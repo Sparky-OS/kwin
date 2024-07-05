@@ -10,7 +10,6 @@ kcoreaddons_add_plugin(screenshot SOURCES main.cpp ${screenshot_COMMON_SOURCES} 
 target_link_libraries(screenshot PRIVATE
     kwin
 
-    KF6::Service
     KF6::I18n
 
     Qt::DBus
@@ -25,7 +24,6 @@ if(BUILD_TESTING)
     target_link_libraries(screenshot_test_support PRIVATE
         kwin
 
-        KF6::Service
         KF6::I18n
 
         Qt::DBus
