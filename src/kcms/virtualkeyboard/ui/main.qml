@@ -70,4 +70,27 @@ KCM.GridViewKCM {
             kcm.save();
         }
     }
+
+    footer: Kirigami.FormLayout {
+        id: footerFormLayout
+
+        visible: kcm.tabletModeAvailable
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("Show automatically:")
+
+            QQC2.CheckBox {
+                id: tabletModeOnlyCheckBox
+                text: i18n("Only when in Tablet Mode")
+
+                checked: kcm.settings.inputMethodTabletOnly
+                onToggled: kcm.settings.inputMethodTabletOnly = checked
+            }
+
+            KCM.SettingStateBinding {
+                configObject: kcm.settings
+                settingName: "InputMethodTabletOnly"
+            }
+        }
+    }
 }

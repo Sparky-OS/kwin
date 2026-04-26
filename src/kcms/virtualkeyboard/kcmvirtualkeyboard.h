@@ -46,6 +46,7 @@ class KcmVirtualKeyboard : public KQuickManagedConfigModule
     Q_PROPERTY(QAbstractItemModel *model READ keyboardsModel CONSTANT)
     Q_PROPERTY(KWinVirtualKeyboard *dbusInterface READ dbusInterface CONSTANT)
     Q_PROPERTY(KWinVirtualKeyboard::VirtualKeyboardMode mode READ mode WRITE setMode NOTIFY modeChanged)
+    Q_PROPERTY(bool tabletModeAvailable READ tabletModeAvailable CONSTANT)
 
 public:
     explicit KcmVirtualKeyboard(QObject *parent, const KPluginMetaData &metaData);
@@ -68,6 +69,9 @@ public:
         return m_mode;
     }
     void setMode(KWinVirtualKeyboard::VirtualKeyboardMode mode);
+
+    // whether the compositor says this computer has a tablet mode
+    bool tabletModeAvailable() const;
 
 Q_SIGNALS:
     void modeChanged(KWinVirtualKeyboard::VirtualKeyboardMode mode);

@@ -18,6 +18,9 @@
 #include <utility>
 #include <vector>
 
+#include <KConfigGroup>
+#include <KConfigWatcher>
+
 class QProcess;
 
 namespace KWin
@@ -119,6 +122,9 @@ private Q_SLOTS:
     void key(quint32 serial, quint32 time, quint32 key, KWin::KeyboardKeyState state);
     void modifiers(quint32 serial, quint32 mods_depressed, quint32 mods_latched, quint32 mods_locked, quint32 group);
 
+    // KConfigWatcher slot
+    void handleTabletOnlyChanged(const KConfigGroup &group);
+
 private:
     void updateInputPanelState();
     void adoptInputMethodContext();
@@ -166,6 +172,9 @@ private:
     bool m_hasPendingModifiers = false;
     bool m_activeClientSupportsTextInput = false;
     bool m_shouldShowPanel = false;
+
+    KConfigWatcher::Ptr m_configWatcher;
+    bool m_imTabletOnly = true;
 };
 
 }

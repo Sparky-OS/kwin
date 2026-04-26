@@ -8,6 +8,7 @@
 
 #include "kcmvirtualkeyboard.h"
 
+#include <QDBusInterface>
 #include <qqml.h>
 
 #include <KApplicationTrader>
@@ -37,6 +38,12 @@ KcmVirtualKeyboard::~KcmVirtualKeyboard() = default;
 VirtualKeyboardSettings *KcmVirtualKeyboard::settings() const
 {
     return m_data->settings();
+}
+
+bool KcmVirtualKeyboard::tabletModeAvailable() const
+{
+    QDBusInterface tabletModeManager(QStringLiteral("org.kde.KWin"), QStringLiteral("/org/kde/KWin"), QStringLiteral("org.kde.KWin.TabletModeManager"));
+    return tabletModeManager.property("tabletModeAvailable").toBool();
 }
 
 void KcmVirtualKeyboard::setMode(KWinVirtualKeyboard::VirtualKeyboardMode mode)

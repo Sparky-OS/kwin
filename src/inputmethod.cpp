@@ -26,6 +26,7 @@
 #include "internalinputmethodcontext.h"
 #include "pointer_input.h"
 #include "tablet_input.h"
+#include "tabletmodemanager.h"
 #include "touch_input.h"
 #include "wayland/display.h"
 #include "wayland/inputmethod_v1.h"
@@ -132,6 +133,10 @@ void InputMethod::init()
     connect(input()->keyboard()->xkb(), &Xkb::modifierStateChanged, this, [this]() {
         m_hasPendingModifiers = true;
     });
+
+    m_configWatcher = KConfigWatcher::create(kwinApp()->config());
+    connect(m_configWatcher.data(), &KConfigWatcher::configChanged, this, &InputMethod::handleTabletOnlyChanged);
+    handleTabletOnlyChanged(kwinApp()->config()->group(QStringLiteral("Wayland")));
 }
 
 void InputMethod::show()
@@ -167,8 +172,20 @@ void InputMethod::hide()
     }
 }
 
+void InputMethod::handleTabletOnlyChanged(const KConfigGroup &group)
+{
+    if (group.name() == "Wayland") {
+        m_imTabletOnly = group.readEntry("InputMethodTabletOnly", true);
+    }
+}
+
 bool InputMethod::shouldShowOnActive() const
 {
+    /* If Tablet Mode is available and the option to only show in Tablet Mode is on, add an additional condition */
+    if (m_imTabletOnly && kwinApp()->tabletModeManager()->isTabletModeAvailable() && !kwinApp()->tabletModeManager()->effectiveTabletMode()) {
+        return false;
+    }
+
     switch (m_virtualKeyboardVisibility) {
     case VirtualKeyboardVisibility::Never:
         return false;

@@ -6,5 +6,9 @@
   <kcfgfile name="kwinrc"/>
   <group name="Wayland">
     <entry name="InputMethod" type="Path" />
+    <entry name="InputMethodTabletOnly" type="Bool">
+      <label>Show Virtual Keyboard only in Touch Mode</label>
+      <default>true</default>
+    </entry>
   </group>
 </kcfg>
