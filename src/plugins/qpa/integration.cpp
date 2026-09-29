@@ -157,12 +157,13 @@ QStringList Integration::themeNames() const
 
 QPlatformOpenGLContext *Integration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
-    const auto device = Compositor::self()->primaryDevice();
-    const auto shareContext = device->eglShareContext();
-    if (!shareContext) {
+    if (!m_eglContext || m_eglContext->isFailed()) {
+        updateEglContext();
+    }
+    if (!m_eglContext) {
         return nullptr;
     }
-    return new EGLPlatformContext(context, shareContext);
+    return new EGLPlatformContext(context, m_eglContext);
 }
 
 QPlatformAccessibility *Integration::accessibility() const
@@ -188,6 +189,15 @@ void Integration::handleWorkspaceCreated()
     }
 
     m_clipboard->initialize();
+
+    updateEglContext();
+    connect(Compositor::self(), &Compositor::primaryGpuChanged, this, &Integration::updateEglContext);
+}
+
+void Integration::updateEglContext() const
+{
+    RenderDevice *device = Compositor::self()->primaryDevice();
+    m_eglContext = EglContext::create(device->eglDisplay(), EGL_NO_CONFIG_KHR, device->eglShareContext());
 }
 
 void Integration::handleOutputEnabled(LogicalOutput *output)
