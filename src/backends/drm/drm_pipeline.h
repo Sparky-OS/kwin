@@ -86,6 +86,11 @@ public:
 
     DrmCrtc *crtc() const;
     std::shared_ptr<DrmConnectorMode> mode() const;
+    /**
+     * The 3D twin of mode() the CRTC is set to instead, when the output is in 3D;
+     * nullptr for 2D. mode() stays the 2D mode everything else sees.
+     */
+    std::shared_ptr<DrmConnectorMode> stereoMode() const;
     bool active() const;
     bool activePending() const;
     bool enabled() const;
@@ -97,6 +102,7 @@ public:
 
     void setCrtc(DrmCrtc *crtc);
     void setMode(const std::shared_ptr<DrmConnectorMode> &mode);
+    void setStereoMode(const std::shared_ptr<DrmConnectorMode> &mode);
     void setActive(bool active);
     void setEnable(bool enable);
     void setPresentationMode(PresentationMode mode);
@@ -153,6 +159,7 @@ private:
         bool needsModeset = false;
         bool needsModesetProperties = false;
         std::shared_ptr<DrmConnectorMode> mode;
+        std::shared_ptr<DrmConnectorMode> stereoMode;
         uint32_t overscan = 0;
         BackendOutput::RgbRange rgbRange = BackendOutput::RgbRange::Automatic;
         PresentationMode presentationMode = PresentationMode::VSync;

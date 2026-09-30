@@ -228,11 +228,51 @@ static GLVertexBuffer *uploadGeometry(const Region &devicePixels, const QSize &f
     return vbo;
 }
 
+// Each eye's rectangle, in fbo coordinates, gets the whole shadow texture
+static GLVertexBuffer *uploadStereoGeometry(const std::array<RectF, 2> &eyes)
+{
+    GLVertexBuffer *vbo = GLVertexBuffer::streamingBuffer();
+    vbo->reset();
+    vbo->setAttribLayout(std::span(GLVertexBuffer::GLVertex2DLayout), sizeof(GLVertex2D));
+    const auto optMap = vbo->map<GLVertex2D>(eyes.size() * 6);
+    if (!optMap) {
+        return nullptr;
+    }
+    const auto map = *optMap;
+    size_t vboIndex = 0;
+    for (const RectF &eye : eyes) {
+        const float x0 = eye.left();
+        const float y0 = eye.top();
+        const float x1 = eye.right();
+        const float y1 = eye.bottom();
+        map[vboIndex++] = GLVertex2D{.position = QVector2D(x0, y0), .texcoord = QVector2D(0, 0)};
+        map[vboIndex++] = GLVertex2D{.position = QVector2D(x1, y1), .texcoord = QVector2D(1, 1)};
+        map[vboIndex++] = GLVertex2D{.position = QVector2D(x0, y1), .texcoord = QVector2D(0, 1)};
+        map[vboIndex++] = GLVertex2D{.position = QVector2D(x0, y0), .texcoord = QVector2D(0, 0)};
+        map[vboIndex++] = GLVertex2D{.position = QVector2D(x1, y0), .texcoord = QVector2D(1, 0)};
+        map[vboIndex++] = GLVertex2D{.position = QVector2D(x1, y1), .texcoord = QVector2D(1, 1)};
+    }
+    vbo->unmap();
+    vbo->setVertexCount(vboIndex);
+    return vbo;
+}
+
+void EglGbmLayerSurface::setStereoLayout(StereoLayout layout)
+{
+    if (layout != m_stereoLayout && m_surface) {
+        m_surface->damageJournal.clear();
+    }
+    m_stereoLayout = layout;
+}
+
 bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputFrame *frame)
 {
+    // in 3D both eyes change together, so the whole scanout buffer is new every frame
+    const bool stereo = m_stereoLayout != StereoLayout::None && m_surface->needsShadowBuffer;
+    const Region scanoutDamage = stereo ? Region(Rect(QPoint(), m_surface->gbmSwapchain->size())) : damagedDeviceRegion;
     if (m_surface->needsShadowBuffer) {
-        const Region deviceRepaint = damagedDeviceRegion | m_surface->damageJournal.accumulate(m_surface->currentSlot->age(), Region::infinite());
-        m_surface->damageJournal.add(damagedDeviceRegion);
+        const Region deviceRepaint = scanoutDamage | m_surface->damageJournal.accumulate(m_surface->currentSlot->age(), Region::infinite());
+        m_surface->damageJournal.add(scanoutDamage);
         m_surface->shadowDamageJournal.add(damagedDeviceRegion);
         const auto mapping = m_surface->currentShadowSlot->framebuffer()->colorAttachment()->contentTransform().combine(OutputTransform::FlipY);
         const QSize rotatedSize = mapping.map(m_surface->gbmSwapchain->size());
@@ -254,7 +294,21 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
         mat.ortho(QRectF(QPointF(), fbo->size()));
         binder.shader()->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
         glDisable(GL_BLEND);
-        if (const auto vbo = uploadGeometry(repaint, m_surface->gbmSwapchain->size())) {
+        if (stereo) {
+            // the desktop into both eyes, left eye first: left half and right half for
+            // side by side, top half and bottom half for top and bottom
+            const int w = rotatedSize.width();
+            const int h = rotatedSize.height();
+            const std::array<Rect, 2> deviceEyes = m_stereoLayout == StereoLayout::SideBySideHalf
+                ? std::array<Rect, 2>{Rect(0, 0, w / 2, h), Rect(w / 2, 0, w - w / 2, h)}
+                : std::array<Rect, 2>{Rect(0, 0, w, h / 2), Rect(0, h / 2, w, h - h / 2)};
+            const std::array<RectF, 2> fboEyes{RectF(mapping.map(deviceEyes[0], rotatedSize)), RectF(mapping.map(deviceEyes[1], rotatedSize))};
+            if (const auto vbo = uploadStereoGeometry(fboEyes)) {
+                m_surface->currentShadowSlot->texture()->bind();
+                vbo->render(GL_TRIANGLES);
+                m_surface->currentShadowSlot->texture()->unbind();
+            }
+        } else if (const auto vbo = uploadGeometry(repaint, m_surface->gbmSwapchain->size())) {
             m_surface->currentShadowSlot->texture()->bind();
             vbo->render(GL_TRIANGLES);
             m_surface->currentShadowSlot->texture()->unbind();
@@ -263,7 +317,7 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
         m_surface->shadowSwapchain->release(m_surface->currentShadowSlot, fence.takeFileDescriptor());
         GLFramebuffer::popFramebuffer();
     } else {
-        m_surface->damageJournal.add(damagedDeviceRegion);
+        m_surface->damageJournal.add(scanoutDamage);
     }
     m_surface->compositingTimeQuery->end();
     if (frame) {
@@ -277,7 +331,7 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
         glFinish();
     }
     m_surface->gbmSwapchain->release(m_surface->currentSlot, sourceFence.fileDescriptor().duplicate());
-    const auto buffer = importBuffer(m_surface.get(), m_surface->currentSlot.get(), sourceFence.takeFileDescriptor(), frame, damagedDeviceRegion);
+    const auto buffer = importBuffer(m_surface.get(), m_surface->currentSlot.get(), sourceFence.takeFileDescriptor(), frame, scanoutDamage);
     if (buffer) {
         m_surface->currentFramebuffer = buffer;
         return true;

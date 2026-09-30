@@ -53,6 +53,7 @@ EglGbmLayer::EglGbmLayer(EglGbmBackend *eglBackend, DrmGpu *gpu, DrmPlane::TypeI
 std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::doBeginFrame()
 {
     m_scanoutBuffer.reset();
+    m_surface.setStereoLayout(drmOutput()->activeStereoLayout());
     return m_surface.startRendering(targetRect().size(),
                                     drmOutput()->transform().combine(OutputTransform::FlipY),
                                     supportedDrmFormats(),

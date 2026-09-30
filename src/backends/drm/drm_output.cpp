@@ -113,7 +113,36 @@ bool DrmOutput::shouldDisableNonPrimaryPlanes() const
 {
     // The kernel rejects async commits that change anything but the primary plane FB_ID
     // This disables the hardware cursor, so it doesn't interfere with that
-    return m_desiredPresentationMode == PresentationMode::Async || m_desiredPresentationMode == PresentationMode::AdaptiveAsync;
+    // In 3D every plane would reach only one eye, so only the primary plane is used and
+    // the cursor is drawn into the desktop, which goes to both
+    return m_desiredPresentationMode == PresentationMode::Async || m_desiredPresentationMode == PresentationMode::AdaptiveAsync
+        || activeStereoLayout() != StereoLayout::None;
+}
+
+// Phase one of 3D output: KWIN_DRM_STEREO_3D=CONNECTOR=layout[,...], layout "sbs" (side by
+// side, half) or "tab" (top and bottom), e.g. HDMI-A-1=sbs. The display settings will
+// offer the 3D modes themselves instead.
+static StereoLayout stereoLayoutSetting(const QString &outputName)
+{
+    const QStringList entries = qEnvironmentVariable("KWIN_DRM_STEREO_3D").split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (const QString &entry : entries) {
+        const QStringList pair = entry.split(QLatin1Char('='));
+        if (pair.size() != 2 || pair[0].trimmed() != outputName) {
+            continue;
+        }
+        const QString layout = pair[1].trimmed().toLower();
+        if (layout == QLatin1String("sbs")) {
+            return StereoLayout::SideBySideHalf;
+        } else if (layout == QLatin1String("tab")) {
+            return StereoLayout::TopAndBottom;
+        }
+    }
+    return StereoLayout::None;
+}
+
+StereoLayout DrmOutput::activeStereoLayout() const
+{
+    return m_pipeline && m_pipeline->stereoMode() ? m_stereoLayout : StereoLayout::None;
 }
 
 bool DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay)
@@ -598,7 +627,17 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
 
     const bool bt2020 = m_nextState->wideColorGamut && (capabilities() & Capability::WideColorGamut);
     const bool hdr = m_nextState->highDynamicRange && (capabilities() & Capability::HighDynamicRange);
-    m_pipeline->setMode(std::static_pointer_cast<DrmConnectorMode>(m_nextState->currentMode));
+    const auto mode = std::static_pointer_cast<DrmConnectorMode>(m_nextState->currentMode);
+    m_pipeline->setMode(mode);
+    m_stereoLayout = stereoLayoutSetting(name());
+    std::shared_ptr<DrmConnectorMode> stereoMode;
+    if (mode && m_stereoLayout != StereoLayout::None) {
+        stereoMode = m_connector->stereoVariant(mode.get(), m_stereoLayout);
+        if (!stereoMode) {
+            qCWarning(KWIN_DRM) << "3D requested on" << name() << "but the display declares no such 3D structure for" << mode->size() << mode->refreshRate() << "mHz; staying 2D";
+        }
+    }
+    m_pipeline->setStereoMode(stereoMode);
     m_pipeline->setOverscan(m_nextState->overscan);
     m_pipeline->setRgbRange(m_nextState->rgbRange);
     m_pipeline->setEnable(m_nextState->enabled);
@@ -833,7 +872,8 @@ void DrmOutput::maybeScheduleRepaints(const State &next)
 
 bool DrmOutput::needsShadowBuffer() const
 {
-    return m_needsShadowBuffer;
+    // 3D draws the desktop into both eyes from the shadow buffer
+    return m_needsShadowBuffer || activeStereoLayout() != StereoLayout::None;
 }
 
 void DrmOutput::removePipeline()

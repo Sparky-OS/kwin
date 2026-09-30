@@ -432,7 +432,7 @@ bool DrmPipeline::prepareAtomicModeset(DrmAtomicCommit *commit)
     }
 
     commit->addProperty(m_pending.crtc->active, 1);
-    commit->addBlob(m_pending.crtc->modeId, m_pending.mode->blob());
+    commit->addBlob(m_pending.crtc->modeId, (m_pending.stereoMode ? m_pending.stereoMode : m_pending.mode)->blob());
     if (m_pending.crtc->degammaLut.isValid()) {
         commit->addProperty(m_pending.crtc->degammaLut, 0);
     }
@@ -634,6 +634,20 @@ void DrmPipeline::setCrtc(DrmCrtc *crtc)
 void DrmPipeline::setMode(const std::shared_ptr<DrmConnectorMode> &mode)
 {
     m_pending.mode = mode;
+}
+
+void DrmPipeline::setStereoMode(const std::shared_ptr<DrmConnectorMode> &mode)
+{
+    if (mode != m_pending.stereoMode) {
+        // a different 3D structure is a different CRTC mode
+        m_pending.needsModesetProperties = true;
+    }
+    m_pending.stereoMode = mode;
+}
+
+std::shared_ptr<DrmConnectorMode> DrmPipeline::stereoMode() const
+{
+    return m_pending.stereoMode;
 }
 
 void DrmPipeline::setActive(bool active)

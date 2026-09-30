@@ -16,6 +16,7 @@
 
 #include "core/outputlayer.h"
 #include "drm_plane.h"
+#include "drm_stereo.h"
 #include "opengl/gltexture.h"
 #include "utils/damagejournal.h"
 #include "utils/filedescriptor.h"
@@ -59,6 +60,11 @@ public:
                                                             double scale, BackendOutput::ColorPowerTradeoff tradeoff,
                                                             bool useShadowBuffer, uint32_t requiredAlphaBits);
     bool endRendering(const Region &damagedDeviceRegion, OutputFrame *frame);
+    /**
+     * In 3D the shadow buffer holds the desktop once, and endRendering() draws it into
+     * both eyes of the scanout buffer; needs the shadow buffer (DrmOutput::needsShadowBuffer).
+     */
+    void setStereoLayout(StereoLayout layout);
 
     void destroyResources();
     EglGbmBackend *eglBackend() const;
@@ -125,6 +131,7 @@ private:
 
     DrmGpu *const m_gpu;
     EglGbmBackend *const m_eglBackend;
+    StereoLayout m_stereoLayout = StereoLayout::None;
     const BufferTarget m_requestedBufferTarget;
 };
 

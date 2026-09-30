@@ -17,6 +17,7 @@
 #include "core/backendoutput.h"
 #include "drm_blob.h"
 #include "drm_object.h"
+#include "drm_stereo.h"
 #include "drm_pointer.h"
 #include "utils/edid.h"
 
@@ -72,6 +73,12 @@ public:
     QByteArray mstPath() const;
 
     QList<std::shared_ptr<DrmConnectorMode>> modes() const;
+    /**
+     * The 3D variant of @p mode in @p layout, if the display declares one: the same timing
+     * with DRM_MODE_FLAG_3D_* set. 3D modes are kept out of modes(), so that nothing picks
+     * one without being asked to.
+     */
+    std::shared_ptr<DrmConnectorMode> stereoVariant(DrmConnectorMode *mode, StereoLayout layout) const;
     std::shared_ptr<DrmConnectorMode> generateMode(const QSize &size, float refreshRate, OutputModeline::Flags flags);
 
     BackendOutput::SubPixel subpixel() const;
@@ -159,6 +166,7 @@ private:
     QSize m_physicalSize = QSize(-1, -1);
     QList<std::shared_ptr<DrmConnectorMode>> m_driverModes;
     QList<std::shared_ptr<DrmConnectorMode>> m_modes;
+    QList<std::shared_ptr<DrmConnectorMode>> m_stereoModes;
     uint32_t m_possibleCrtcs = 0;
     QByteArray m_mstPath;
 
