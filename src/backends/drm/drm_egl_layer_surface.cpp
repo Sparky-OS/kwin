@@ -273,13 +273,14 @@ static QMatrix4x4 duboisMatrix(StereoLayout layout, bool leftEye)
 
 bool EglGbmLayerSurface::drawAnaglyph(const QSize &fboSize, const Region &repaint)
 {
-    if (!m_surface->anaglyphShader) {
+    if (!m_surface->anaglyphShader && !m_surface->anaglyphShaderFailed) {
         m_surface->anaglyphShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/anaglyph.frag"));
-        if (!m_surface->anaglyphShader || !m_surface->anaglyphShader->isValid()) {
+        if (!m_surface->anaglyphShader) {
+            m_surface->anaglyphShaderFailed = true;
             qCWarning(KWIN_DRM) << "Failed to load the anaglyph shader, showing the desktop flat";
         }
     }
-    if (!m_surface->anaglyphShader || !m_surface->anaglyphShader->isValid()) {
+    if (!m_surface->anaglyphShader) {
         return false;
     }
     ShaderBinder binder(m_surface->anaglyphShader.get());
