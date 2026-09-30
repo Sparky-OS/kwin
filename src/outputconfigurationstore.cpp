@@ -51,6 +51,12 @@ std::optional<OutputModeline> LegacyOutputModeline::match(const QList<OutputMode
     return std::nullopt;
 }
 
+// HDMI 3D modes are listed with the others but only ever set by the user
+static bool isStereo3D(OutputModeline::Flags flags)
+{
+    return flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf) || flags.testFlag(OutputModeline::Flag::Stereo3DTopAndBottom);
+}
+
 OutputConfigurationStore::OutputConfigurationStore()
 {
     load();
@@ -463,7 +469,7 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
                 // This is fallback for output configs prior to 6.6.5, which didn't have flags.
                 if (!effectiveMode) {
                     for (const auto &mode : availableModes) {
-                        if (mode->isRemoved()) {
+                        if (mode->isRemoved() || isStereo3D(mode->flags())) {
                             continue;
                         }
                         if (state.legacyMode->size == mode->size() && state.legacyMode->refreshRate == mode->refreshRate()) {
@@ -708,7 +714,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
                 // This is fallback for output configs prior to 6.6.5, which didn't have flags.
                 if (!modeline) {
                     for (const auto &mode : availableModes) {
-                        if (mode->isRemoved()) {
+                        if (mode->isRemoved() || isStereo3D(mode->flags())) {
                             continue;
                         }
                         if (existingData.legacyMode->size == mode->size() && existingData.legacyMode->refreshRate == mode->refreshRate()) {
@@ -796,8 +802,9 @@ std::shared_ptr<OutputMode> OutputConfigurationStore::chooseMode(BackendOutput *
 
     const auto modes = output->modes();
     auto notPotentiallyBroken = modes | std::ranges::views::filter([](const auto &mode) {
-        // generated modes aren't guaranteed to work, so don't choose one as the default
-        return !mode->isRemoved() && !(mode->flags() & OutputModeline::Flag::Generated);
+        // generated modes aren't guaranteed to work, so don't choose one as the default;
+        // a 3D mode is only ever the user's choice
+        return !mode->isRemoved() && !(mode->flags() & OutputModeline::Flag::Generated) && !isStereo3D(mode->flags());
     });
     if (notPotentiallyBroken.empty()) {
         // there's nothing more we can do

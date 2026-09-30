@@ -460,7 +460,7 @@ std::expected<void, OutputError> DrmPipeline::prepareAtomicModeset(DrmAtomicComm
     }
 
     commit->addProperty(m_pending.crtc->active, 1);
-    commit->addBlob(m_pending.crtc->modeId, (m_pending.stereoMode ? m_pending.stereoMode : m_pending.mode)->blob());
+    commit->addBlob(m_pending.crtc->modeId, m_pending.mode->blob());
     for (DrmAbstractColorOp *op = m_pending.crtc->legacyPreBlendPipeline; op; op = op->next()) {
         op->bypass(commit);
     }
@@ -657,20 +657,6 @@ void DrmPipeline::setCrtc(DrmCrtc *crtc)
 void DrmPipeline::setMode(const std::shared_ptr<DrmConnectorMode> &mode)
 {
     m_pending.mode = mode;
-}
-
-void DrmPipeline::setStereoMode(const std::shared_ptr<DrmConnectorMode> &mode)
-{
-    if (mode != m_pending.stereoMode) {
-        // a different 3D structure is a different CRTC mode
-        m_pending.needsModesetProperties = true;
-    }
-    m_pending.stereoMode = mode;
-}
-
-std::shared_ptr<DrmConnectorMode> DrmPipeline::stereoMode() const
-{
-    return m_pending.stereoMode;
 }
 
 void DrmPipeline::setActive(bool active)

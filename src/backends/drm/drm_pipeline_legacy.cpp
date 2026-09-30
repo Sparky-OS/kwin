@@ -88,7 +88,7 @@ std::expected<void, OutputError> DrmPipeline::legacyModeset()
         });
     }
     auto commit = std::make_unique<DrmLegacyCommit>(this, buffer, nullptr);
-    if (!commit->doModeset(m_connector, (m_pending.stereoMode ? m_pending.stereoMode : m_pending.mode).get())) {
+    if (!commit->doModeset(m_connector, m_pending.mode.get())) {
         qCWarning(KWIN_DRM) << "Modeset failed!" << strerror(errno);
         return DrmCommit::errnoToError();
     }
@@ -180,9 +180,8 @@ std::expected<void, OutputError> DrmPipeline::applyPendingChangesLegacy()
             });
         }
         const auto currentModeContent = m_pending.crtc->queryCurrentMode();
-        const auto &crtcMode = m_pending.stereoMode ? m_pending.stereoMode : m_pending.mode;
-        if (m_pending.crtc != m_next.crtc || *crtcMode != currentModeContent) {
-            qCDebug(KWIN_DRM) << "Using legacy path to set mode" << crtcMode->nativeMode()->name;
+        if (m_pending.crtc != m_next.crtc || *m_pending.mode != currentModeContent) {
+            qCDebug(KWIN_DRM) << "Using legacy path to set mode" << m_pending.mode->nativeMode()->name;
             const auto ret = legacyModeset();
             if (!ret) {
                 return ret;

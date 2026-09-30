@@ -119,11 +119,11 @@ bool DrmOutput::shouldDisableNonPrimaryPlanes() const
         || activeStereoLayout() != StereoLayout::None;
 }
 
-// Phase one of 3D output: KWIN_DRM_STEREO_3D=CONNECTOR=layout[,...], layout "sbs" (side by
-// side, half) or "tab" (top and bottom) for a display that declares them, or "anaglyph-crt"
-// / "anaglyph-modern" (also "anaglyph") on any screen, e.g. HDMI-A-1=sbs. The display
-// settings will offer them as modes instead.
-static StereoLayout stereoLayoutSetting(const QString &outputName)
+// A display's HDMI 3D modes are listed with its other modes, and choosing one is turning 3D
+// on. Anaglyph needs no 3D mode, so until the display settings offer it, it is switched on
+// per output with KWIN_DRM_STEREO_3D=CONNECTOR=layout[,...], layout "anaglyph-crt" /
+// "anaglyph-modern" (also "anaglyph"), e.g. HDMI-A-1=anaglyph-modern.
+static StereoLayout anaglyphSetting(const QString &outputName)
 {
     const QStringList entries = qEnvironmentVariable("KWIN_DRM_STEREO_3D").split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (const QString &entry : entries) {
@@ -132,11 +132,7 @@ static StereoLayout stereoLayoutSetting(const QString &outputName)
             continue;
         }
         const QString layout = pair[1].trimmed().toLower();
-        if (layout == QLatin1String("sbs")) {
-            return StereoLayout::SideBySideHalf;
-        } else if (layout == QLatin1String("tab")) {
-            return StereoLayout::TopAndBottom;
-        } else if (layout == QLatin1String("anaglyph") || layout == QLatin1String("anaglyph-crt")) {
+        if (layout == QLatin1String("anaglyph") || layout == QLatin1String("anaglyph-crt")) {
             return StereoLayout::AnaglyphCrt;
         } else if (layout == QLatin1String("anaglyph-modern")) {
             return StereoLayout::AnaglyphModern;
@@ -150,11 +146,13 @@ StereoLayout DrmOutput::activeStereoLayout() const
     if (!m_pipeline) {
         return StereoLayout::None;
     }
-    if (isAnaglyph(m_stereoLayout)) {
-        // no 3D mode involved: any output
-        return m_stereoLayout;
+    // a 3D mode is sent in its own structure; otherwise anaglyph, if asked for, on any output
+    if (const auto mode = m_pipeline->mode()) {
+        if (const StereoLayout layout = stereoLayoutForMode(mode->flags()); layout != StereoLayout::None) {
+            return layout;
+        }
     }
-    return m_pipeline->stereoMode() ? m_stereoLayout : StereoLayout::None;
+    return m_anaglyphLayout;
 }
 
 std::expected<void, OutputError> DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay)
@@ -651,15 +649,7 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     const bool hdr = m_nextState->highDynamicRange && (capabilities() & Capability::HighDynamicRange);
     const auto mode = std::static_pointer_cast<DrmConnectorMode>(m_nextState->currentMode);
     m_pipeline->setMode(mode);
-    m_stereoLayout = stereoLayoutSetting(name());
-    std::shared_ptr<DrmConnectorMode> stereoMode;
-    if (mode && m_stereoLayout != StereoLayout::None && !isAnaglyph(m_stereoLayout)) {
-        stereoMode = m_connector->stereoVariant(mode.get(), m_stereoLayout);
-        if (!stereoMode) {
-            qCWarning(KWIN_DRM) << "3D requested on" << name() << "but the display declares no such 3D structure for" << mode->size() << mode->refreshRate() << "mHz; staying 2D";
-        }
-    }
-    m_pipeline->setStereoMode(stereoMode);
+    m_anaglyphLayout = anaglyphSetting(name());
     m_pipeline->setOverscan(m_nextState->overscan);
     m_pipeline->setRgbRange(m_nextState->rgbRange);
     m_pipeline->setEnable(m_nextState->enabled);

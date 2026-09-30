@@ -1352,6 +1352,14 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
         if (m_modeline.flags() & OutputModeline::Flag::Custom) {
             flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_CUSTOM;
         }
+        // the mode's HDMI 3D structure: kde_output_device_mode_v2.flags stereo_side_by_side_half
+        // and stereo_top_and_bottom (plasma-wayland-protocols, stereo3d branch)
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DSideBySideHalf) {
+            flags |= 0x4;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DTopAndBottom) {
+            flags |= 0x8;
+        }
         send_flags(resource->handle, flags);
     }
 

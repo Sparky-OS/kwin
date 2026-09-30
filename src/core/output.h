@@ -176,6 +176,9 @@ public:
         Generated = 0x2,
         Custom = 0x8,
         ReducedBlanking = 0x10,
+        // HDMI 1.4 3D structures a mode is sent in; a 3D mode is only ever the user's choice
+        Stereo3DSideBySideHalf = 0x20,
+        Stereo3DTopAndBottom = 0x40,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
