@@ -70,8 +70,9 @@ public:
      */
     bool needsShadowBuffer() const;
     /**
-     * The 3D structure the output is being sent in, StereoLayout::None for 2D.
-     * The desktop is drawn into both eyes (EglGbmLayerSurface).
+     * The 3D structure the output is being sent in (the current mode's), or anaglyph on
+     * any output; StereoLayout::None for 2D. The desktop is drawn into both eyes
+     * (EglGbmLayerSurface).
      */
     StereoLayout activeStereoLayout() const;
 
@@ -103,7 +104,7 @@ private:
 
     QVector3D m_sRgbChannelFactors = {1, 1, 1};
     bool m_needsShadowBuffer = false;
-    StereoLayout m_stereoLayout = StereoLayout::None;
+    StereoLayout m_anaglyphLayout = StereoLayout::None;
     PresentationMode m_desiredPresentationMode = PresentationMode::VSync;
     bool m_autoRotateAvailable = false;
     bool m_autoBrightnessAvailable = false;

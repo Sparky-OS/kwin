@@ -8,6 +8,7 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 #include "drm_connector.h"
+#include "drm_stereo.h"
 #include "drm_commit.h"
 #include "drm_crtc.h"
 #include "drm_gpu.h"
@@ -47,7 +48,7 @@ uint32_t DrmConnector::refreshRateForMode(_drmModeModeInfo *m)
 
 static OutputModeline::Flags flagsForMode(const drmModeModeInfo *info, OutputModeline::Flags additionalFlags)
 {
-    OutputModeline::Flags flags = additionalFlags;
+    OutputModeline::Flags flags = additionalFlags | stereoFlagsForDrmMode(info->flags);
     if (info->type & DRM_MODE_TYPE_PREFERRED) {
         flags |= OutputModeline::Flag::Preferred;
     }
@@ -228,30 +229,6 @@ QList<std::shared_ptr<DrmConnectorMode>> DrmConnector::modes() const
     return m_modes;
 }
 
-std::shared_ptr<DrmConnectorMode> DrmConnector::stereoVariant(DrmConnectorMode *mode, StereoLayout layout) const
-{
-    uint32_t structure = 0;
-    switch (layout) {
-    case StereoLayout::None:
-    case StereoLayout::AnaglyphCrt:
-    case StereoLayout::AnaglyphModern:
-        // no 3D structure on the link
-        return nullptr;
-    case StereoLayout::SideBySideHalf:
-        structure = DRM_MODE_FLAG_3D_SIDE_BY_SIDE_HALF;
-        break;
-    case StereoLayout::TopAndBottom:
-        structure = DRM_MODE_FLAG_3D_TOP_AND_BOTTOM;
-        break;
-    }
-    drmModeModeInfo wanted = *mode->nativeMode();
-    wanted.flags = (wanted.flags & ~DRM_MODE_FLAG_3D_MASK) | structure;
-    const auto it = std::ranges::find_if(m_stereoModes, [&wanted](const auto &stereo) {
-        return *stereo == wanted;
-    });
-    return it == m_stereoModes.end() ? nullptr : *it;
-}
-
 BackendOutput::SubPixel DrmConnector::subpixel() const
 {
     switch (m_conn->subpixel) {
@@ -330,29 +307,25 @@ bool DrmConnector::updateProperties()
     }
 
     // update modes
-    // 3D modes (DRM_MODE_FLAG_3D_*, listed since DrmGpu asks for them) each repeat a 2D mode's
-    // timing; they are kept apart and only reached through stereoVariant()
-    QList<const drmModeModeInfo *> flatModes;
-    QList<const drmModeModeInfo *> stereoModes;
+    // the display's HDMI 3D modes (DRM_MODE_FLAG_3D_*, listed since DrmGpu asks for them) are
+    // listed with the others, flagged with their 3D structure; structures the desktop can't be
+    // drawn into yet are left out
+    QList<const drmModeModeInfo *> driverModes;
     for (int i = 0; i < m_conn->count_modes; i++) {
-        (m_conn->modes[i].flags & DRM_MODE_FLAG_3D_MASK ? stereoModes : flatModes).append(&m_conn->modes[i]);
+        const drmModeModeInfo *mode = &m_conn->modes[i];
+        if (!(mode->flags & DRM_MODE_FLAG_3D_MASK) || stereoFlagsForDrmMode(mode->flags)) {
+            driverModes.append(mode);
+        }
     }
-    bool equal = flatModes.count() == m_driverModes.count() && stereoModes.count() == m_stereoModes.count();
-    for (int i = 0; equal && i < flatModes.count(); i++) {
-        equal &= checkIfEqual(m_driverModes[i]->nativeMode(), flatModes[i]);
+    bool equal = driverModes.count() == m_driverModes.count();
+    for (int i = 0; equal && i < driverModes.count(); i++) {
+        equal &= checkIfEqual(m_driverModes[i]->nativeMode(), driverModes[i]);
     }
-    for (int i = 0; equal && i < stereoModes.count(); i++) {
-        equal &= checkIfEqual(m_stereoModes[i]->nativeMode(), stereoModes[i]);
-    }
-    if (!equal && !flatModes.isEmpty()) {
+    if (!equal && !driverModes.isEmpty()) {
         // reload modes
         m_driverModes.clear();
-        for (const drmModeModeInfo *mode : std::as_const(flatModes)) {
+        for (const drmModeModeInfo *mode : std::as_const(driverModes)) {
             m_driverModes.append(std::make_shared<DrmConnectorMode>(this, *mode, OutputModeline::Flags()));
-        }
-        m_stereoModes.clear();
-        for (const drmModeModeInfo *mode : std::as_const(stereoModes)) {
-            m_stereoModes.append(std::make_shared<DrmConnectorMode>(this, *mode, OutputModeline::Flags()));
         }
         m_modes.clear();
         m_modes.append(m_driverModes);
