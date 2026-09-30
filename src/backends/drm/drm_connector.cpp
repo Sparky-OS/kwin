@@ -233,6 +233,9 @@ std::shared_ptr<DrmConnectorMode> DrmConnector::stereoVariant(DrmConnectorMode *
     uint32_t structure = 0;
     switch (layout) {
     case StereoLayout::None:
+    case StereoLayout::AnaglyphCrt:
+    case StereoLayout::AnaglyphModern:
+        // no 3D structure on the link
         return nullptr;
     case StereoLayout::SideBySideHalf:
         structure = DRM_MODE_FLAG_3D_SIDE_BY_SIDE_HALF;

@@ -257,6 +257,51 @@ static GLVertexBuffer *uploadStereoGeometry(const std::array<RectF, 2> &eyes)
     return vbo;
 }
 
+// Dubois least-squares matrices for red/cyan glasses (REEL3D No. 7003): the CRT set as
+// given by Sanders and McAllister, the modern-screen set as given by Zhang and McAllister
+// (coefficients as collected at http://chrisjones.id.au/Dubois/Dubois.html); rows are the
+// output's red, green and blue, columns the eye's.
+static QMatrix4x4 duboisMatrix(StereoLayout layout, bool leftEye)
+{
+    if (layout == StereoLayout::AnaglyphModern) {
+        return leftEye ? QMatrix4x4(0.4154, 0.4710, 0.1669, 0, -0.0458, -0.0484, -0.0257, 0, -0.0547, -0.0615, 0.0128, 0, 0, 0, 0, 0)
+                       : QMatrix4x4(-0.0109, -0.0364, -0.0060, 0, 0.3756, 0.7333, 0.0111, 0, -0.0651, -0.1287, 1.2971, 0, 0, 0, 0, 0);
+    }
+    return leftEye ? QMatrix4x4(0.456, 0.500, 0.176, 0, -0.040, -0.038, -0.016, 0, -0.015, -0.021, -0.005, 0, 0, 0, 0, 0)
+                   : QMatrix4x4(-0.043, -0.088, -0.002, 0, 0.378, 0.734, -0.018, 0, -0.072, -0.113, 1.226, 0, 0, 0, 0, 0);
+}
+
+bool EglGbmLayerSurface::drawAnaglyph(const QSize &fboSize, const Region &repaint)
+{
+    if (!m_surface->anaglyphShader) {
+        m_surface->anaglyphShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/anaglyph.frag"));
+        if (!m_surface->anaglyphShader || !m_surface->anaglyphShader->isValid()) {
+            qCWarning(KWIN_DRM) << "Failed to load the anaglyph shader, showing the desktop flat";
+        }
+    }
+    if (!m_surface->anaglyphShader || !m_surface->anaglyphShader->isValid()) {
+        return false;
+    }
+    ShaderBinder binder(m_surface->anaglyphShader.get());
+    GLShader *shader = binder.shader();
+    shader->setColorspaceUniforms(m_surface->blendingColor, m_surface->layerBlendingColor, RenderingIntent::AbsoluteColorimetricNoAdaptation);
+    // both eyes are the one desktop for now; per-eye content will bind its own right eye
+    shader->setUniform("leftEye", 0);
+    shader->setUniform("rightEye", 0);
+    shader->setUniform("leftMatrix", duboisMatrix(m_stereoLayout, true));
+    shader->setUniform("rightMatrix", duboisMatrix(m_stereoLayout, false));
+    QMatrix4x4 mat;
+    mat.scale(1, -1);
+    mat.ortho(QRectF(QPointF(), fboSize));
+    shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
+    if (const auto vbo = uploadGeometry(repaint, m_surface->gbmSwapchain->size())) {
+        m_surface->currentShadowSlot->texture()->bind();
+        vbo->render(GL_TRIANGLES);
+        m_surface->currentShadowSlot->texture()->unbind();
+    }
+    return true;
+}
+
 void EglGbmLayerSurface::setStereoLayout(StereoLayout layout)
 {
     if (layout != m_stereoLayout && m_surface) {
@@ -268,6 +313,7 @@ void EglGbmLayerSurface::setStereoLayout(StereoLayout layout)
 bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputFrame *frame)
 {
     // in 3D both eyes change together, so the whole scanout buffer is new every frame
+    const bool anaglyph = isAnaglyph(m_stereoLayout) && m_surface->needsShadowBuffer;
     const bool stereo = m_stereoLayout != StereoLayout::None && m_surface->needsShadowBuffer;
     const Region scanoutDamage = stereo ? Region(Rect(QPoint(), m_surface->gbmSwapchain->size())) : damagedDeviceRegion;
     if (m_surface->needsShadowBuffer) {
@@ -294,7 +340,9 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
         mat.ortho(QRectF(QPointF(), fbo->size()));
         binder.shader()->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
         glDisable(GL_BLEND);
-        if (stereo) {
+        if (anaglyph && drawAnaglyph(fbo->size(), repaint)) {
+            // both eyes mixed; the repaint is the whole buffer in 3D
+        } else if (stereo && !anaglyph) {
             // the desktop into both eyes, left eye first: left half and right half for
             // side by side, top half and bottom half for top and bottom
             const int w = rotatedSize.width();
