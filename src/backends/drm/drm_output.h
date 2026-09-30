@@ -11,6 +11,7 @@
 #include "core/backendoutput.h"
 #include "drm_object.h"
 #include "drm_plane.h"
+#include "drm_stereo.h"
 #include "utils/filedescriptor.h"
 
 #include <QList>
@@ -71,6 +72,11 @@ public:
      * @returns whether or not the renderer should apply channel factors
      */
     bool needsShadowBuffer() const;
+    /**
+     * The 3D structure the output is being sent in, StereoLayout::None for 2D.
+     * The desktop is drawn into both eyes (EglGbmLayerSurface).
+     */
+    StereoLayout activeStereoLayout() const;
 
     void removePipeline();
     void maybeUpdateDpmsState();
@@ -109,6 +115,7 @@ private:
     // m_appliedLayerBlendingColor means there is none
     ColorPipeline m_appliedPostBlendPipeline;
     std::shared_ptr<ColorDescription> m_appliedLayerBlendingColor;
+    StereoLayout m_stereoLayout = StereoLayout::None;
     PresentationMode m_desiredPresentationMode = PresentationMode::VSync;
     bool m_autoRotateAvailable = false;
     bool m_autoBrightnessAvailable = false;

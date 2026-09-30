@@ -242,6 +242,27 @@ QList<std::shared_ptr<DrmConnectorMode>> DrmConnector::modes() const
     return m_modes;
 }
 
+std::shared_ptr<DrmConnectorMode> DrmConnector::stereoVariant(DrmConnectorMode *mode, StereoLayout layout) const
+{
+    uint32_t structure = 0;
+    switch (layout) {
+    case StereoLayout::None:
+        return nullptr;
+    case StereoLayout::SideBySideHalf:
+        structure = DRM_MODE_FLAG_3D_SIDE_BY_SIDE_HALF;
+        break;
+    case StereoLayout::TopAndBottom:
+        structure = DRM_MODE_FLAG_3D_TOP_AND_BOTTOM;
+        break;
+    }
+    drmModeModeInfo wanted = *mode->nativeMode();
+    wanted.flags = (wanted.flags & ~DRM_MODE_FLAG_3D_MASK) | structure;
+    const auto it = std::ranges::find_if(m_stereoModes, [&wanted](const auto &stereo) {
+        return *stereo == wanted;
+    });
+    return it == m_stereoModes.end() ? nullptr : *it;
+}
+
 BackendOutput::SubPixel DrmConnector::subpixel() const
 {
     switch (m_conn->subpixel) {
@@ -320,26 +341,39 @@ bool DrmConnector::updateProperties()
     }
 
     // update modes
-    bool equal = m_conn->count_modes == m_driverModes.count();
-    for (int i = 0; equal && i < m_conn->count_modes; i++) {
-        equal &= checkIfEqual(m_driverModes[i]->nativeMode(), &m_conn->modes[i]);
+    // 3D modes (DRM_MODE_FLAG_3D_*, listed since DrmGpu asks for them) each repeat a 2D mode's
+    // timing; they are kept apart and only reached through stereoVariant()
+    QList<const drmModeModeInfo *> flatModes;
+    QList<const drmModeModeInfo *> stereoModes;
+    for (int i = 0; i < m_conn->count_modes; i++) {
+        (m_conn->modes[i].flags & DRM_MODE_FLAG_3D_MASK ? stereoModes : flatModes).append(&m_conn->modes[i]);
     }
-    if (!equal && m_conn->count_modes > 0) {
+    bool equal = flatModes.count() == m_driverModes.count() && stereoModes.count() == m_stereoModes.count();
+    for (int i = 0; equal && i < flatModes.count(); i++) {
+        equal &= checkIfEqual(m_driverModes[i]->nativeMode(), flatModes[i]);
+    }
+    for (int i = 0; equal && i < stereoModes.count(); i++) {
+        equal &= checkIfEqual(m_stereoModes[i]->nativeMode(), stereoModes[i]);
+    }
+    if (!equal && !flatModes.isEmpty()) {
         // reload modes
         m_driverModes.clear();
-        const auto modes = std::span(m_conn->modes, m_conn->count_modes);
-        auto usableModes = modes | std::views::filter([](drmModeModeInfo mode) {
-            return mode.hdisplay >= 640 && mode.vdisplay >= 480;
+        auto usableModes = flatModes | std::views::filter([](const drmModeModeInfo *mode) {
+            return mode->hdisplay >= 640 && mode->vdisplay >= 480;
         });
         if (usableModes.empty()) {
             // allow unusable modes, we don't have much of a choice
-            for (const auto &mode : modes) {
-                m_driverModes.append(std::make_shared<DrmConnectorMode>(this, mode));
+            for (const drmModeModeInfo *mode : std::as_const(flatModes)) {
+                m_driverModes.append(std::make_shared<DrmConnectorMode>(this, *mode));
             }
         } else {
-            for (const auto &mode : usableModes) {
-                m_driverModes.append(std::make_shared<DrmConnectorMode>(this, mode));
+            for (const drmModeModeInfo *mode : usableModes) {
+                m_driverModes.append(std::make_shared<DrmConnectorMode>(this, *mode));
             }
+        }
+        m_stereoModes.clear();
+        for (const drmModeModeInfo *mode : std::as_const(stereoModes)) {
+            m_stereoModes.append(std::make_shared<DrmConnectorMode>(this, *mode));
         }
         m_modes.clear();
         m_modes.append(m_driverModes);

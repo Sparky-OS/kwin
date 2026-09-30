@@ -188,6 +188,9 @@ void DrmGpu::initDrmResources()
     // always set the cap, so autotests can read back properties,
     // even when this DrmGpu otherwise only uses legacy modesetting
     const bool atomicSuccessful = drmSetClientCap(m_fd, DRM_CLIENT_CAP_ATOMIC, 1) == 0;
+    // HDMI 1.4 3D modes are listed only to clients that ask for them; DrmConnector keeps
+    // them out of the normal mode list (see DrmConnector::stereoVariant)
+    drmSetClientCap(m_fd, DRM_CLIENT_CAP_STEREO_3D, 1);
     if (noAMS) {
         qCWarning(KWIN_DRM) << "Atomic Mode Setting requested off via environment variable. Using legacy mode on GPU" << this;
     } else if (atomicSuccessful) {
