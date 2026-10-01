@@ -104,7 +104,8 @@ private:
 
     QVector3D m_sRgbChannelFactors = {1, 1, 1};
     bool m_needsShadowBuffer = false;
-    StereoLayout m_anaglyphLayout = StereoLayout::None;
+    // a layout on the 2D mode (no 3D signal): side by side, top and bottom or anaglyph
+    StereoLayout m_manualLayout = StereoLayout::None;
     PresentationMode m_desiredPresentationMode = PresentationMode::VSync;
     bool m_autoRotateAvailable = false;
     bool m_autoBrightnessAvailable = false;

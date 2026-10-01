@@ -124,6 +124,7 @@ public:
         Stereo3DSideBySideHalf = 0x20,
         Stereo3DTopAndBottom = 0x40,
         Stereo3DFramePacking = 0x80,
+        Stereo3DSideBySideFull = 0x100,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 

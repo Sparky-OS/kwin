@@ -120,10 +120,13 @@ bool DrmOutput::shouldDisableNonPrimaryPlanes() const
 }
 
 // A display's HDMI 3D modes are listed with its other modes, and choosing one is turning 3D
-// on. Anaglyph needs no 3D mode, so until the display settings offer it, it is switched on
-// per output with KWIN_DRM_STEREO_3D=CONNECTOR=layout[,...], layout "anaglyph-crt" /
-// "anaglyph-modern" (also "anaglyph"), e.g. HDMI-A-1=anaglyph-modern.
-static StereoLayout anaglyphSetting(const QString &outputName)
+// on. The layouts that need no 3D mode, on any output's 2D mode, are switched on per output
+// with KWIN_DRM_STEREO_3D=CONNECTOR=layout[,...] until the display settings offer them:
+// "sbs" (side by side, half) and "tab" (top and bottom) for a display whose 3D format is set
+// by hand because it doesn't detect a 3D signal, "anaglyph-crt" / "anaglyph-modern" (also
+// "anaglyph") for red/cyan glasses, e.g. HDMI-A-1=anaglyph-modern. A 3D mode, when chosen,
+// takes precedence.
+static StereoLayout manualStereoSetting(const QString &outputName)
 {
     const QStringList entries = qEnvironmentVariable("KWIN_DRM_STEREO_3D").split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (const QString &entry : entries) {
@@ -132,7 +135,11 @@ static StereoLayout anaglyphSetting(const QString &outputName)
             continue;
         }
         const QString layout = pair[1].trimmed().toLower();
-        if (layout == QLatin1String("anaglyph") || layout == QLatin1String("anaglyph-crt")) {
+        if (layout == QLatin1String("sbs")) {
+            return StereoLayout::SideBySideHalf;
+        } else if (layout == QLatin1String("tab")) {
+            return StereoLayout::TopAndBottom;
+        } else if (layout == QLatin1String("anaglyph") || layout == QLatin1String("anaglyph-crt")) {
             return StereoLayout::AnaglyphCrt;
         } else if (layout == QLatin1String("anaglyph-modern")) {
             return StereoLayout::AnaglyphModern;
@@ -146,13 +153,13 @@ StereoLayout DrmOutput::activeStereoLayout() const
     if (!m_pipeline) {
         return StereoLayout::None;
     }
-    // a 3D mode is sent in its own structure; otherwise anaglyph, if asked for, on any output
+    // a 3D mode is sent in its own structure; otherwise a layout on the 2D mode, if asked for
     if (const auto mode = m_pipeline->mode()) {
         if (const StereoLayout layout = stereoLayoutForMode(mode->flags()); layout != StereoLayout::None) {
             return layout;
         }
     }
-    return m_anaglyphLayout;
+    return m_manualLayout;
 }
 
 bool DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay)
@@ -639,7 +646,7 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     const bool hdr = m_nextState->highDynamicRange && (capabilities() & Capability::HighDynamicRange);
     const auto mode = std::static_pointer_cast<DrmConnectorMode>(m_nextState->currentMode);
     m_pipeline->setMode(mode);
-    m_anaglyphLayout = anaglyphSetting(name());
+    m_manualLayout = manualStereoSetting(name());
     m_pipeline->setOverscan(m_nextState->overscan);
     m_pipeline->setRgbRange(m_nextState->rgbRange);
     m_pipeline->setEnable(m_nextState->enabled);

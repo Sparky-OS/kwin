@@ -51,12 +51,13 @@ EglGbmLayer::EglGbmLayer(EglGbmBackend *eglBackend, DrmGpu *gpu, DrmPlane::TypeI
 {
 }
 
-// the scanout buffer: for frame packing the whole frame (both eyes and the blanking between
-// them), otherwise the layer's size
+// the scanout buffer: for frame packing and side by side full the whole frame holding both
+// eyes, otherwise the layer's size
 QSize EglGbmLayer::scanoutSize() const
 {
-    if (m_type == OutputLayerType::Primary && drmOutput()->activeStereoLayout() == StereoLayout::FramePacking) {
-        return framePackedSize(*pipeline()->mode()->nativeMode());
+    const StereoLayout layout = drmOutput()->activeStereoLayout();
+    if (m_type == OutputLayerType::Primary && isFullFrameStereo(layout)) {
+        return stereoFrameSize(*pipeline()->mode()->nativeMode(), layout);
     }
     return targetRect().size();
 }
@@ -65,9 +66,9 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::doBeginFrame()
 {
     m_scanoutBuffer.reset();
     const StereoLayout stereoLayout = drmOutput()->activeStereoLayout();
-    if (m_type == OutputLayerType::Primary && stereoLayout == StereoLayout::FramePacking) {
+    if (m_type == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         const drmModeModeInfo *mode = pipeline()->mode()->nativeMode();
-        m_surface.setStereoLayout(stereoLayout, QSize(mode->hdisplay, mode->vdisplay), mode->vtotal);
+        m_surface.setStereoLayout(stereoLayout, QSize(mode->hdisplay, mode->vdisplay), stereoRightEyeOffset(*mode, stereoLayout));
     } else {
         m_surface.setStereoLayout(stereoLayout);
     }

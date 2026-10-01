@@ -309,7 +309,7 @@ bool DrmConnector::updateProperties()
     // update modes
     // the display's HDMI 3D modes (DRM_MODE_FLAG_3D_*, listed since DrmGpu asks for them) are
     // listed with the others, flagged with their 3D structure (side by side half, top and
-    // bottom, frame packing); the other structures are left out
+    // bottom, frame packing, side by side full); the other structures are left out
     QList<const drmModeModeInfo *> driverModes;
     for (int i = 0; i < m_conn->count_modes; i++) {
         const drmModeModeInfo *mode = &m_conn->modes[i];

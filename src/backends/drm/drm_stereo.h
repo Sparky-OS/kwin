@@ -8,6 +8,7 @@
 
 #include "core/output.h"
 
+#include <QPoint>
 #include <QSize>
 
 #include <xf86drmMode.h>
@@ -16,17 +17,21 @@ namespace KWin
 {
 
 /**
- * Stereoscopic 3D output. SideBySideHalf, TopAndBottom and FramePacking are HDMI 1.4
- * structures a mode is sent in (DRM_MODE_FLAG_3D_*, from the display's EDID): choosing such a mode is
- * turning 3D on, and the desktop is drawn into both eyes. The anaglyph layouts need no 3D
- * mode and work on any screen, the two eyes mixed into one picture for red/cyan glasses
- * (CRT or modern-screen matrices).
+ * Stereoscopic 3D output. SideBySideHalf, TopAndBottom, FramePacking and SideBySideFull
+ * are HDMI 1.4 structures a mode is sent in (DRM_MODE_FLAG_3D_*, from the display's EDID):
+ * choosing such a mode is turning 3D on, and the desktop is drawn into both eyes.
+ *
+ * Without a 3D mode, an output can still be packed side by side (half) or top and bottom
+ * on its 2D mode, for displays that don't detect a 3D signal and have their 3D format set
+ * by hand (projectors and the like), or mixed as anaglyph for red/cyan glasses on any
+ * screen (CRT or modern-screen matrices).
  */
 enum class StereoLayout {
     None,
     SideBySideHalf,
     TopAndBottom,
     FramePacking,
+    SideBySideFull,
     AnaglyphCrt,
     AnaglyphModern,
 };
@@ -38,7 +43,8 @@ inline bool isAnaglyph(StereoLayout layout)
 
 /**
  * The mode flag for a DRM mode's 3D structure; empty for 2D modes and for the 3D structures
- * the desktop can't be drawn into yet (frame packing and the rest), which aren't listed.
+ * the desktop can't be drawn into (field and line alternative, L + depth), which aren't
+ * listed.
  */
 inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
 {
@@ -49,6 +55,8 @@ inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
         return OutputModeline::Flag::Stereo3DTopAndBottom;
     case DRM_MODE_FLAG_3D_FRAME_PACKING:
         return OutputModeline::Flag::Stereo3DFramePacking;
+    case DRM_MODE_FLAG_3D_SIDE_BY_SIDE_FULL:
+        return OutputModeline::Flag::Stereo3DSideBySideFull;
     default:
         return {};
     }
@@ -65,17 +73,39 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
     if (flags & OutputModeline::Flag::Stereo3DFramePacking) {
         return StereoLayout::FramePacking;
     }
+    if (flags & OutputModeline::Flag::Stereo3DSideBySideFull) {
+        return StereoLayout::SideBySideFull;
+    }
     return StereoLayout::None;
 }
 
 /**
- * Frame packing sends both eyes in full in one taller frame: the left eye, the mode's
- * vertical blanking, then the right eye from line vtotal on (HDMI 1.4). The
- * scanout buffer is that whole frame; the mode's size is one eye.
+ * The layouts that send both eyes in full in one frame bigger than the mode, which is one
+ * eye: frame packing (the left eye, the mode's vertical blanking, then the right eye from
+ * line vtotal on) and side by side full (the right eye from column hdisplay on), as the
+ * kernel times them (CRTC_STEREO_DOUBLE). The scanout buffer is that whole frame.
  */
-inline QSize framePackedSize(const drmModeModeInfo &mode)
+inline bool isFullFrameStereo(StereoLayout layout)
 {
-    return QSize(mode.hdisplay, mode.vtotal + mode.vdisplay);
+    return layout == StereoLayout::FramePacking || layout == StereoLayout::SideBySideFull;
+}
+
+inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
+{
+    switch (layout) {
+    case StereoLayout::FramePacking:
+        return QSize(mode.hdisplay, mode.vtotal + mode.vdisplay);
+    case StereoLayout::SideBySideFull:
+        return QSize(2 * mode.hdisplay, mode.vdisplay);
+    default:
+        return QSize(mode.hdisplay, mode.vdisplay);
+    }
+}
+
+// where the right eye starts in a full-frame layout
+inline QPoint stereoRightEyeOffset(const drmModeModeInfo &mode, StereoLayout layout)
+{
+    return layout == StereoLayout::FramePacking ? QPoint(0, mode.vtotal) : QPoint(mode.hdisplay, 0);
 }
 
 }
