@@ -1464,6 +1464,7 @@ void XdgToplevelWindow::initialize()
     setShortcut(rules()->checkShortcut(initialShortcut(sessionData), true));
     setDecorationPolicy(rules()->checkDecorationPolicy(initialDecorationPolicy(sessionData), true));
     setExcludeFromCapture(rules()->checkExcludeFromCapture(initialExcludeFromCapture(sessionData), true));
+    updateStereoContent();
 
     workspace()->rulebook()->discardUsed(this, false); // Remove Apply Now rules.
     updateWindowRules(Rules::All);
