@@ -35,6 +35,7 @@ public:
     void releaseBuffers() override;
 
 private:
+    QSize scanoutSize() const;
     bool earlyScanoutChecks() override;
     bool importScanoutBuffer(GraphicsBuffer *buffer, const std::shared_ptr<OutputFrame> &frame) override;
 

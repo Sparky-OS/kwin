@@ -31,7 +31,8 @@ namespace KWin
 // HDMI 3D modes are listed with the others but only ever set by the user
 static bool isStereo3D(OutputModeline::Flags flags)
 {
-    return flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf) || flags.testFlag(OutputModeline::Flag::Stereo3DTopAndBottom);
+    return flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf) || flags.testFlag(OutputModeline::Flag::Stereo3DTopAndBottom)
+        || flags.testFlag(OutputModeline::Flag::Stereo3DFramePacking);
 }
 
 OutputConfigurationStore::OutputConfigurationStore()

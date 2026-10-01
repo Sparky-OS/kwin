@@ -1350,13 +1350,16 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
         if (m_flags & OutputModeline::Flag::ReducedBlanking) {
             flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_REDUCED_BLANKING;
         }
-        // the mode's HDMI 3D structure: kde_output_device_mode_v2.flags stereo_side_by_side_half
-        // and stereo_top_and_bottom (plasma-wayland-protocols, stereo3d branch)
+        // the mode's HDMI 3D structure: kde_output_device_mode_v2.flags stereo_side_by_side_half,
+        // stereo_top_and_bottom and stereo_frame_packing (plasma-wayland-protocols, stereo3d branch)
         if (m_flags & OutputModeline::Flag::Stereo3DSideBySideHalf) {
             flags |= 0x4;
         }
         if (m_flags & OutputModeline::Flag::Stereo3DTopAndBottom) {
             flags |= 0x8;
+        }
+        if (m_flags & OutputModeline::Flag::Stereo3DFramePacking) {
+            flags |= 0x10;
         }
         send_flags(resource->handle, flags);
     }
