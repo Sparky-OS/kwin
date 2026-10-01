@@ -55,7 +55,7 @@ std::optional<OutputModeline> LegacyOutputModeline::match(const QList<OutputMode
 static bool isStereo3D(OutputModeline::Flags flags)
 {
     return flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf) || flags.testFlag(OutputModeline::Flag::Stereo3DTopAndBottom)
-        || flags.testFlag(OutputModeline::Flag::Stereo3DFramePacking);
+        || flags.testFlag(OutputModeline::Flag::Stereo3DFramePacking) || flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideFull);
 }
 
 OutputConfigurationStore::OutputConfigurationStore()

@@ -131,8 +131,8 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayerSurface::startRendering(cons
 
     m_surface->compositingTimeQuery = GLRenderTimeQuery::begin(m_surface->context);
     if (m_surface->needsShadowBuffer) {
-        // frame packing: the desktop is rendered once at one eye's size
-        const QSize shadowSize = m_stereoLayout == StereoLayout::FramePacking ? m_eyeSize : m_surface->gbmSwapchain->size();
+        // frame packing and side by side full: the desktop is rendered once at one eye's size
+        const QSize shadowSize = isFullFrameStereo(m_stereoLayout) ? m_eyeSize : m_surface->gbmSwapchain->size();
         if (!m_surface->shadowSwapchain || m_surface->shadowSwapchain->size() != shadowSize) {
             const auto formats = m_eglBackend->eglDisplayObject()->nonExternalOnlySupportedDrmFormats();
             const QList<FormatInfo> sortedFormats = OutputLayer::filterAndSortFormats(formats, requiredAlphaBits, tradeoff);
@@ -303,14 +303,14 @@ bool EglGbmLayerSurface::drawAnaglyph(const QSize &fboSize, const Region &repain
     return true;
 }
 
-void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSize, int rightEyeY)
+void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSize, const QPoint &rightEyeOffset)
 {
-    if ((layout != m_stereoLayout || eyeSize != m_eyeSize || rightEyeY != m_rightEyeY) && m_surface) {
+    if ((layout != m_stereoLayout || eyeSize != m_eyeSize || rightEyeOffset != m_rightEyeOffset) && m_surface) {
         m_surface->damageJournal.clear();
     }
     m_stereoLayout = layout;
     m_eyeSize = eyeSize;
-    m_rightEyeY = rightEyeY;
+    m_rightEyeOffset = rightEyeOffset;
 }
 
 bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputFrame *frame)
@@ -348,7 +348,7 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
         } else if (stereo && !anaglyph) {
             // the desktop into both eyes, left eye first: left half and right half for
             // side by side, top half and bottom half for top and bottom, each eye in full
-            // with black between them for frame packing
+            // for frame packing (black between them) and side by side full
             const int w = rotatedSize.width();
             const int h = rotatedSize.height();
             std::array<Rect, 2> deviceEyes;
@@ -357,9 +357,10 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
                 deviceEyes = {Rect(0, 0, w / 2, h), Rect(w / 2, 0, w - w / 2, h)};
                 break;
             case StereoLayout::FramePacking:
+            case StereoLayout::SideBySideFull:
                 glClearColor(0, 0, 0, 1);
                 glClear(GL_COLOR_BUFFER_BIT);
-                deviceEyes = {Rect(QPoint(0, 0), m_eyeSize), Rect(QPoint(0, m_rightEyeY), m_eyeSize)};
+                deviceEyes = {Rect(QPoint(0, 0), m_eyeSize), Rect(m_rightEyeOffset, m_eyeSize)};
                 break;
             default:
                 deviceEyes = {Rect(0, 0, w, h / 2), Rect(0, h / 2, w, h - h / 2)};

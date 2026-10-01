@@ -279,9 +279,10 @@ std::expected<void, OutputError> DrmPipeline::prepareAtomicPlane(DrmAtomicCommit
     commit->addBuffer(plane, fb, frame);
     Rect sourceRect = layer->sourceRect().toRect();
     Rect targetRect = layer->targetRect();
-    // frame packing: the primary plane is the whole frame, both eyes and the blanking between them
-    if (layer->type() == OutputLayerType::Primary && stereoLayoutForMode(m_pending.mode->flags()) == StereoLayout::FramePacking) {
-        sourceRect = targetRect = Rect(QPoint(0, 0), framePackedSize(*m_pending.mode->nativeMode()));
+    // frame packing and side by side full: the primary plane is the whole frame holding both eyes
+    const StereoLayout stereoLayout = stereoLayoutForMode(m_pending.mode->flags());
+    if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
+        sourceRect = targetRect = Rect(QPoint(0, 0), stereoFrameSize(*m_pending.mode->nativeMode(), stereoLayout));
     }
     plane->set(commit, sourceRect, targetRect);
     if (plane->vmHotspotX.isValid() && plane->vmHotspotY.isValid()) {

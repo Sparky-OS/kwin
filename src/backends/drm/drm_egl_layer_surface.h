@@ -66,7 +66,7 @@ public:
      * In 3D the shadow buffer holds the desktop once, and endRendering() draws it into
      * both eyes of the scanout buffer; needs the shadow buffer (DrmOutput::needsShadowBuffer).
      */
-    void setStereoLayout(StereoLayout layout, const QSize &eyeSize = QSize(), int rightEyeY = 0);
+    void setStereoLayout(StereoLayout layout, const QSize &eyeSize = QSize(), const QPoint &rightEyeOffset = QPoint());
 
     void destroyResources();
     EglGbmBackend *eglBackend() const;
@@ -138,9 +138,9 @@ private:
     DrmGpu *const m_gpu;
     EglGbmBackend *const m_eglBackend;
     StereoLayout m_stereoLayout = StereoLayout::None;
-    // frame packing: one eye's size, and where the right eye starts in the frame
+    // frame packing and side by side full: one eye's size, and where the right eye starts
     QSize m_eyeSize;
-    int m_rightEyeY = 0;
+    QPoint m_rightEyeOffset;
     const BufferTarget m_requestedBufferTarget;
 };
 
