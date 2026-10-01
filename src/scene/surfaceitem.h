@@ -43,6 +43,14 @@ public:
     RectF bufferSourceBox() const;
     void setBufferSourceBox(const RectF &box);
 
+    /**
+     * How the buffer holds two views, one for each eye. A stereo surface shows one view
+     * over its whole rect: the view of the eye being rendered, else the left one.
+     */
+    StereoContent stereoContent() const;
+    void setStereoContent(StereoContent content);
+    WindowQuadList eyeQuads(StereoEye eye) const;
+
     OutputTransform bufferTransform() const;
     void setBufferTransform(OutputTransform transform);
 
@@ -80,6 +88,7 @@ protected:
 
     void preprocess() override;
     WindowQuadList buildQuads() const override;
+    WindowQuadList buildSourceQuads(const RectF &bufferSourceBox) const;
     void releaseResources() override;
 
     Region m_damage;
@@ -87,6 +96,7 @@ protected:
     OutputTransform m_surfaceToBufferTransform;
     GraphicsBufferRef m_bufferRef;
     RectF m_bufferSourceBox;
+    StereoContent m_stereoContent = StereoContentNone;
     QSize m_bufferSize;
     QSizeF m_destinationSize;
     bool m_hasAlphaChannel = false;

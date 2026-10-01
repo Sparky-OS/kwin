@@ -113,7 +113,11 @@ void ItemRendererOpenGL::setBlendEnabled(bool enabled)
 
 static RenderGeometry clipQuads(const Item *item, const ItemRendererOpenGL::RenderContext *context)
 {
-    const WindowQuadList quads = item->quads();
+    // a stereo surface shows the view of the eye being rendered, the left one outside 3D
+    const SurfaceItem *surfaceItem = qobject_cast<const SurfaceItem *>(item);
+    const WindowQuadList quads = surfaceItem && surfaceItem->stereoContent() != StereoContentNone
+        ? surfaceItem->eyeQuads(context->stereoEye == StereoEye::Right ? StereoEye::Right : StereoEye::Left)
+        : item->quads();
 
     const qreal scale = context->renderTargetScale;
     const QPointF itemToDeviceTranslation = context->transformStack.top().map(QPointF(0., 0.))
@@ -376,6 +380,7 @@ void ItemRendererOpenGL::renderItem(const RenderTarget &renderTarget, const Rend
         .renderTargetScale = viewport.scale(),
         .viewportOrigin = viewport.scaledRenderRect().topLeft(),
         .renderOffset = viewport.renderOffset(),
+        .stereoEye = stereoEye(),
     };
 
     renderContext.transformStack.push(QMatrix4x4());

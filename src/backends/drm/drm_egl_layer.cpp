@@ -91,6 +91,16 @@ bool EglGbmLayer::doEndFrame(const Region &renderedDeviceRegion, const Region &d
     return m_surface.endRendering(damagedDeviceRegion, frame);
 }
 
+bool EglGbmLayer::hasStereoEyes() const
+{
+    return m_type == OutputLayerType::Primary && drmOutput()->activeStereoLayout() != StereoLayout::None;
+}
+
+std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::beginRightEyeFrame()
+{
+    return m_surface.startRightEye();
+}
+
 bool EglGbmLayer::preparePresentationTest()
 {
     if (m_type != OutputLayerType::Primary && drmOutput()->shouldDisableNonPrimaryPlanes()) {

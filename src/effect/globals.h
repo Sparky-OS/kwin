@@ -174,6 +174,44 @@ enum Layer {
 };
 Q_ENUM_NS(Layer)
 
+/**
+ * How a window's picture holds two views, one per eye (stereo content): HDMI's 3D
+ * structures for the packing, and the eye order of the frame packing SEI. The
+ * right-first values carry the right eye's view on the left or at the top.
+ */
+enum StereoContent {
+    StereoContentNone = 0,
+    StereoContentSideBySideHalf,
+    StereoContentSideBySideHalfRightFirst,
+    StereoContentSideBySideFull,
+    StereoContentSideBySideFullRightFirst,
+    StereoContentTopAndBottomHalf,
+    StereoContentTopAndBottomHalfRightFirst,
+    StereoContentTopAndBottomFull,
+    StereoContentTopAndBottomFullRightFirst,
+};
+Q_ENUM_NS(StereoContent)
+
+inline bool isSideBySideStereoContent(StereoContent content)
+{
+    return content >= StereoContentSideBySideHalf && content <= StereoContentSideBySideFullRightFirst;
+}
+
+inline bool isRightFirstStereoContent(StereoContent content)
+{
+    return content == StereoContentSideBySideHalfRightFirst || content == StereoContentSideBySideFullRightFirst
+        || content == StereoContentTopAndBottomHalfRightFirst || content == StereoContentTopAndBottomFullRightFirst;
+}
+
+/**
+ * The eye a scene pass renders; None when the output shows one picture.
+ */
+enum class StereoEye {
+    None,
+    Left,
+    Right,
+};
+
 // TODO: could this be in Tile itself?
 enum class QuickTileFlag {
     None = 0,

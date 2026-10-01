@@ -77,6 +77,7 @@ public:
     bool checkDisableGlobalShortcuts(bool disable) const;
     QString checkDesktopFile(QString desktopFile, bool init = false) const;
     Layer checkLayer(Layer layer) const;
+    StereoContent checkStereo3D(StereoContent content) const;
     bool checkAdaptiveSync(bool adaptivesync) const;
     bool checkTearing(bool requestsTearing) const;
     bool checkExcludeFromCapture(bool exclude, bool init = false) const;
@@ -194,6 +195,7 @@ public:
     bool applyDisableGlobalShortcuts(bool &disable) const;
     bool applyDesktopFile(QString &desktopFile, bool init) const;
     bool applyLayer(enum Layer &layer) const;
+    bool applyStereo3D(enum StereoContent &content) const;
     bool applyAdaptiveSync(bool &adaptivesync) const;
     bool applyTearing(bool &tearing) const;
     bool applyExcludeFromCapture(bool &exclude, bool init) const;
@@ -222,6 +224,8 @@ private:
 #endif
     enum Layer layer;
     ForceRule layerrule;
+    enum StereoContent stereo3d;
+    ForceRule stereo3drule;
     QString m_id;
     bool m_enabled = true;
     QString description;

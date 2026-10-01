@@ -128,6 +128,16 @@ bool OutputLayer::endFrame(const Region &renderedDeviceRegion, const Region &dam
     return doEndFrame(renderedDeviceRegion, damagedDeviceRegion, frame);
 }
 
+bool OutputLayer::hasStereoEyes() const
+{
+    return false;
+}
+
+std::optional<OutputLayerBeginFrameInfo> OutputLayer::beginRightEyeFrame()
+{
+    return std::nullopt;
+}
+
 void OutputLayer::setScanoutCandidate(SurfaceItem *item)
 {
     if (m_scanoutCandidate && item != m_scanoutCandidate) {

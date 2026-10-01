@@ -33,6 +33,7 @@ WindowItem::WindowItem(Window *window, Item *parent)
     updateDecorationItem();
 
     connect(window, &Window::shadowChanged, this, &WindowItem::updateShadowItem);
+    connect(window, &Window::stereoContentChanged, this, &WindowItem::updateStereoContent);
     updateShadowItem();
 
     connect(window, &Window::frameGeometryChanged, this, &WindowItem::updateGeometry);
@@ -234,6 +235,7 @@ void WindowItem::updateSurfaceItem(std::unique_ptr<SurfaceItem> &&surfaceItem)
 
         updateSurfacePosition();
         updateBorderRadius();
+        updateStereoContent();
     } else {
         disconnect(m_window, &Window::bufferGeometryChanged, this, &WindowItem::updateSurfacePosition);
         disconnect(m_window, &Window::frameGeometryChanged, this, &WindowItem::updateSurfacePosition);
@@ -252,6 +254,15 @@ void WindowItem::updateSurfacePosition()
 void WindowItem::updateBorderRadius()
 {
     m_windowContainer->setBorderRadius(m_window->borderRadius());
+}
+
+// the window's main surface holds its stereo picture; subsurfaces, decoration and
+// shadow stay the same in both eyes
+void WindowItem::updateStereoContent()
+{
+    if (m_surfaceItem) {
+        m_surfaceItem->setStereoContent(m_window->stereoContent());
+    }
 }
 
 void WindowItem::updateShadowItem()

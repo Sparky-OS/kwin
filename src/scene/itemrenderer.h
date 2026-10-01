@@ -9,6 +9,7 @@
 #include <kwin_export.h>
 
 #include "core/region.h"
+#include "effect/globals.h"
 
 #include <QMatrix4x4>
 #include <memory>
@@ -60,6 +61,15 @@ public:
     virtual void renderItem(const RenderTarget &renderTarget, const RenderViewport &viewport, Item *item, int mask, const Region &deviceRegion, const WindowPaintData &data, const std::function<bool(Item *)> &filter, const std::function<bool(Item *)> &holeFilter) = 0;
 
     virtual void setLayerDebugging(bool enable);
+
+    /**
+     * The eye the scene is rendered for: stereo surfaces show that eye's view.
+     */
+    StereoEye stereoEye() const;
+    void setStereoEye(StereoEye eye);
+
+private:
+    StereoEye m_stereoEye = StereoEye::None;
 };
 
 } // namespace KWin

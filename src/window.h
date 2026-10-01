@@ -1417,6 +1417,13 @@ public:
     bool excludeFromCapture() const;
     void setExcludeFromCapture(bool newExcludeFromCapture);
 
+    /**
+     * How the window's picture holds two views, one for each eye. The stereo content
+     * window rule sets it.
+     */
+    StereoContent stereoContent() const;
+    void updateStereoContent();
+
 public Q_SLOTS:
     virtual void closeWindow() = 0;
 
@@ -1534,6 +1541,7 @@ Q_SIGNALS:
     void descriptionChanged();
     void borderRadiusChanged();
     void excludeFromCaptureChanged();
+    void stereoContentChanged();
     void decorationPolicyChanged();
 
 protected:
@@ -1857,6 +1865,7 @@ protected:
     bool m_minimized = false;
     bool m_suspended = false;
     bool m_excludeFromCapture = false;
+    StereoContent m_stereoContent = StereoContentNone;
     QTimer *m_autoRaiseTimer = nullptr;
     QList<VirtualDesktop *> m_desktops;
 

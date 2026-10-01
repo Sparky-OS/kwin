@@ -37,6 +37,7 @@ namespace KWin
 
 Rules::Rules()
     : layerrule(UnusedForceRule)
+    , stereo3drule(UnusedForceRule)
     , wmclassmatch(UnimportantMatch)
     , wmclasscomplete(UnimportantMatch)
     , windowrolematch(UnimportantMatch)
@@ -169,6 +170,7 @@ void Rules::readFromSettings(const RuleSettings *settings)
     READ_FORCE_RULE(disableglobalshortcuts, );
     READ_SET_RULE(desktopfile);
     READ_FORCE_RULE(layer, );
+    READ_FORCE_RULE(stereo3d, );
     READ_FORCE_RULE(adaptivesync, );
     READ_FORCE_RULE(tearing, );
     READ_SET_RULE(excludefromcapture);
@@ -265,6 +267,7 @@ void Rules::write(RuleSettings *settings) const
     WRITE_FORCE_RULE(disableglobalshortcuts, Disableglobalshortcuts, );
     WRITE_SET_RULE(desktopfile, Desktopfile, );
     WRITE_FORCE_RULE(layer, Layer, );
+    WRITE_FORCE_RULE(stereo3d, Stereo3d, );
     WRITE_FORCE_RULE(adaptivesync, Adaptivesync, );
 }
 
@@ -310,6 +313,7 @@ bool Rules::isEmpty() const
         && disableglobalshortcutsrule == UnusedForceRule
         && desktopfilerule == UnusedSetRule
         && layerrule == UnusedForceRule
+        && stereo3drule == UnusedForceRule
         && adaptivesyncrule == UnusedForceRule
         && tearingrule == UnusedForceRule
         && excludefromcapturerule == UnusedSetRule;
@@ -688,6 +692,7 @@ APPLY_RULE(ignoregeometry, IgnoreGeometry, bool)
 APPLY_RULE(screen, Screen, int)
 APPLY_RULE(activity, Activity, QStringList)
 APPLY_FORCE_RULE(layer, Layer, enum Layer)
+APPLY_FORCE_RULE(stereo3d, Stereo3D, enum StereoContent)
 
 bool Rules::applyDesktops(QList<VirtualDesktop *> &vds, bool init) const
 {
@@ -799,6 +804,7 @@ bool Rules::discardUsed(bool withdrawn)
     DISCARD_USED_FORCE_RULE(disableglobalshortcuts);
     DISCARD_USED_SET_RULE(desktopfile);
     DISCARD_USED_FORCE_RULE(layer);
+    DISCARD_USED_FORCE_RULE(stereo3d);
     DISCARD_USED_FORCE_RULE(adaptivesync);
     DISCARD_USED_FORCE_RULE(tearing);
     DISCARD_USED_SET_RULE(excludefromcapture);
@@ -961,6 +967,7 @@ CHECK_RULE(Shortcut, QString)
 CHECK_FORCE_RULE(DisableGlobalShortcuts, bool)
 CHECK_RULE(DesktopFile, QString)
 CHECK_FORCE_RULE(Layer, Layer)
+CHECK_FORCE_RULE(Stereo3D, StereoContent)
 CHECK_FORCE_RULE(AdaptiveSync, bool)
 CHECK_FORCE_RULE(Tearing, bool)
 CHECK_RULE(ExcludeFromCapture, bool)

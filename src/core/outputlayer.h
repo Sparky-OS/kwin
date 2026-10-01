@@ -99,6 +99,15 @@ public:
     bool endFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame);
 
     /**
+     * Whether the layer shows two eyes (a 3D or anaglyph output). Such a layer can take the
+     * scene once per eye: beginFrame() gives the left eye's render target, and
+     * beginRightEyeFrame(), called before endFrame(), the right eye's. Without the right
+     * eye's frame, the layer shows the left eye's picture in both.
+     */
+    virtual bool hasStereoEyes() const;
+    virtual std::optional<OutputLayerBeginFrameInfo> beginRightEyeFrame();
+
+    /**
      * Do checks if the current configuration of the layer could possibly work.
      * This can include checking things like color operations or offload transforms
      */

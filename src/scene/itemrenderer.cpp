@@ -34,4 +34,14 @@ void ItemRenderer::setLayerDebugging(bool enable)
 {
 }
 
+StereoEye ItemRenderer::stereoEye() const
+{
+    return m_stereoEye;
+}
+
+void ItemRenderer::setStereoEye(StereoEye eye)
+{
+    m_stereoEye = eye;
+}
+
 } // namespace KWin
