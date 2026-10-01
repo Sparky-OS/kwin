@@ -8,6 +8,7 @@
 */
 
 #include "drm_pipeline.h"
+#include "drm_stereo.h"
 
 #include <errno.h>
 
@@ -276,7 +277,13 @@ std::expected<void, OutputError> DrmPipeline::prepareAtomicPlane(DrmAtomicCommit
     }
     commit->addProperty(plane->crtcId, m_pending.crtc->id());
     commit->addBuffer(plane, fb, frame);
-    plane->set(commit, layer->sourceRect().toRect(), layer->targetRect());
+    Rect sourceRect = layer->sourceRect().toRect();
+    Rect targetRect = layer->targetRect();
+    // frame packing: the primary plane is the whole frame, both eyes and the blanking between them
+    if (layer->type() == OutputLayerType::Primary && stereoLayoutForMode(m_pending.mode->flags()) == StereoLayout::FramePacking) {
+        sourceRect = targetRect = Rect(QPoint(0, 0), framePackedSize(*m_pending.mode->nativeMode()));
+    }
+    plane->set(commit, sourceRect, targetRect);
     if (plane->vmHotspotX.isValid() && plane->vmHotspotY.isValid()) {
         commit->addProperty(plane->vmHotspotX, std::round(layer->hotspot().x()));
         commit->addProperty(plane->vmHotspotY, std::round(layer->hotspot().y()));

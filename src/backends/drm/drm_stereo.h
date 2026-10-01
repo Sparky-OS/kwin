@@ -8,14 +8,16 @@
 
 #include "core/output.h"
 
+#include <QSize>
+
 #include <xf86drmMode.h>
 
 namespace KWin
 {
 
 /**
- * Stereoscopic 3D output. SideBySideHalf and TopAndBottom are HDMI 1.4 structures a
- * mode is sent in (DRM_MODE_FLAG_3D_*, from the display's EDID): choosing such a mode is
+ * Stereoscopic 3D output. SideBySideHalf, TopAndBottom and FramePacking are HDMI 1.4
+ * structures a mode is sent in (DRM_MODE_FLAG_3D_*, from the display's EDID): choosing such a mode is
  * turning 3D on, and the desktop is drawn into both eyes. The anaglyph layouts need no 3D
  * mode and work on any screen, the two eyes mixed into one picture for red/cyan glasses
  * (CRT or modern-screen matrices).
@@ -24,6 +26,7 @@ enum class StereoLayout {
     None,
     SideBySideHalf,
     TopAndBottom,
+    FramePacking,
     AnaglyphCrt,
     AnaglyphModern,
 };
@@ -44,6 +47,8 @@ inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
         return OutputModeline::Flag::Stereo3DSideBySideHalf;
     case DRM_MODE_FLAG_3D_TOP_AND_BOTTOM:
         return OutputModeline::Flag::Stereo3DTopAndBottom;
+    case DRM_MODE_FLAG_3D_FRAME_PACKING:
+        return OutputModeline::Flag::Stereo3DFramePacking;
     default:
         return {};
     }
@@ -57,7 +62,20 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
     if (flags & OutputModeline::Flag::Stereo3DTopAndBottom) {
         return StereoLayout::TopAndBottom;
     }
+    if (flags & OutputModeline::Flag::Stereo3DFramePacking) {
+        return StereoLayout::FramePacking;
+    }
     return StereoLayout::None;
+}
+
+/**
+ * Frame packing sends both eyes in full in one taller frame: the left eye, the mode's
+ * vertical blanking, then the right eye from line vtotal on (HDMI 1.4). The
+ * scanout buffer is that whole frame; the mode's size is one eye.
+ */
+inline QSize framePackedSize(const drmModeModeInfo &mode)
+{
+    return QSize(mode.hdisplay, mode.vtotal + mode.vdisplay);
 }
 
 }

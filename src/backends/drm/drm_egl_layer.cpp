@@ -7,6 +7,7 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 #include "drm_egl_layer.h"
+#include "drm_stereo.h"
 #include "core/colorpipeline.h"
 #include "core/iccprofile.h"
 #include "core/renderdevice.h"
@@ -50,13 +51,29 @@ EglGbmLayer::EglGbmLayer(EglGbmBackend *eglBackend, DrmGpu *gpu, DrmPlane::TypeI
 {
 }
 
+// the scanout buffer: for frame packing the whole frame (both eyes and the blanking between
+// them), otherwise the layer's size
+QSize EglGbmLayer::scanoutSize() const
+{
+    if (m_type == OutputLayerType::Primary && drmOutput()->activeStereoLayout() == StereoLayout::FramePacking) {
+        return framePackedSize(*pipeline()->mode()->nativeMode());
+    }
+    return targetRect().size();
+}
+
 std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::beginFrame(OutputFrame *frame)
 {
     m_scanoutBuffer.reset();
-    m_surface.setStereoLayout(drmOutput()->activeStereoLayout());
+    const StereoLayout stereoLayout = drmOutput()->activeStereoLayout();
+    if (m_type == OutputLayerType::Primary && stereoLayout == StereoLayout::FramePacking) {
+        const drmModeModeInfo *mode = pipeline()->mode()->nativeMode();
+        m_surface.setStereoLayout(stereoLayout, QSize(mode->hdisplay, mode->vdisplay), mode->vtotal);
+    } else {
+        m_surface.setStereoLayout(stereoLayout);
+    }
     const bool tearing = frame && (frame->presentationMode() == PresentationMode::Async || frame->presentationMode() == PresentationMode::AdaptiveAsync);
     const auto formats = tearing && !supportedAsyncDrmFormats().isEmpty() ? supportedAsyncDrmFormats() : supportedDrmFormats();
-    return m_surface.startRendering(targetRect().size(),
+    return m_surface.startRendering(scanoutSize(),
                                     drmOutput()->transform().combine(OutputTransform::FlipY),
                                     formats,
                                     drmOutput()->blendingColor(),
@@ -81,7 +98,7 @@ bool EglGbmLayer::preparePresentationTest()
         return false;
     }
     m_scanoutBuffer.reset();
-    return m_surface.renderTestBuffer(targetRect().size(), supportedDrmFormats(), drmOutput()->nextState().colorPowerTradeoff, m_requiredAlphaBits) != nullptr;
+    return m_surface.renderTestBuffer(scanoutSize(), supportedDrmFormats(), drmOutput()->nextState().colorPowerTradeoff, m_requiredAlphaBits) != nullptr;
 }
 
 static const auto s_allowHardwareRotation = environmentVariableBoolValue("KWIN_ENABLE_HW_ROTATION");
