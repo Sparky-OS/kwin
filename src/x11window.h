@@ -102,6 +102,11 @@ public:
 
     bool hasNETSupport() const;
 
+    /**
+     * How much larger the X11 window is than its place on screen: (2, 1) or (1, 2) for
+     * full-resolution stereo content, else (1, 1).
+     */
+    QSizeF stereoClientScale() const;
     QSizeF minSize() const override;
     QSizeF maxSize() const override;
 
@@ -342,12 +347,15 @@ private:
 
     void checkOutput();
     void handleXwaylandScaleChanged();
+    void handleStereoContentChanged();
     void handleCommitted();
 
     void setAllowCommits(bool allow);
 
     Xcb::Window m_client;
     qreal m_bufferScale = 1;
+    // how much larger the X11 window is than its place on screen (full-resolution stereo)
+    QSizeF m_stereoClientScale = QSizeF(1, 1);
     xcb_window_t m_wmClientLeader = XCB_WINDOW_NONE;
     bool m_managed;
 

@@ -138,6 +138,7 @@ X11Window::X11Window()
     connect(options, &Options::condensedTitleChanged, this, &X11Window::updateCaption);
     connect(workspace(), &Workspace::dpmsStateChanged, this, &X11Window::updateVisibility);
     connect(waylandServer(), &WaylandServer::lockStateChanged, this, &X11Window::updateVisibility);
+    connect(this, &Window::stereoContentChanged, this, &X11Window::handleStereoContentChanged);
 
     // SELI TODO: Initialize xsizehints??
 }
@@ -3004,14 +3005,17 @@ void X11Window::getWmNormalHints()
     updateAllowedActions(); // affects isResizeable()
 }
 
+// the size hints are the X11 window's, larger than its place on screen for full-resolution stereo
 QSizeF X11Window::minSize() const
 {
-    return rules()->checkMinSize(Xcb::fromXNative(m_geometryHints.minSize()));
+    const QSizeF size = Xcb::fromXNative(m_geometryHints.minSize());
+    return rules()->checkMinSize(QSizeF(size.width() / m_stereoClientScale.width(), size.height() / m_stereoClientScale.height()));
 }
 
 QSizeF X11Window::maxSize() const
 {
-    return rules()->checkMaxSize(Xcb::fromXNative(m_geometryHints.maxSize()));
+    const QSizeF size = Xcb::fromXNative(m_geometryHints.maxSize());
+    return rules()->checkMaxSize(QSizeF(size.width() / m_stereoClientScale.width(), size.height() / m_stereoClientScale.height()));
 }
 
 /**
@@ -3048,6 +3052,37 @@ void X11Window::handleXwaylandScaleChanged()
     // this is needed to make Xwayland actually resize it as well
     resize(moveResizeGeometry().size());
     getWmOpaqueRegion();
+}
+
+// A full-resolution stereo window holds both views at full size. Its X11 window is twice its
+// place on screen, in width (side by side) or height (top and bottom); KWin places it, and
+// takes pointer input in it, at one view's size, so the pointer lands in the left view.
+QSizeF X11Window::stereoClientScale() const
+{
+    switch (stereoContent()) {
+    case StereoContentSideBySideFull:
+    case StereoContentSideBySideFullRightFirst:
+        return QSizeF(2, 1);
+    case StereoContentTopAndBottomFull:
+    case StereoContentTopAndBottomFullRightFirst:
+        return QSizeF(1, 2);
+    default:
+        return QSizeF(1, 1);
+    }
+}
+
+void X11Window::handleStereoContentChanged()
+{
+    // the X11 window keeps its size and its place on screen changes; a fullscreen or
+    // maximized window keeps its place and its X11 window changes
+    const QSizeF scale = stereoClientScale();
+    RectF frame = moveResizeGeometry();
+    if (!isFullScreen() && requestedMaximizeMode() == MaximizeRestore) {
+        const QSizeF clientSize = frameSizeToClientSize(frame.size());
+        frame.setSize(clientSizeToFrameSize(QSizeF(clientSize.width() * m_stereoClientScale.width() / scale.width(),
+                                                   clientSize.height() * m_stereoClientScale.height() / scale.height())));
+    }
+    resize(frame.size());
 }
 
 void X11Window::handleCommitted()
@@ -3099,6 +3134,10 @@ void X11Window::configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, q
     const int configurePositionMask = XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y;
     const int configureSizeMask = XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT;
     const int configureGeometryMask = configurePositionMask | configureSizeMask;
+
+    // the requested size is the X11 window's, larger than its place on screen for full-resolution stereo
+    rw /= m_stereoClientScale.width();
+    rh /= m_stereoClientScale.height();
 
     // "maximized" is a user setting -> we do not allow the client to resize itself
     // away from this & against the users explicit wish
@@ -3411,8 +3450,10 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     const RectF clientGeometry = nextFrameRectToClientRect(frameGeometry);
     const RectF bufferGeometry = nextFrameRectToBufferRect(frameGeometry);
     const qreal bufferScale = kwinApp()->xwaylandScale();
+    const QSizeF stereoClientScale = this->stereoClientScale();
 
-    if (m_bufferGeometry == bufferGeometry && m_clientGeometry == clientGeometry && m_frameGeometry == frameGeometry && m_bufferScale == bufferScale) {
+    if (m_bufferGeometry == bufferGeometry && m_clientGeometry == clientGeometry && m_frameGeometry == frameGeometry && m_bufferScale == bufferScale
+        && m_stereoClientScale == stereoClientScale) {
         return;
     }
 
@@ -3427,6 +3468,7 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     m_clientGeometry = clientGeometry;
     m_bufferGeometry = bufferGeometry;
     m_bufferScale = bufferScale;
+    m_stereoClientScale = stereoClientScale;
     m_output = workspace()->outputAt(frameGeometry.center());
 
     if (!areGeometryUpdatesBlocked()) {
@@ -3482,6 +3524,8 @@ void X11Window::configure(const Rect &nativeGeometry)
             }
         }
     }
+    effectiveGeometry.setWidth(std::round(effectiveGeometry.width() * m_stereoClientScale.width()));
+    effectiveGeometry.setHeight(std::round(effectiveGeometry.height() * m_stereoClientScale.height()));
     if (m_client.size() != effectiveGeometry.size()) {
         m_client.setGeometry(effectiveGeometry);
     } else if (m_client.position() != effectiveGeometry.topLeft()) {

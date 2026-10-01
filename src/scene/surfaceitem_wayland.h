@@ -85,6 +85,7 @@ public:
 
 private:
     void handleShapeChange();
+    void updateDestinationSize();
 
     X11Window *m_window;
     RegionF m_previousBufferShape;

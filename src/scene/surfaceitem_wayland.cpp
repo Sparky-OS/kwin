@@ -276,6 +276,21 @@ SurfaceItemXwayland::SurfaceItemXwayland(X11Window *window, Item *parent)
     , m_window(window)
 {
     connect(window, &X11Window::shapeChanged, this, &SurfaceItemXwayland::handleShapeChange);
+    connect(window->surface(), &SurfaceInterface::sizeChanged, this, &SurfaceItemXwayland::updateDestinationSize);
+    connect(window, &X11Window::bufferGeometryChanged, this, &SurfaceItemXwayland::updateDestinationSize);
+    connect(window, &X11Window::stereoContentChanged, this, &SurfaceItemXwayland::updateDestinationSize);
+    updateDestinationSize();
+}
+
+// A full-resolution stereo window's X11 window is larger than its place on screen: its buffer
+// is drawn at the window's size, as Xwayland does for an emulated resolution.
+void SurfaceItemXwayland::updateDestinationSize()
+{
+    if (m_window->stereoClientScale() != QSizeF(1, 1)) {
+        setDestinationSize(m_window->bufferGeometry().size());
+    } else if (surface()) {
+        setDestinationSize(surface()->size());
+    }
 }
 
 void SurfaceItemXwayland::handleShapeChange()
