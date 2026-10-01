@@ -433,6 +433,26 @@
       <default code="true">Rules::UnusedForceRule</default>
     </entry>
 
+    <entry name="stereo3d" type="Enum">
+      <label>Stereo content</label>
+      <choices name="KWin::StereoContent">
+        <choice name="StereoContentNone" value="none" />
+        <choice name="StereoContentSideBySideHalf" value="sbs-half" />
+        <choice name="StereoContentSideBySideHalfRightFirst" value="sbs-half-right-first" />
+        <choice name="StereoContentSideBySideFull" value="sbs-full" />
+        <choice name="StereoContentSideBySideFullRightFirst" value="sbs-full-right-first" />
+        <choice name="StereoContentTopAndBottomHalf" value="tab-half" />
+        <choice name="StereoContentTopAndBottomHalfRightFirst" value="tab-half-right-first" />
+        <choice name="StereoContentTopAndBottomFull" value="tab-full" />
+        <choice name="StereoContentTopAndBottomFullRightFirst" value="tab-full-right-first" />
+      </choices>
+      <default code="true">StereoContentNone</default>
+    </entry>
+    <entry name="stereo3drule" type="Int">
+      <label>Stereo content rule type</label>
+      <default code="true">Rules::UnusedForceRule</default>
+    </entry>
+
     <entry name="adaptivesync" type="Bool">
       <label>AdaptiveSync</label>
       <default>true</default>

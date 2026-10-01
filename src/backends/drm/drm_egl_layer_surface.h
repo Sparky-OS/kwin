@@ -67,6 +67,12 @@ public:
      * both eyes of the scanout buffer; needs the shadow buffer (DrmOutput::needsShadowBuffer).
      */
     void setStereoLayout(StereoLayout layout, const QSize &eyeSize = QSize(), const QPoint &rightEyeOffset = QPoint());
+    /**
+     * With stereo content the scene is rendered once per eye: the shadow buffer from
+     * startRendering() holds the left eye, this one the right eye. Call it between
+     * startRendering() and endRendering(); without it the left eye is shown in both.
+     */
+    std::optional<OutputLayerBeginFrameInfo> startRightEye();
 
     void destroyResources();
     EglGbmBackend *eglBackend() const;
@@ -113,6 +119,10 @@ private:
         Colorimetry wireColor = Colorimetry::BT709;
         TransferFunction::Type wireTransfer = TransferFunction::Type::gamma22;
         DamageJournal shadowDamageJournal;
+        // the right eye's shadow buffer, when the scene is rendered once per eye
+        std::shared_ptr<EglSwapchain> rightShadowSwapchain;
+        std::shared_ptr<EglSwapchainSlot> currentRightShadowSlot;
+        DamageJournal rightShadowDamageJournal;
         BackendOutput::ColorPowerTradeoff tradeoff = BackendOutput::ColorPowerTradeoff::PreferEfficiency;
 
         std::unique_ptr<GLRenderTimeQuery> compositingTimeQuery;

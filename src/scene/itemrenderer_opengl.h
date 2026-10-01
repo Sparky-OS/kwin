@@ -61,6 +61,7 @@ public:
         const qreal renderTargetScale;
         const QPointF viewportOrigin;
         const QPoint renderOffset;
+        const StereoEye stereoEye;
     };
 
     explicit ItemRendererOpenGL(RenderDevice *device);

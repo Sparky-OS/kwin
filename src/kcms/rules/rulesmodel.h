@@ -104,6 +104,7 @@ private:
     QList<OptionsModel::Data> colorSchemesModelData() const;
     QList<OptionsModel::Data> layerModelData() const;
     QList<OptionsModel::Data> decorationPolicyData() const;
+    QList<OptionsModel::Data> stereo3dModelData() const;
 
 private Q_SLOTS:
     void selectX11Window();

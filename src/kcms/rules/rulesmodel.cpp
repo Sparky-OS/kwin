@@ -707,6 +707,15 @@ void RulesModel::populateRuleList()
                                       QIcon::fromTheme("view-sort")));
     layer->setOptionsData(layerModelData());
 
+    auto stereo3d = addRule(new RuleItem(QLatin1StringView("stereo3d"),
+                                         RulePolicy::ForceRule, RuleItem::Option,
+                                         i18n("Stereo content"), i18n("Appearance & Fixes"),
+                                         QIcon::fromTheme(QStringLiteral("view-split-left-right")),
+                                         xi18nc("@info:tooltip", "The window's picture holds two views, one for each eye. "
+                                                                 "In a 3D mode each view goes to its eye, with anaglyph the two are mixed, "
+                                                                 "and otherwise the left view is shown.")));
+    stereo3d->setOptionsData(stereo3dModelData());
+
     addRule(new RuleItem(QLatin1StringView("adaptivesync"),
                          RulePolicy::ForceRule, RuleItem::Boolean,
                          i18n("Adaptive sync"), i18n("Appearance & Fixes"),
@@ -910,6 +919,22 @@ QList<OptionsModel::Data> RulesModel::colorSchemesModelData() const
             index.data(Qt::DecorationRole).value<QIcon>()};
     }
 
+    return modelData;
+}
+
+QList<OptionsModel::Data> RulesModel::stereo3dModelData() const
+{
+    static const auto modelData = QList<OptionsModel::Data>{
+        {StereoContentNone, i18n("None (2D)")},
+        {StereoContentSideBySideHalf, i18n("Side by side (half), left eye first")},
+        {StereoContentSideBySideHalfRightFirst, i18n("Side by side (half), right eye first")},
+        {StereoContentSideBySideFull, i18n("Side by side (full), left eye first")},
+        {StereoContentSideBySideFullRightFirst, i18n("Side by side (full), right eye first")},
+        {StereoContentTopAndBottomHalf, i18n("Top and bottom (half), left eye first")},
+        {StereoContentTopAndBottomHalfRightFirst, i18n("Top and bottom (half), right eye first")},
+        {StereoContentTopAndBottomFull, i18n("Top and bottom (full), left eye first")},
+        {StereoContentTopAndBottomFullRightFirst, i18n("Top and bottom (full), right eye first")},
+    };
     return modelData;
 }
 

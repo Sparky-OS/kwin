@@ -4362,6 +4362,7 @@ void Window::applyWindowRules()
     }
     setDesktopFileName(rules()->checkDesktopFile(desktopFileName()));
     setExcludeFromCapture(rules()->checkExcludeFromCapture(excludeFromCapture()));
+    updateStereoContent();
 }
 
 void Window::setLastUsageSerial(quint32 serial)
@@ -4651,6 +4652,21 @@ void Window::setExcludeFromCapture(bool newExcludeFromCapture)
     }
 
     Q_EMIT excludeFromCaptureChanged();
+}
+
+StereoContent Window::stereoContent() const
+{
+    return m_stereoContent;
+}
+
+void Window::updateStereoContent()
+{
+    // programs don't declare their stereo content yet, only the window rule sets it
+    const StereoContent content = rules()->checkStereo3D(StereoContentNone);
+    if (m_stereoContent != content) {
+        m_stereoContent = content;
+        Q_EMIT stereoContentChanged();
+    }
 }
 
 } // namespace KWin

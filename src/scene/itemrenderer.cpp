@@ -35,4 +35,14 @@ RenderDevice *ItemRenderer::renderDevice() const
     return m_renderDevice;
 }
 
+StereoEye ItemRenderer::stereoEye() const
+{
+    return m_stereoEye;
+}
+
+void ItemRenderer::setStereoEye(StereoEye eye)
+{
+    m_stereoEye = eye;
+}
+
 } // namespace KWin

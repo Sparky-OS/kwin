@@ -9,6 +9,7 @@
 #include <kwin_export.h>
 
 #include "core/region.h"
+#include "effect/globals.h"
 
 #include <QMatrix4x4>
 #include <memory>
@@ -64,8 +65,17 @@ public:
 
     RenderDevice *renderDevice() const;
 
+    /**
+     * The eye the scene is rendered for: stereo surfaces show that eye's view.
+     */
+    StereoEye stereoEye() const;
+    void setStereoEye(StereoEye eye);
+
 protected:
     RenderDevice *const m_renderDevice;
+
+private:
+    StereoEye m_stereoEye = StereoEye::None;
 };
 
 } // namespace KWin

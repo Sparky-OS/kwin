@@ -80,6 +80,41 @@ void SurfaceItem::setBufferSourceBox(const RectF &box)
     }
 }
 
+StereoContent SurfaceItem::stereoContent() const
+{
+    return m_stereoContent;
+}
+
+void SurfaceItem::setStereoContent(StereoContent content)
+{
+    if (m_stereoContent != content) {
+        m_stereoContent = content;
+        scheduleRepaint(rect());
+    }
+}
+
+// The eye's view in the surface's orientation (its half of the source box), mapped back
+// to buffer coordinates; the right-first contents hold the left eye's view second.
+WindowQuadList SurfaceItem::eyeQuads(StereoEye eye) const
+{
+    const QSizeF orientedBufferSize = m_bufferToSurfaceTransform.map(QSizeF(m_bufferSize));
+    const RectF sourceBox = m_bufferToSurfaceTransform.map(m_bufferSourceBox, m_bufferSize);
+    const bool secondView = (eye == StereoEye::Right) != isRightFirstStereoContent(m_stereoContent);
+    RectF view = sourceBox;
+    if (isSideBySideStereoContent(m_stereoContent)) {
+        view.setWidth(sourceBox.width() / 2);
+        if (secondView) {
+            view.translate(sourceBox.width() / 2, 0);
+        }
+    } else {
+        view.setHeight(sourceBox.height() / 2);
+        if (secondView) {
+            view.translate(0, sourceBox.height() / 2);
+        }
+    }
+    return buildSourceQuads(m_surfaceToBufferTransform.map(view, orientedBufferSize));
+}
+
 OutputTransform SurfaceItem::bufferTransform() const
 {
     return m_surfaceToBufferTransform;
@@ -146,7 +181,8 @@ void SurfaceItem::addDamage(const Region &region)
     const RectF sourceBox = m_bufferToSurfaceTransform.map(m_bufferSourceBox, m_bufferSize);
     const qreal xScale = sourceBox.width() / m_destinationSize.width();
     const qreal yScale = sourceBox.height() / m_destinationSize.height();
-    const RegionF logicalDamage = mapFromBuffer(region);
+    // each view of a stereo buffer covers the whole surface
+    const RegionF logicalDamage = m_stereoContent != StereoContentNone ? RegionF(rect()) : mapFromBuffer(region);
 
     const auto views = scene()->views();
     for (RenderView *view : views) {
@@ -206,21 +242,26 @@ void SurfaceItem::preprocess(ItemRenderer *renderer)
 
 WindowQuadList SurfaceItem::buildQuads(ItemRenderer *renderer) const
 {
+    return buildSourceQuads(m_bufferSourceBox);
+}
+
+WindowQuadList SurfaceItem::buildSourceQuads(const RectF &bufferSourceBox) const
+{
     const RegionF region = shape();
     WindowQuadList quads;
     quads.reserve(region.rects().size());
 
-    const RectF sourceBox = m_bufferToSurfaceTransform.map(m_bufferSourceBox, m_bufferSize);
+    const RectF sourceBox = m_bufferToSurfaceTransform.map(bufferSourceBox, m_bufferSize);
     const qreal xScale = sourceBox.width() / m_destinationSize.width();
     const qreal yScale = sourceBox.height() / m_destinationSize.height();
 
     for (const RectF &rect : region.rects()) {
         WindowQuad quad;
 
-        const QPointF bufferTopLeft = (m_bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.left() * xScale, rect.top() * yScale), sourceBox.size())).toPoint();
-        const QPointF bufferTopRight = (m_bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.right() * xScale, rect.top() * yScale), sourceBox.size())).toPoint();
-        const QPointF bufferBottomRight = (m_bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.right() * xScale, rect.bottom() * yScale), sourceBox.size())).toPoint();
-        const QPointF bufferBottomLeft = (m_bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.left() * xScale, rect.bottom() * yScale), sourceBox.size())).toPoint();
+        const QPointF bufferTopLeft = (bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.left() * xScale, rect.top() * yScale), sourceBox.size())).toPoint();
+        const QPointF bufferTopRight = (bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.right() * xScale, rect.top() * yScale), sourceBox.size())).toPoint();
+        const QPointF bufferBottomRight = (bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.right() * xScale, rect.bottom() * yScale), sourceBox.size())).toPoint();
+        const QPointF bufferBottomLeft = (bufferSourceBox.topLeft() + m_surfaceToBufferTransform.map(QPointF(rect.left() * xScale, rect.bottom() * yScale), sourceBox.size())).toPoint();
 
         quad[0] = WindowVertex(rect.topLeft(), bufferTopLeft);
         quad[1] = WindowVertex(rect.topRight(), bufferTopRight);

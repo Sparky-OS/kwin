@@ -30,6 +30,8 @@ public:
 
     std::optional<OutputLayerBeginFrameInfo> beginFrame(OutputFrame *frame) override;
     bool endFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame) override;
+    bool hasStereoEyes() const override;
+    std::optional<OutputLayerBeginFrameInfo> beginRightEyeFrame() override;
     bool preparePresentationTest() override;
     std::shared_ptr<DrmFramebuffer> currentBuffer() const override;
     void releaseBuffers() override;

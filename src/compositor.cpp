@@ -33,6 +33,7 @@
 #include "scene/itemrenderer_opengl.h"
 #include "scene/surfaceitem.h"
 #include "scene/surfaceitem_wayland.h"
+#include "scene/windowitem.h"
 #include "scene/workspacescene.h"
 #include "utils/common.h"
 #include "utils/envvar.h"
@@ -524,6 +525,17 @@ static bool prepareRendering(RenderView *view, LogicalOutput *logicalOutput, Bac
     return layer->preparePresentationTest();
 }
 
+// a window with stereo content is shown in the view
+static bool showsStereoContent(RenderView *view)
+{
+    const QList<Item *> windowItems = kwinApp()->scene()->containerItem()->childItems();
+    return std::ranges::any_of(windowItems, [view](Item *item) {
+        const auto windowItem = static_cast<WindowItem *>(item);
+        return windowItem->isVisible() && windowItem->window()->stereoContent() != StereoContentNone
+            && windowItem->mapToScene(windowItem->boundingRect()).intersects(view->viewport());
+    });
+}
+
 static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendOutput *backendOutput, const std::shared_ptr<OutputFrame> &frame, const Region &surfaceDamage)
 {
     auto beginInfo = view->layer()->beginFrame(frame.get());
@@ -532,7 +544,23 @@ static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendO
     }
     auto &[renderTarget, repaint] = beginInfo.value();
     const Region bufferDamage = surfaceDamage.united(repaint).intersected(renderTarget.transformedRect());
-    view->paint(renderTarget, view->renderOffset(), bufferDamage);
+    if (view->layer()->hasStereoEyes() && showsStereoContent(view)) {
+        // stereo content on a 3D or anaglyph output: the scene once per eye, each stereo
+        // window showing that eye's view and everything else the same in both
+        ItemRenderer *renderer = kwinApp()->scene()->renderer(view->renderDevice());
+        renderer->setStereoEye(StereoEye::Left);
+        view->paint(renderTarget, view->renderOffset(), bufferDamage);
+        if (auto rightInfo = view->layer()->beginRightEyeFrame()) {
+            const Region rightDamage = surfaceDamage.united(rightInfo->repaint).intersected(rightInfo->renderTarget.transformedRect());
+            renderer->setStereoEye(StereoEye::Right);
+            view->paint(rightInfo->renderTarget, view->renderOffset(), rightDamage);
+        } else {
+            qCWarning(KWIN_CORE, "Rendering the right eye failed, showing the left eye in both");
+        }
+        renderer->setStereoEye(StereoEye::None);
+    } else {
+        view->paint(renderTarget, view->renderOffset(), bufferDamage);
+    }
     return view->layer()->endFrame(bufferDamage, surfaceDamage, frame.get());
 }
 

@@ -123,6 +123,16 @@ SurfaceItem *OutputLayer::presentedDirectScanoutItem() const
     return nullptr;
 }
 
+bool OutputLayer::hasStereoEyes() const
+{
+    return false;
+}
+
+std::optional<OutputLayerBeginFrameInfo> OutputLayer::beginRightEyeFrame()
+{
+    return std::nullopt;
+}
+
 void OutputLayer::setScanoutCandidate(SurfaceItem *item)
 {
     if (m_scanoutCandidate && item != m_scanoutCandidate) {
