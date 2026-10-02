@@ -4098,8 +4098,10 @@ Xcb::Property X11Window::fetchStereoContent() const
 
 void X11Window::readStereoContent(Xcb::Property &property)
 {
-    // _KDE_NET_WM_STEREO_CONTENT: CARDINAL/32, one of the StereoContent values,
-    // absent or anything else means no stereo content
+    // _KDE_NET_WM_STEREO_CONTENT: CARDINAL/32, one value of the StereoContent
+    // enum (0 none, 1 sbs half, 2 sbs half right first, 3 sbs full,
+    // 4 sbs full right first, 5 tab half, 6 tab half right first, 7 tab full,
+    // 8 tab full right first); absent, malformed or out of range means none.
     const uint32_t value = property.value<uint32_t>().value_or(StereoContentNone);
     setDeclaredStereoContent(value <= StereoContentTopAndBottomFullRightFirst ? StereoContent(value) : StereoContentNone);
 }
