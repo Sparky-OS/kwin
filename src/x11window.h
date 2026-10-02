@@ -311,6 +311,9 @@ private:
     Xcb::Property fetchSkipCloseAnimation() const;
     void readSkipCloseAnimation(Xcb::Property &prop);
     void getSkipCloseAnimation();
+    Xcb::Property fetchStereoContent() const;
+    void readStereoContent(Xcb::Property &prop);
+    void getStereoContent();
 
     void configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, qreal rh, int gravity, bool from_tool);
     void getSyncCounter();

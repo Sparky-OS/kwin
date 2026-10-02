@@ -4676,12 +4676,26 @@ StereoContent Window::stereoContent() const
 
 void Window::updateStereoContent()
 {
-    // programs don't declare their stereo content yet, only the window rule sets it
-    const StereoContent content = rules()->checkStereo3D(StereoContentNone);
+    // the program's declaration is the content, unless a window rule replaces it
+    const StereoContent content = rules()->checkStereo3D(m_declaredStereoContent);
     if (m_stereoContent != content) {
         m_stereoContent = content;
         Q_EMIT stereoContentChanged();
     }
+}
+
+StereoContent Window::declaredStereoContent() const
+{
+    return m_declaredStereoContent;
+}
+
+void Window::setDeclaredStereoContent(StereoContent content)
+{
+    if (m_declaredStereoContent == content) {
+        return;
+    }
+    m_declaredStereoContent = content;
+    updateStereoContent();
 }
 
 } // namespace KWin
