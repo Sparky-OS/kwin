@@ -377,6 +377,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     auto wmClientLeaderCookie = fetchWmClientLeader();
     auto skipCloseAnimationCookie = fetchSkipCloseAnimation();
     auto colorSchemeCookie = fetchPreferredColorScheme();
+    auto stereoContentCookie = fetchStereoContent();
     auto transientCookie = fetchTransient();
     auto activitiesCookie = fetchActivities();
     auto applicationMenuServiceNameCookie = fetchApplicationMenuServiceName();
@@ -401,6 +402,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     getWmClientMachine();
     getSyncCounter();
     setCaption(readName());
+    readStereoContent(stereoContentCookie);
 
     setupWindowRules();
     connect(this, &X11Window::windowClassChanged, this, &X11Window::evaluateWindowRules);
@@ -4188,6 +4190,25 @@ void X11Window::getSkipCloseAnimation()
 {
     Xcb::Property property = fetchSkipCloseAnimation();
     readSkipCloseAnimation(property);
+}
+
+Xcb::Property X11Window::fetchStereoContent() const
+{
+    return Xcb::Property(false, window(), atoms->kde_net_wm_stereo_content, XCB_ATOM_CARDINAL, 0, 1);
+}
+
+void X11Window::readStereoContent(Xcb::Property &property)
+{
+    // _KDE_NET_WM_STEREO_CONTENT: CARDINAL/32, one of the StereoContent values,
+    // absent or anything else means no stereo content
+    const uint32_t value = property.value<uint32_t>().value_or(StereoContentNone);
+    setDeclaredStereoContent(value <= StereoContentTopAndBottomFullRightFirst ? StereoContent(value) : StereoContentNone);
+}
+
+void X11Window::getStereoContent()
+{
+    Xcb::Property property = fetchStereoContent();
+    readStereoContent(property);
 }
 
 //********************************************

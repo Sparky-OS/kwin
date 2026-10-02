@@ -67,6 +67,7 @@ public:
     Xcb::Atom kde_net_wm_shadow;
     Xcb::Atom kde_color_sheme;
     Xcb::Atom kde_skip_close_animation;
+    Xcb::Atom kde_net_wm_stereo_content;
     Xcb::Atom utf8_string;
     Xcb::Atom text;
     Xcb::Atom uri_list;

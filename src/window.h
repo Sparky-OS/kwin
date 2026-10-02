@@ -1434,6 +1434,14 @@ public:
     StereoContent stereoContent() const;
     void updateStereoContent();
 
+    /**
+     * How the window's picture holds two views, one for each eye, as the program
+     * declared it (an X11 property, or a Wayland protocol). The stereo content
+     * window rule is applied over it. @see updateStereoContent
+     */
+    StereoContent declaredStereoContent() const;
+    void setDeclaredStereoContent(StereoContent content);
+
 public Q_SLOTS:
     virtual void closeWindow() = 0;
 
@@ -1876,6 +1884,7 @@ protected:
     bool m_suspended = false;
     bool m_excludeFromCapture = false;
     StereoContent m_stereoContent = StereoContentNone;
+    StereoContent m_declaredStereoContent = StereoContentNone;
     QTimer *m_autoRaiseTimer = nullptr;
     QList<VirtualDesktop *> m_desktops;
 

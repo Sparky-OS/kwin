@@ -130,6 +130,7 @@ private Q_SLOTS:
     void testOverrideRedirectStackingBelow();
     void testRandrEmulation();
     void testRestoreFocusToDestroyedWindow();
+    void testStereoContentDeclaration();
 };
 
 void X11WindowTest::initTestCase_data()
@@ -3856,6 +3857,56 @@ void X11WindowTest::testRestoreFocusToDestroyedWindow()
     QSignalSpy windowActivatedSpy(workspace(), &Workspace::windowActivated);
     QVERIFY(windowActivatedSpy.wait());
     QCOMPARE(workspace()->activeWindow(), firstWindow);
+}
+
+void X11WindowTest::testStereoContentDeclaration()
+{
+    // This test verifies that a program declares its stereo content with the
+    // _KDE_NET_WM_STEREO_CONTENT property, both before mapping and while managed.
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    const uint32_t value = StereoContentSideBySideHalf;
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &value);
+    });
+    QVERIFY(window);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideHalf);
+
+    // changing the property updates the content
+    QSignalSpy stereoContentChangedSpy(window, &Window::stereoContentChanged);
+    const uint32_t full = StereoContentTopAndBottomFullRightFirst;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &full);
+    xcb_flush(c.get());
+    QVERIFY(stereoContentChangedSpy.wait());
+    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomFullRightFirst);
+
+    // an unknown value is no stereo content
+    const uint32_t invalid = 42;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &invalid);
+    xcb_flush(c.get());
+    QVERIFY(stereoContentChangedSpy.wait());
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+
+    // removing the property undeclares the content
+    const uint32_t again = StereoContentSideBySideHalfRightFirst;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &again);
+    xcb_flush(c.get());
+    QVERIFY(stereoContentChangedSpy.wait());
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideHalfRightFirst);
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content);
+    xcb_flush(c.get());
+    QVERIFY(stereoContentChangedSpy.wait());
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
 }
 
 WAYLANDTEST_MAIN(X11WindowTest)
