@@ -760,7 +760,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             .hdrColorProfileSource = existingData.hdrColorProfileSource.value_or(BackendOutput::ColorProfileSource::EDID),
             .brightness = existingData.brightness.value_or(1.0),
             .allowSdrSoftwareBrightness = existingData.allowSdrSoftwareBrightness.value_or(output->brightnessDevice() == nullptr),
-            .colorPowerTradeoff = existingData.colorPowerTradeoff.value_or(BackendOutput::ColorPowerTradeoff::PreferEfficiency),
+            .colorPowerTradeoff = existingData.colorPowerTradeoff.value_or(BackendOutput::ColorPowerTradeoff::PreferAccuracy),
             .uuid = existingData.uuid,
             .detectedDdcCi = existingData.detectedDdcCi.value_or(false),
             .allowDdcCi = existingData.allowDdcCi.value_or(!output->isDdcCiKnownBroken()),
