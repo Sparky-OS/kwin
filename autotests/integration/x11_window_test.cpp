@@ -3867,6 +3867,14 @@ void X11WindowTest::testStereoContentDeclaration()
     Test::XcbConnectionPtr c = Test::createX11Connection();
     QVERIFY(!xcb_connection_has_error(c.get()));
 
+    // KWin announces support on the root window.
+    xcb_get_property_cookie_t supportCookie = xcb_get_property(c.get(), false, kwinApp()->x11RootWindow(),
+                                                               atoms->kde_net_wm_stereo_content_supported, XCB_ATOM_CARDINAL, 0, 1);
+    std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
+    QVERIFY(supportReply);
+    QCOMPARE(supportReply->value_len, 1u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 1u);
+
     const uint32_t value = StereoContentSideBySideHalf;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
         xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
