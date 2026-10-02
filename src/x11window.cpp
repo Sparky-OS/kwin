@@ -139,6 +139,11 @@ X11Window::X11Window()
     connect(workspace(), &Workspace::dpmsStateChanged, this, &X11Window::updateVisibility);
     connect(waylandServer(), &WaylandServer::lockStateChanged, this, &X11Window::updateVisibility);
     connect(this, &Window::stereoContentChanged, this, &X11Window::handleStereoContentChanged);
+    connect(this, &Window::surfaceChanged, this, [this]() {
+        if (surface()) {
+            connect(surface(), &SurfaceInterface::sizeChanged, this, &Window::inputTransformationChanged);
+        }
+    });
 
     // SELI TODO: Initialize xsizehints??
 }
@@ -354,6 +359,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     blockGeometryUpdates();
 
     m_client.reset(w, false, windowGeometry.rect());
+    m_programSize = Xcb::fromXNative(windowGeometry.rect()).size();
     m_client.setBorderWidth(0);
     m_client.selectInput(attr->your_event_mask | XCB_EVENT_MASK_FOCUS_CHANGE | XCB_EVENT_MASK_PROPERTY_CHANGE);
 
@@ -3071,6 +3077,27 @@ QSizeF X11Window::stereoClientScale() const
     }
 }
 
+// Input on a full-resolution stereo window goes to its left view: one view of the X11
+// window over the window's place on screen.
+QSizeF X11Window::inputScale() const
+{
+    if (m_stereoClientScale == QSizeF(1, 1) || !surface() || m_bufferGeometry.isEmpty()) {
+        return QSizeF(1, 1);
+    }
+    const QSizeF view(surface()->size().width() / m_stereoClientScale.width(), surface()->size().height() / m_stereoClientScale.height());
+    return QSizeF(view.width() / m_bufferGeometry.width(), view.height() / m_bufferGeometry.height());
+}
+
+bool X11Window::isShownSurfacePoint(const QPointF &point) const
+{
+    if (m_stereoClientScale == QSizeF(1, 1) || !surface()) {
+        return true;
+    }
+    // the rest of the X11 window holds the right eye's view
+    return point.x() < surface()->size().width() / m_stereoClientScale.width()
+        && point.y() < surface()->size().height() / m_stereoClientScale.height();
+}
+
 void X11Window::handleStereoContentChanged()
 {
     // the X11 window keeps its size and its place on screen changes; a fullscreen or
@@ -3136,6 +3163,12 @@ void X11Window::configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, q
     const int configureGeometryMask = configurePositionMask | configureSizeMask;
 
     // the requested size is the X11 window's, larger than its place on screen for full-resolution stereo
+    if (value_mask & XCB_CONFIG_WINDOW_WIDTH) {
+        m_programSize.setWidth(rw);
+    }
+    if (value_mask & XCB_CONFIG_WINDOW_HEIGHT) {
+        m_programSize.setHeight(rh);
+    }
     rw /= m_stereoClientScale.width();
     rh /= m_stereoClientScale.height();
 
@@ -3468,6 +3501,7 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     m_clientGeometry = clientGeometry;
     m_bufferGeometry = bufferGeometry;
     m_bufferScale = bufferScale;
+    const bool stereoScaleChanged = m_stereoClientScale != stereoClientScale;
     m_stereoClientScale = stereoClientScale;
     m_output = workspace()->outputAt(frameGeometry.center());
 
@@ -3493,6 +3527,9 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     }
     if (oldOutput != m_output) {
         Q_EMIT outputChanged(oldOutput);
+    }
+    if (stereoScaleChanged) {
+        Q_EMIT inputTransformationChanged();
     }
 
     if (oldBufferGeometry.size() != bufferGeometry.size()) {
@@ -3524,8 +3561,16 @@ void X11Window::configure(const Rect &nativeGeometry)
             }
         }
     }
-    effectiveGeometry.setWidth(std::round(effectiveGeometry.width() * m_stereoClientScale.width()));
-    effectiveGeometry.setHeight(std::round(effectiveGeometry.height() * m_stereoClientScale.height()));
+    if (m_stereoClientScale != QSizeF(1, 1)) {
+        if (isFullScreen() && !m_programSize.isEmpty()) {
+            // fullscreen keeps the program's own frame (its rendering stays at full size)
+            // and the output's 3D mode scales it, whatever its resolution
+            effectiveGeometry.setSize(Xcb::toXNative(m_programSize));
+        } else {
+            effectiveGeometry.setWidth(std::round(effectiveGeometry.width() * m_stereoClientScale.width()));
+            effectiveGeometry.setHeight(std::round(effectiveGeometry.height() * m_stereoClientScale.height()));
+        }
+    }
     if (m_client.size() != effectiveGeometry.size()) {
         m_client.setGeometry(effectiveGeometry);
     } else if (m_client.position() != effectiveGeometry.topLeft()) {
@@ -4352,7 +4397,11 @@ bool X11Window::hitTest(const QPointF &point) const
     if (!m_surface || (m_surface->isMapped() && !m_surface->inputSurfaceAt(mapToLocal(point)))) {
         return false;
     }
-    return std::ranges::any_of(m_shapeRegion.rects(), [local = mapToLocal(point)](const RectF &rect) {
+    if (!isShownSurfacePoint(mapToLocal(point))) {
+        return false;
+    }
+    // the shape is in on-screen units, the surface in its own (larger for full-resolution stereo)
+    return std::ranges::any_of(m_shapeRegion.rects(), [local = point - m_bufferGeometry.topLeft()](const RectF &rect) {
         return rect.contains(local);
     });
 }

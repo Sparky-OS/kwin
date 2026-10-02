@@ -52,6 +52,13 @@
 namespace KWin
 {
 
+// A pointer constraint holds only on the part of the surface shown on screen (a
+// full-resolution stereo window shows one view of a larger surface).
+static bool constraintContains(const Window *window, const RegionF &region, const QPointF &point)
+{
+    return region.contains(point) && window->isShownSurfacePoint(point);
+}
+
 static bool screenContainsPos(const QPointF &pos)
 {
     const auto outputs = workspace()->outputs();
@@ -741,14 +748,14 @@ void PointerInputRedirection::updatePointerConstraints()
     // since Wayland commits are applied asynchronously
 
     const bool shouldConfine = s->confinedPointerRegion()
-        && s->confinedPointerRegion()->contains(focus()->mapToLocal(m_pos));
+        && constraintContains(focus(), *s->confinedPointerRegion(), focus()->mapToLocal(m_pos));
     if (m_confined != shouldConfine) {
         m_confined = shouldConfine;
         s->setPointerConfined(m_confined);
     }
 
     const bool shouldLock = s->lockedPointerRegion()
-        && s->lockedPointerRegion()->contains(focus()->mapToLocal(m_pos));
+        && constraintContains(focus(), *s->lockedPointerRegion(), focus()->mapToLocal(m_pos));
     if (m_locked != shouldLock) {
         m_locked = shouldLock;
         s->setPointerLocked(m_locked);
@@ -770,7 +777,7 @@ QPointF PointerInputRedirection::applyPointerConfinement(const QPointF &pos) con
     const RegionF region = *s->confinedPointerRegion();
 
     const QPointF localPos = focus()->mapToLocal(pos);
-    if (region.contains(localPos)) {
+    if (constraintContains(focus(), region, localPos)) {
         return pos;
     }
 
@@ -778,12 +785,12 @@ QPointF PointerInputRedirection::applyPointerConfinement(const QPointF &pos) con
 
     // allow either x or y to pass
     QPointF p(currentPos.x(), localPos.y());
-    if (region.contains(p)) {
+    if (constraintContains(focus(), region, p)) {
         return focus()->mapFromLocal(p);
     }
 
     p = QPointF(localPos.x(), currentPos.y());
-    if (region.contains(p)) {
+    if (constraintContains(focus(), region, p)) {
         return focus()->mapFromLocal(p);
     }
 

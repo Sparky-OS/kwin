@@ -1066,6 +1066,16 @@ public:
      * Returns Transformation to map from global to window coordinates.
      */
     QMatrix4x4 inputTransformation() const;
+    /**
+     * Surface-local units per logical unit for input: 1, except for a window whose surface
+     * is larger than its place on screen (a full-resolution stereo X11 window, whose input
+     * goes to its left view).
+     */
+    virtual QSizeF inputScale() const;
+    /**
+     * Whether a surface-local point is on the part of the surface shown on screen.
+     */
+    virtual bool isShownSurfacePoint(const QPointF &point) const;
 
     /*!
      * Returns \c true if the window can accept input at the specified position \a point.

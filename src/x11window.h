@@ -242,6 +242,8 @@ public:
     quint64 surfaceSerial() const;
 
     bool hitTest(const QPointF &point) const override;
+    QSizeF inputScale() const override;
+    bool isShownSurfacePoint(const QPointF &point) const override;
 
 public Q_SLOTS:
     void closeWindow() override;
@@ -356,6 +358,9 @@ private:
     qreal m_bufferScale = 1;
     // how much larger the X11 window is than its place on screen (full-resolution stereo)
     QSizeF m_stereoClientScale = QSizeF(1, 1);
+    // the program's own window size, as mapped or last asked for: a fullscreen
+    // full-resolution stereo window keeps it, and the output scales it
+    QSizeF m_programSize;
     xcb_window_t m_wmClientLeader = XCB_WINDOW_NONE;
     bool m_managed;
 
