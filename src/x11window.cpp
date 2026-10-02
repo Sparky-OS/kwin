@@ -404,6 +404,9 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
 
     setupWindowRules();
     connect(this, &X11Window::windowClassChanged, this, &X11Window::evaluateWindowRules);
+    // before placement: a full-resolution stereo window is placed, and made fullscreen,
+    // by its size on screen (one view), not by its larger X11 window
+    updateStereoContent();
 
     if (Xcb::Extensions::self()->isShapeAvailable()) {
         xcb_shape_select_input(kwinApp()->x11Connection(), window(), true);
@@ -478,6 +481,10 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     }
 
     RectF geom = session ? session->geometry : Xcb::fromXNative(windowGeometry.rect());
+    if (!session) {
+        const QSizeF stereoScale = stereoClientScale();
+        geom.setSize(QSizeF(geom.width() / stereoScale.width(), geom.height() / stereoScale.height()));
+    }
     bool placementDone = false;
 
     RectF area;
@@ -3058,13 +3065,15 @@ void X11Window::getWmNormalHints()
 QSizeF X11Window::minSize() const
 {
     const QSizeF size = Xcb::fromXNative(m_geometryHints.minSize());
-    return rules()->checkMinSize(QSizeF(size.width() / m_stereoClientScale.width(), size.height() / m_stereoClientScale.height()));
+    const QSizeF scale = stereoClientScale();
+    return rules()->checkMinSize(QSizeF(size.width() / scale.width(), size.height() / scale.height()));
 }
 
 QSizeF X11Window::maxSize() const
 {
     const QSizeF size = Xcb::fromXNative(m_geometryHints.maxSize());
-    return rules()->checkMaxSize(QSizeF(size.width() / m_stereoClientScale.width(), size.height() / m_stereoClientScale.height()));
+    const QSizeF scale = stereoClientScale();
+    return rules()->checkMaxSize(QSizeF(size.width() / scale.width(), size.height() / scale.height()));
 }
 
 /**
@@ -3143,6 +3152,9 @@ bool X11Window::isShownSurfacePoint(const QPointF &point) const
 
 void X11Window::handleStereoContentChanged()
 {
+    if (!m_managed) {
+        return;
+    }
     // the X11 window keeps its size and its place on screen changes; a fullscreen or
     // maximized window keeps its place and its X11 window changes
     const QSizeF scale = stereoClientScale();
