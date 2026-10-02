@@ -11,6 +11,7 @@
 // own
 #include "netinfo.h"
 // kwin
+#include "atoms.h"
 #include "rootinfo_filter.h"
 #include "utils/envvar.h"
 #include "virtualdesktops.h"
@@ -115,6 +116,13 @@ RootInfo *RootInfo::create()
         | NET::ActionClose;
 
     s_self = std::make_unique<RootInfo>(supportWindow, "KWin", properties, types, states, properties2, actions);
+
+    // Announce the stereo content declaration of _KDE_NET_WM_STEREO_CONTENT
+    // to programs looking at the root window.
+    const uint32_t stereoContentSupported = 1;
+    xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, kwinApp()->x11RootWindow(),
+                        atoms->kde_net_wm_stereo_content_supported, XCB_ATOM_CARDINAL, 32, 1, &stereoContentSupported);
+
     return s_self.get();
 }
 
@@ -125,6 +133,7 @@ void RootInfo::destroy()
     }
     xcb_window_t supportWindow = s_self->supportWindow();
     s_self.reset();
+    xcb_delete_property(kwinApp()->x11Connection(), kwinApp()->x11RootWindow(), atoms->kde_net_wm_stereo_content_supported);
     xcb_destroy_window(kwinApp()->x11Connection(), supportWindow);
 }
 
