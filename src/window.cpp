@@ -341,9 +341,21 @@ QString Window::windowRole() const
 
 QMatrix4x4 Window::inputTransformation() const
 {
+    const QSizeF scale = inputScale();
     QMatrix4x4 m;
+    m.scale(scale.width(), scale.height());
     m.translate(-m_bufferGeometry.x(), -m_bufferGeometry.y());
     return m;
+}
+
+QSizeF Window::inputScale() const
+{
+    return QSizeF(1, 1);
+}
+
+bool Window::isShownSurfacePoint(const QPointF &point) const
+{
+    return true;
 }
 
 bool Window::hitTest(const QPointF &point) const
@@ -366,12 +378,15 @@ QPointF Window::mapToFrame(const QPointF &point) const
 
 QPointF Window::mapToLocal(const QPointF &point) const
 {
-    return point - bufferGeometry().topLeft();
+    const QSizeF scale = inputScale();
+    const QPointF local = point - bufferGeometry().topLeft();
+    return QPointF(local.x() * scale.width(), local.y() * scale.height());
 }
 
 QPointF Window::mapFromLocal(const QPointF &point) const
 {
-    return point + bufferGeometry().topLeft();
+    const QSizeF scale = inputScale();
+    return QPointF(point.x() / scale.width(), point.y() / scale.height()) + bufferGeometry().topLeft();
 }
 
 bool Window::isLocalhost() const
