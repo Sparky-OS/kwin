@@ -133,6 +133,7 @@ private Q_SLOTS:
     void testGenerateConfigs_data();
     void testGenerateConfigs();
     void testGeneratePartialConfigs();
+    void testColorPowerTradeoffDefault();
     void testAutorotate_data();
     void testAutorotate();
     void testSettingRestoration_data();
@@ -1596,6 +1597,54 @@ void OutputChangesTest::testGenerateConfigs()
 
     QFETCH(bool, defaultDDCValue);
     QCOMPARE(*outputConfig->allowDdcCi, defaultDDCValue);
+}
+
+void OutputChangesTest::testColorPowerTradeoffDefault()
+{
+    // A new output prefers colour accuracy (max bpc 16), but a stored choice must win.
+    const auto outputBackend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+    outputBackend->setVirtualOutputs({
+        VirtualBackend::OutputInfo{
+            .size = QSize(1920, 1080),
+            .edid = readEdid(QFINDTESTDATA("data/Odyssey G5.bin")),
+            .edidIdentifierOverride = QByteArrayLiteral("ColorPowerTradeoffDefault-1"),
+        },
+    });
+
+    OutputConfigurationStore *configurationStore = workspace()->outputConfigureStore();
+    configurationStore->clear();
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+
+    {
+        auto cfg = configurationStore->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        QVERIFY(cfg.has_value());
+        auto [config, type] = *cfg;
+        QCOMPARE(type, OutputConfigurationStore::ConfigType::Generated);
+        QVERIFY(config.constChangeSet(outputs[0])->colorPowerTradeoff);
+        QCOMPARE(*config.constChangeSet(outputs[0])->colorPowerTradeoff, BackendOutput::ColorPowerTradeoff::PreferAccuracy);
+        workspace()->applyOutputConfiguration(config);
+    }
+    // the default is saved with the config, then the user switches the output to PreferEfficiency
+    configurationStore->storeConfig(outputs, false);
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QStringLiteral("/kwinoutputconfig.json");
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QByteArray json = file.readAll();
+    file.close();
+    QVERIFY(json.contains("\"colorPowerTradeoff\": \"PreferAccuracy\""));
+    json.replace("\"colorPowerTradeoff\": \"PreferAccuracy\"", "\"colorPowerTradeoff\": \"PreferEfficiency\"");
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write(json);
+    file.close();
+
+    // a fresh store loads the saved file and must keep the stored choice
+    OutputConfigurationStore reloaded;
+    auto cfg = reloaded.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(cfg.has_value());
+    auto [config, type] = *cfg;
+    QCOMPARE(type, OutputConfigurationStore::ConfigType::Preexisting);
+    QVERIFY(config.constChangeSet(outputs[0])->colorPowerTradeoff);
+    QCOMPARE(*config.constChangeSet(outputs[0])->colorPowerTradeoff, BackendOutput::ColorPowerTradeoff::PreferEfficiency);
 }
 
 void OutputChangesTest::testGeneratePartialConfigs()

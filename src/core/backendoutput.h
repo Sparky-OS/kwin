@@ -477,7 +477,7 @@ protected:
         /// how much HDR headroom is created by increasing the backlight beyond the user setting
         double artificialHdrHeadroom = 1.0;
         double maxPossibleArtificialHdrHeadroom = 1.0;
-        ColorPowerTradeoff colorPowerTradeoff = ColorPowerTradeoff::PreferEfficiency;
+        ColorPowerTradeoff colorPowerTradeoff = ColorPowerTradeoff::PreferAccuracy;
         double dimming = 1.0;
         BrightnessDevice *brightnessDevice = nullptr;
         QString uuid;
