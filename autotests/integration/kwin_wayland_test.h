@@ -27,6 +27,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "qwayland-alpha-modifier-v1.h"
+#include "qwayland-kde-stereo-content-v1.h"
 #include "qwayland-color-management-v1.h"
 #include "qwayland-color-representation-v1.h"
 #include "qwayland-commit-timing-v1.h"
@@ -834,6 +835,7 @@ enum class AdditionalWaylandInterface : uint64_t {
     TearingControlV1 = 1ull << 35,
     CommitTiming = 1ull << 36,
     PointerWarp = 1ull << 37,
+    StereoContentV1 = 1ull << 38,
 };
 Q_DECLARE_FLAGS(AdditionalWaylandInterfaces, AdditionalWaylandInterface)
 
@@ -1079,6 +1081,20 @@ public:
     ~TearingControlV1() override;
 };
 
+class StereoContentManagerV1 : public QtWayland::kde_stereo_content_manager_v1
+{
+public:
+    explicit StereoContentManagerV1(::wl_registry *registry, uint32_t id, int version);
+    ~StereoContentManagerV1() override;
+};
+
+class StereoContentV1 : public QtWayland::kde_stereo_content_v1
+{
+public:
+    explicit StereoContentV1(::kde_stereo_content_v1 *object);
+    ~StereoContentV1() override;
+};
+
 class WlKeyboard;
 class WlPointer;
 class WlTouch;
@@ -1245,6 +1261,7 @@ struct Connection
     std::unique_ptr<WaylandClient::Viewporter> viewporter;
     std::unique_ptr<AlphaModifierV1> alphaModifier;
     std::unique_ptr<TearingControlManagerV1> tearingControl;
+    std::unique_ptr<StereoContentManagerV1> stereoContentManager;
     // TODO port everything away from KWayland::Client::Seat
     std::unique_ptr<WlSeat> kwinSeat;
     std::unique_ptr<CommitTimingManager> commitTiming;
@@ -1332,6 +1349,7 @@ AlphaModifierV1 *alphaModifier();
 TearingControlManagerV1 *tearingControl();
 PointerWarpV1 *pointerWarp();
 Connection *connection();
+StereoContentManagerV1 *stereoContentManager();
 
 bool waitForWaylandSurface(Window *window);
 

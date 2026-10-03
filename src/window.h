@@ -104,6 +104,8 @@ class KWIN_EXPORT Window : public QObject
     Q_OBJECT
     QML_ELEMENT
     QML_UNCREATABLE("")
+    Q_PROPERTY(uint declaredStereoContentClass READ declaredStereoContentClass NOTIFY declaredStereoContentClassChanged)
+    Q_PROPERTY(uint declaredStereoContentSubclass READ declaredStereoContentSubclass NOTIFY declaredStereoContentClassChanged)
 
     /*!
      * \qmlproperty RectF Window::bufferGeometry
@@ -1614,6 +1616,15 @@ public:
     StereoContent declaredStereoContent() const;
     void setDeclaredStereoContent(StereoContent content);
 
+    /**
+     * The class and sub-class of the declared stereo content, as the program
+     * declared them alongside the layout. 0 means unspecified. Stored for the
+     * automatic 3D switch, which acts on them when it is built.
+     */
+    uint8_t declaredStereoContentClass() const;
+    uint8_t declaredStereoContentSubclass() const;
+    void setDeclaredStereoContentClass(uint8_t contentClass, uint8_t subclass);
+
 public Q_SLOTS:
     virtual void closeWindow() = 0;
 
@@ -1732,6 +1743,7 @@ Q_SIGNALS:
     void borderRadiusChanged();
     void excludeFromCaptureChanged();
     void stereoContentChanged();
+    void declaredStereoContentClassChanged();
     void decorationPolicyChanged();
 
 protected:
@@ -2058,6 +2070,8 @@ protected:
     bool m_excludeFromCapture = false;
     StereoContent m_stereoContent = StereoContentNone;
     StereoContent m_declaredStereoContent = StereoContentNone;
+    uint8_t m_declaredStereoContentClass = 0;
+    uint8_t m_declaredStereoContentSubclass = 0;
     QTimer *m_autoRaiseTimer = nullptr;
     QList<VirtualDesktop *> m_desktops;
 

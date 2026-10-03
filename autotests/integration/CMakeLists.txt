@@ -42,6 +42,7 @@ qt6_generate_wayland_protocol_client_sources(KWinIntegrationTestFramework
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-device-v2.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-management-v2.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-screen-edge-v1.xml
+        ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-stereo-content-v1.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/keystate.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/zkde-screencast-unstable-v1.xml
 )
@@ -166,6 +167,7 @@ integrationTest(NAME testMouseActions SRCS mouseactions_test.cpp LIBS)
 integrationTest(NAME testColorManagement SRCS test_colormanagement.cpp)
 integrationTest(NAME testAlphaModifier SRCS alpha_modifier_test.cpp)
 integrationTest(NAME testTearingControl SRCS tearing_control_test.cpp)
+integrationTest(NAME testStereoContent SRCS stereo_content_test.cpp)
 integrationTest(NAME testKeyboardInput SRCS keyboard_input_test.cpp)
 integrationTest(NAME testFifo SRCS test_fifo.cpp PROPERTIES RUN_SERIAL TRUE)
 integrationTest(NAME testMouseKeys SRCS mouse_keys_test.cpp)

@@ -597,6 +597,9 @@ std::unique_ptr<Connection> Connection::setup(int socket, AdditionalWaylandInter
         if (flags & AdditionalWaylandInterface::TearingControlV1 && interface == wp_tearing_control_manager_v1_interface.name) {
             c->tearingControl = std::make_unique<TearingControlManagerV1>(*c->registry, name, version);
         }
+        if (flags & AdditionalWaylandInterface::StereoContentV1 && interface == kde_stereo_content_manager_v1_interface.name) {
+            c->stereoContentManager = std::make_unique<StereoContentManagerV1>(*c->registry, name, version);
+        }
         if (flags.testFlag(AdditionalWaylandInterface::Seat) && interface == wl_seat_interface.name) {
             c->kwinSeat = std::make_unique<WlSeat>(*c->registry, name, version);
         }
@@ -755,6 +758,7 @@ Connection::~Connection()
     viewporter.reset();
     alphaModifier.reset();
     tearingControl.reset();
+    stereoContentManager.reset();
     kwinSeat.reset();
     commitTiming.reset();
     pointerWarp.reset();
@@ -970,6 +974,11 @@ WaylandClient::LinuxDmabufV1 *linuxDmabuf()
 ColorRepresentationV1 *colorRepresentation()
 {
     return s_waylandConnection->colorRepresentation.get();
+}
+
+StereoContentManagerV1 *stereoContentManager()
+{
+    return s_waylandConnection->stereoContentManager.get();
 }
 
 AlphaModifierV1 *alphaModifier()
@@ -2037,6 +2046,26 @@ TearingControlV1::TearingControlV1(::wp_tearing_control_v1 *object)
 }
 
 TearingControlV1::~TearingControlV1()
+{
+    destroy();
+}
+
+StereoContentManagerV1::StereoContentManagerV1(::wl_registry *registry, uint32_t id, int version)
+    : QtWayland::kde_stereo_content_manager_v1(registry, id, version)
+{
+}
+
+StereoContentManagerV1::~StereoContentManagerV1()
+{
+    destroy();
+}
+
+StereoContentV1::StereoContentV1(::kde_stereo_content_v1 *object)
+    : QtWayland::kde_stereo_content_v1(object)
+{
+}
+
+StereoContentV1::~StereoContentV1()
 {
     destroy();
 }

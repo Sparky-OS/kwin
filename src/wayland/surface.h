@@ -9,6 +9,7 @@
 #include "core/colorspace.h"
 #include "core/output.h"
 #include "core/renderbackend.h"
+#include "effect/globals.h"
 
 #include <QObject>
 
@@ -348,6 +349,14 @@ public:
     double alphaMultiplier() const;
 
     /**
+     * The surface's declared stereo content from kde_stereo_content_v1,
+     * with the content's class and sub-class.
+     */
+    StereoContent stereoContent() const;
+    uint8_t stereoContentClass() const;
+    uint8_t stereoContentSubclass() const;
+
+    /**
      * Returns the current release point for the buffer on this surface. The buffer keeps the
      * release point referenced as long as it's referenced itself; for synchronization on the
      * GPU side, the compositor has to either keep the release point referenced as long as the
@@ -475,6 +484,7 @@ Q_SIGNALS:
     void presentationModeHintChanged();
     void bufferReleasePointChanged();
     void alphaMultiplierChanged();
+    void stereoContentChanged();
 
     void waitingOnCommitTiming();
 

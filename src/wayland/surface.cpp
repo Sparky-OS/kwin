@@ -585,6 +585,9 @@ void SurfaceState::mergeInto(SurfaceState *target)
     target->colorDescriptionType = colorDescriptionType;
     target->renderingIntent = renderingIntent;
     target->alphaMultiplier = alphaMultiplier;
+    target->stereoContent = stereoContent;
+    target->stereoContentClass = stereoContentClass;
+    target->stereoContentSubclass = stereoContentSubclass;
     target->yuvCoefficients = yuvCoefficients;
     target->fifoBarrier |= std::exchange(fifoBarrier, false);
     target->hasFifoWaitCondition = std::exchange(hasFifoWaitCondition, false);
@@ -635,6 +638,7 @@ void SurfaceInterfacePrivate::applyState(SurfaceState *next)
     const bool presentationModeHintChanged = (next->committed & SurfaceState::Field::PresentationModeHint);
     const bool bufferReleasePointChanged = (next->committed & SurfaceState::Field::Buffer) && current->releasePoint != next->releasePoint;
     const bool alphaMultiplierChanged = (next->committed & SurfaceState::Field::AlphaMultiplier);
+    const bool stereoContentChanged = (next->committed & SurfaceState::Field::StereoContent);
     const bool yuvCoefficientsChanged = (next->committed & SurfaceState::Field::YuvCoefficients) && (current->yuvCoefficients != next->yuvCoefficients);
     const bool pointerLockRegionChanged = (next->committed & SurfaceState::Field::PointerLockRegion) && (current->pointerLockRegion != next->pointerLockRegion);
     const bool pointerConfinementRegionChanged = (next->committed & SurfaceState::Field::PointerConfinementRegion) && (current->pointerConfinementRegion != next->pointerConfinementRegion);
@@ -744,6 +748,9 @@ void SurfaceInterfacePrivate::applyState(SurfaceState *next)
     }
     if (alphaMultiplierChanged) {
         Q_EMIT q->alphaMultiplierChanged();
+    }
+    if (stereoContentChanged) {
+        Q_EMIT q->stereoContentChanged();
     }
     if (!bufferDamage.isEmpty()) {
         Q_EMIT q->damaged(bufferDamage);
@@ -1303,6 +1310,21 @@ std::shared_ptr<SyncReleasePoint> SurfaceInterface::bufferReleasePoint() const
 double SurfaceInterface::alphaMultiplier() const
 {
     return d->current->alphaMultiplier;
+}
+
+StereoContent SurfaceInterface::stereoContent() const
+{
+    return d->current->stereoContent;
+}
+
+uint8_t SurfaceInterface::stereoContentClass() const
+{
+    return d->current->stereoContentClass;
+}
+
+uint8_t SurfaceInterface::stereoContentSubclass() const
+{
+    return d->current->stereoContentSubclass;
 }
 
 void SurfaceInterface::clearFifoBarrier(std::optional<std::chrono::nanoseconds> refreshDuration)

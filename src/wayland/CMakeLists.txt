@@ -22,6 +22,7 @@ ecm_add_qtwayland_server_protocol_kde(WaylandProtocols_xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-management-v2.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-order-v1.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-screen-edge-v1.xml
+        ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-stereo-content-v1.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/keystate.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/org-kde-plasma-virtual-desktop.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/plasma-shell.xml
@@ -86,6 +87,7 @@ target_sources(kwin PRIVATE
     abstract_data_source.cpp
     abstract_drop_handler.cpp
     alphamodifier_v1.cpp
+    stereocontent_v1.cpp
     appmenu.cpp
     backgroundeffect_v1.cpp
     clientconnection.cpp
@@ -178,6 +180,7 @@ target_sources(kwin PRIVATE
 
 install(FILES
     alphamodifier_v1.h
+    stereocontent_v1.h
     appmenu.h
     backgroundeffect_v1.h
     clientconnection.h

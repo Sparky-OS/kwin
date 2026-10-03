@@ -256,8 +256,7 @@ void WindowItem::updateBorderRadius()
     m_windowContainer->setBorderRadius(m_window->borderRadius());
 }
 
-// the window's main surface holds its stereo picture; subsurfaces, decoration and
-// shadow stay the same in both eyes
+// The rule applies to the main surface; subsurfaces carry their own declarations.
 void WindowItem::updateStereoContent()
 {
     if (m_surfaceItem) {

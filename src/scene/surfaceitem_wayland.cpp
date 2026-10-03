@@ -59,6 +59,10 @@ SurfaceItemWayland::SurfaceItemWayland(SurfaceInterface *surface, Item *parent)
 
     SubSurfaceInterface *subsurface = surface->subSurface();
     if (subsurface) {
+        setStereoContent(surface->stereoContent());
+        connect(surface, &SurfaceInterface::stereoContentChanged, this, [this, surface] {
+            setStereoContent(surface->stereoContent());
+        });
         connect(subsurface, &SubSurfaceInterface::positionChanged,
                 this, &SurfaceItemWayland::handleSubSurfacePositionChanged);
         setPosition(subsurface->position());
