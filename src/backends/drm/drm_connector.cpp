@@ -283,6 +283,12 @@ QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QL
         }
         if (otherStereoFormats) {
             layouts << OutputModeline::Flag::Stereo3DSideBySideHalf << OutputModeline::Flag::Stereo3DTopAndBottom;
+            // frame sequential: the gear (DLP-Link, a panel with its own emitter) syncs its glasses itself;
+            // any size, but the rate per eye is half the refresh
+            if (mode->refreshRate() >= 100000) {
+                layouts << OutputModeline::Flag::Stereo3DSequentialLeftFirst;
+                layouts << OutputModeline::Flag::Stereo3DSequentialRightFirst;
+            }
             if (mode->size() == nativeSize && !base->requiresYcbcr420()) {
                 layouts << OutputModeline::Flag::Stereo3DRowsLeftFirst;
                 layouts << OutputModeline::Flag::Stereo3DRowsRightFirst;
