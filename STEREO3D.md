@@ -70,7 +70,7 @@ Tested on real hardware, with the kernel side in place, on a Sony KDL-46HX855 (a
 - **deep colour**, with new outputs preferring colour accuracy: 12 bpc, the TVs' maximum, on both.
 
 **Built, not yet on this branch:** the X11 property (tested in a container, under review).
-**Built, not yet tested on a screen:** anaglyph, switched by an environment variable for now.
+**Anaglyph:** the same Dubois matrices (modern screens and CRT, in linear light) were tested in a game, Half-Life 2 handing its full side by side eyes to a gamescope effect, on the HX855 (2026-09-24, both profiles). In KWin it is built and switched by an environment variable for now; its first screen test comes with the toggle.
 **Planned, in this order:** the Wayland protocol, the virtual 3D modes and their toggles, the other stereo formats, VR.
 
 Daniel (Sparky Stereo OS, an edition of SparkyLinux)
