@@ -133,6 +133,7 @@ private Q_SLOTS:
     void testRandrEmulation();
     void testRestoreFocusToDestroyedWindow();
     void testStereoContentDeclaration();
+    void testStereoContentClass();
     void testStereoContentDeclarationMalformed();
     void testStereoContentDeclarationRulePrecedence();
 };
@@ -3876,7 +3877,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 1u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 2u);
 
     const uint32_t value = StereoContentSideBySideHalf;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -3918,6 +3919,56 @@ void X11WindowTest::testStereoContentDeclaration()
     xcb_unmap_window(c.get(), window->window());
     xcb_destroy_window(c.get(), window->window());
     xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoContentClass()
+{
+    auto c = Test::createX11Connection();
+    const uint32_t game[] = {3, 4};
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&](xcb_window_t id) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content_class,
+                            XCB_ATOM_CARDINAL, 32, 2, game);
+    });
+    QVERIFY(window);
+    QCOMPARE(window->declaredStereoContentClass(), 3);
+    QCOMPARE(window->declaredStereoContentSubclass(), 4);
+    QSignalSpy changed(window, &Window::declaredStereoContentClassChanged);
+    const uint32_t science[] = {4, 1};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_class,
+                        XCB_ATOM_CARDINAL, 32, 2, science);
+    xcb_flush(c.get());
+    QVERIFY(changed.wait());
+    QCOMPARE(window->property("declaredStereoContentClass").toUInt(), 4u);
+    QCOMPARE(window->declaredStereoContentSubclass(), 1);
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_class);
+    xcb_flush(c.get());
+    QVERIFY(changed.wait());
+    QCOMPARE(window->declaredStereoContentClass(), 0);
+    QCOMPARE(window->declaredStereoContentSubclass(), 0);
+
+    struct Malformed { xcb_atom_t type; uint8_t format; uint32_t length; uint32_t values[3]; };
+    const Malformed cases[] = {
+        {XCB_ATOM_STRING, 32, 2, {3, 4}},
+        {XCB_ATOM_CARDINAL, 8, 2, {3, 4}},
+        {XCB_ATOM_CARDINAL, 32, 0, {}},
+        {XCB_ATOM_CARDINAL, 32, 1, {3}},
+        {XCB_ATOM_CARDINAL, 32, 3, {3, 4, 0}},
+        {XCB_ATOM_CARDINAL, 32, 2, {256, 1}},
+        {XCB_ATOM_CARDINAL, 32, 2, {3, 256}},
+    };
+    for (const auto &bad : cases) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_class,
+                            XCB_ATOM_CARDINAL, 32, 2, game);
+        xcb_flush(c.get());
+        QVERIFY(changed.wait());
+        QCOMPARE(window->declaredStereoContentClass(), 3);
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_class,
+                            bad.type, bad.format, bad.length, bad.values);
+        xcb_flush(c.get());
+        QVERIFY(changed.wait());
+        QCOMPARE(window->declaredStereoContentClass(), 0);
+        QCOMPARE(window->declaredStereoContentSubclass(), 0);
+    }
 }
 
 void X11WindowTest::testStereoContentDeclarationMalformed()
