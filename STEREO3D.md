@@ -69,8 +69,8 @@ Tested on real hardware, with the kernel side in place, on a Sony KDL-46HX855 (a
 - **a game handing over full side by side** (Half-Life 2 through gamescope), shown in 2D, side by side, top and bottom and frame packing: the HX855;
 - **deep colour**, with new outputs preferring colour accuracy: 12 bpc, the TVs' maximum, on both.
 
-**Built, not yet on this branch:** the X11 property (tested in a container, under review).
+**On this branch, tested in containers (2026-10-03), not yet on a screen:** programs declaring their stereo themselves, through the X11 property `_KDE_NET_WM_STEREO_CONTENT` with its class companion and through the Wayland protocol `kde-stereo-content-v1` (layout, class and sub-class, double-buffered, synchronized subsurfaces); a shared client library for both, in our plasma-wayland-protocols branch; and area-filtered downscaling for stereo windows shrunk more than 2:1, checked pixel by pixel against reference averages.
 **Anaglyph:** the same Dubois matrices (modern screens and CRT, in linear light) were tested in a game, Half-Life 2 handing its full side by side eyes to a gamescope effect, on the HX855 (2026-09-25, both profiles). In KWin it is built and switched by an environment variable for now; its first screen test comes with the toggle.
-**Planned, in this order:** the Wayland protocol, the virtual 3D modes and their toggles, the other stereo formats, VR.
+**Planned, in this order:** the virtual 3D modes and their toggles, the other stereo formats, VR.
 
 Daniel (Sparky Stereo OS, an edition of SparkyLinux)
