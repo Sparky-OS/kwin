@@ -134,6 +134,8 @@ private Q_SLOTS:
     void testGenerateConfigs();
     void testGeneratePartialConfigs();
     void testColorPowerTradeoffDefault();
+    void testVirtualStereoRestore();
+    void testVirtualStereoAutomaticPicks();
     void testAutorotate_data();
     void testAutorotate();
     void testSettingRestoration_data();
@@ -1597,6 +1599,82 @@ void OutputChangesTest::testGenerateConfigs()
 
     QFETCH(bool, defaultDDCValue);
     QCOMPARE(*outputConfig->allowDdcCi, defaultDDCValue);
+}
+
+void OutputChangesTest::testVirtualStereoAutomaticPicks()
+{
+    using Flag = OutputModeline::Flag;
+    const OutputModeline base(QSize(1920, 1080), 60000, Flag::Preferred);
+    const OutputModeline twin(QSize(3840, 2160), 120000, Flag::Preferred | Flag::VirtualStereo | Flag::Stereo3DAnaglyphModern);
+    const OutputModeline hdmi(QSize(3840, 2160), 120000, Flag::Preferred | Flag::Stereo3DFramePacking);
+    const auto backend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+    backend->setVirtualOutputs({VirtualBackend::OutputInfo{
+        .size = base.size(),
+        .modes = {twin, hdmi, base},
+        .edidIdentifierOverride = QByteArrayLiteral("VirtualStereoAutomaticPicks"),
+    }});
+    const auto outputs = backend->outputs();
+    auto store = workspace()->outputConfigureStore();
+    store->clear();
+    const auto fresh = store->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(fresh);
+    QCOMPARE(*fresh->first.constChangeSet(outputs[0])->currentMode, base);
+
+    // Old saved configurations had size and refresh, but no mode flags.
+    OutputConfiguration oldConfig;
+    oldConfig.changeSet(outputs[0])->desiredMode = OutputModeline(base.size(), base.refreshRate());
+    outputs[0]->applyChanges(oldConfig);
+    store->storeConfig(outputs, false);
+    OutputConfigurationStore oldStore;
+    const auto restored = oldStore.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(restored);
+    QCOMPARE(*restored->first.constChangeSet(outputs[0])->currentMode, base);
+}
+
+void OutputChangesTest::testVirtualStereoRestore()
+{
+    using Flag = OutputModeline::Flag;
+    const OutputModeline base(QSize(1920, 1080), 60000, Flag::Preferred);
+    const OutputModeline twin(base.size(), base.refreshRate(), Flag::VirtualStereo | Flag::Stereo3DAnaglyphModern);
+    const auto backend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+    backend->setVirtualOutputs({VirtualBackend::OutputInfo{
+        .size = base.size(),
+        .modes = {base},
+        .edidIdentifierOverride = QByteArrayLiteral("VirtualStereoRestore"),
+    }});
+    const auto outputs = backend->outputs();
+    auto store = workspace()->outputConfigureStore();
+    store->clear();
+    auto fresh = store->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(fresh);
+    QCOMPARE(*fresh->first.constChangeSet(outputs[0])->currentMode, base);
+    QCOMPARE(fresh->first.constChangeSet(outputs[0])->anaglyph, std::optional(false));
+    QCOMPARE(fresh->first.constChangeSet(outputs[0])->otherStereoFormats, std::optional(false));
+
+    // Store the user's desired mode. At startup the backend initially exposes only 2D.
+    OutputConfiguration choice;
+    choice.changeSet(outputs[0])->desiredMode = twin;
+    choice.changeSet(outputs[0])->anaglyph = true;
+    choice.changeSet(outputs[0])->otherStereoFormats = true;
+    outputs[0]->applyChanges(choice);
+    store->storeConfig(outputs, false);
+    QVERIFY(!twin.match(outputs[0]->modes()));
+    OutputConfigurationStore restarted;
+    auto restored = restarted.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(restored);
+    const auto state = restored->first.constChangeSet(outputs[0]);
+    QCOMPARE(state->anaglyph, std::optional(true));
+    QCOMPARE(state->otherStereoFormats, std::optional(true));
+    QCOMPARE(*state->currentMode, twin);
+
+    // A disabled group must not revive a saved twin, even if its desired flags remain.
+    choice.changeSet(outputs[0])->anaglyph = false;
+    outputs[0]->applyChanges(choice);
+    store->storeConfig(outputs, false);
+    OutputConfigurationStore disabled;
+    auto fallback = disabled.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(fallback);
+    QCOMPARE(*fallback->first.constChangeSet(outputs[0])->currentMode, base);
 }
 
 void OutputChangesTest::testColorPowerTradeoffDefault()

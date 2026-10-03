@@ -32,7 +32,7 @@ static OutputModeline::Flags flagsForMode(const drmModeModeInfo &info)
     return flags;
 }
 
-DrmConnectorMode::DrmConnectorMode(DrmConnector *connector, drmModeModeInfo nativeMode)
+DrmConnectorMode::DrmConnectorMode(DrmConnector *connector, drmModeModeInfo nativeMode, bool ycbcr420Only)
     : OutputMode(OutputModeline(CvtModeline{
                                     .clock = nativeMode.clock,
                                     .hdisplay = nativeMode.hdisplay,
@@ -50,6 +50,7 @@ DrmConnectorMode::DrmConnectorMode(DrmConnector *connector, drmModeModeInfo nati
                                 flagsForMode(nativeMode)))
     , m_connector(connector)
     , m_nativeMode(nativeMode)
+    , m_ycbcr420Only(ycbcr420Only || (connector && connector->edid()->requiresYcbcr420(size(), refreshRate())))
 {
 }
 
@@ -82,8 +83,48 @@ DrmConnectorMode::DrmConnectorMode(DrmConnector *connector, const OutputModeline
     sprintf(m_nativeMode.name, "%dx%d@%d", size.width(), size.height(), m_nativeMode.vrefresh);
 }
 
+// a virtual twin has its base mode's timings, is never preferred, and is marked with its layout
+static OutputModeline virtualTwinModeline(const OutputModeline &base, OutputModeline::Flag layout)
+{
+    const OutputModeline::Flags flags = (base.flags() & ~OutputModeline::Flags(OutputModeline::Flag::Preferred)) | OutputModeline::Flag::VirtualStereo | layout;
+    if (const auto cvt = base.cvt()) {
+        return OutputModeline(*cvt, flags);
+    }
+    return OutputModeline(base.size(), base.refreshRate(), flags);
+}
+
+DrmConnectorMode::DrmConnectorMode(const std::shared_ptr<DrmConnectorMode> &base, OutputModeline::Flag layout)
+    : OutputMode(virtualTwinModeline(base->modeline(), layout))
+    , m_virtualBase(base)
+    , m_connector(base->m_connector)
+    , m_nativeMode(*base->nativeMode())
+    , m_ycbcr420Only(base->requiresYcbcr420())
+{
+}
+
+std::shared_ptr<OutputMode> DrmConnectorMode::resolveVirtualMode(const std::shared_ptr<OutputMode> &current, const QList<std::shared_ptr<OutputMode>> &modes)
+{
+    if (current && (current->flags() & OutputModeline::Flag::VirtualStereo) && !modes.contains(current)) {
+        return std::static_pointer_cast<DrmConnectorMode>(current)->virtualBase()->modeline().match(modes);
+    }
+    return current;
+}
+
+bool DrmConnectorMode::requiresYcbcr420() const
+{
+    return m_ycbcr420Only;
+}
+
+std::shared_ptr<DrmConnectorMode> DrmConnectorMode::virtualBase() const
+{
+    return m_virtualBase;
+}
+
 std::shared_ptr<DrmBlob> DrmConnectorMode::blob()
 {
+    if (m_virtualBase) {
+        return m_virtualBase->blob();
+    }
     if (!m_blob) {
         m_blob = DrmBlob::create(m_connector->gpu(), &m_nativeMode, sizeof(m_nativeMode));
     }
@@ -250,6 +291,51 @@ QByteArray DrmConnector::mstPath() const
 QList<std::shared_ptr<DrmConnectorMode>> DrmConnector::modes() const
 {
     return m_modes;
+}
+
+QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QList<std::shared_ptr<OutputMode>> &baseModes,
+                                                                      const QList<std::shared_ptr<OutputMode>> &previousModes,
+                                                                      bool anaglyph, bool otherStereoFormats)
+{
+    auto modes = baseModes;
+    QSize nativeSize;
+    for (const auto &mode : baseModes) {
+        if ((mode->flags() & OutputModeline::Flag::Preferred) && stereoLayoutForMode(mode->flags()) == StereoLayout::None) {
+            nativeSize = mode->size();
+            break;
+        }
+    }
+    for (const auto &mode : baseModes) {
+        if (stereoLayoutForMode(mode->flags()) != StereoLayout::None) {
+            continue;
+        }
+        const auto base = std::static_pointer_cast<DrmConnectorMode>(mode);
+        QList<OutputModeline::Flag> layouts;
+        if (anaglyph && !base->requiresYcbcr420()) {
+            layouts << OutputModeline::Flag::Stereo3DAnaglyphModern << OutputModeline::Flag::Stereo3DAnaglyphCrt;
+        }
+        if (otherStereoFormats) {
+            layouts << OutputModeline::Flag::Stereo3DSideBySideHalf << OutputModeline::Flag::Stereo3DTopAndBottom;
+            if (mode->size() == nativeSize && !base->requiresYcbcr420()) {
+                layouts << OutputModeline::Flag::Stereo3DRowsLeftFirst;
+                layouts << OutputModeline::Flag::Stereo3DRowsRightFirst;
+                layouts << OutputModeline::Flag::Stereo3DColumnsLeftFirst;
+                layouts << OutputModeline::Flag::Stereo3DColumnsRightFirst;
+                layouts << OutputModeline::Flag::Stereo3DCheckerboardLeftFirst;
+                layouts << OutputModeline::Flag::Stereo3DCheckerboardRightFirst;
+            }
+        }
+        for (const auto layout : layouts) {
+            auto twin = std::make_shared<DrmConnectorMode>(base, layout);
+            auto previous = twin->modeline().match(previousModes);
+            if (previous && std::static_pointer_cast<DrmConnectorMode>(previous)->virtualBase() == base) {
+                modes.append(previous);
+            } else {
+                modes.append(twin);
+            }
+        }
+    }
+    return modes;
 }
 
 BackendOutput::SubPixel DrmConnector::subpixel() const

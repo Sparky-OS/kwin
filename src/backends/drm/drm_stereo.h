@@ -34,7 +34,19 @@ enum class StereoLayout {
     SideBySideFull,
     AnaglyphCrt,
     AnaglyphModern,
+    RowsLeftFirst,
+    RowsRightFirst,
+    ColumnsLeftFirst,
+    ColumnsRightFirst,
+    CheckerboardLeftFirst,
+    CheckerboardRightFirst,
+
 };
+
+inline bool isSpatialStereo(StereoLayout layout)
+{
+    return layout >= StereoLayout::RowsLeftFirst && layout <= StereoLayout::CheckerboardRightFirst;
+}
 
 inline bool isAnaglyph(StereoLayout layout)
 {
@@ -64,6 +76,31 @@ inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
 
 inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
 {
+    if (flags & OutputModeline::Flag::Stereo3DAnaglyphModern) {
+        return StereoLayout::AnaglyphModern;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DAnaglyphCrt) {
+        return StereoLayout::AnaglyphCrt;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DRowsLeftFirst) {
+        return StereoLayout::RowsLeftFirst;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DRowsRightFirst) {
+        return StereoLayout::RowsRightFirst;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DColumnsLeftFirst) {
+        return StereoLayout::ColumnsLeftFirst;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DColumnsRightFirst) {
+        return StereoLayout::ColumnsRightFirst;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DCheckerboardLeftFirst) {
+        return StereoLayout::CheckerboardLeftFirst;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DCheckerboardRightFirst) {
+        return StereoLayout::CheckerboardRightFirst;
+    }
+
     if (flags & OutputModeline::Flag::Stereo3DSideBySideHalf) {
         return StereoLayout::SideBySideHalf;
     }

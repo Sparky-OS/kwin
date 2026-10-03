@@ -181,6 +181,15 @@ public:
         Stereo3DTopAndBottom = 0x40,
         Stereo3DFramePacking = 0x80,
         Stereo3DSideBySideFull = 0x100,
+        Stereo3DAnaglyphModern = 0x200,
+        Stereo3DAnaglyphCrt = 0x400,
+        Stereo3DRowsLeftFirst = 0x800,
+        Stereo3DRowsRightFirst = 0x1000,
+        Stereo3DColumnsLeftFirst = 0x2000,
+        Stereo3DColumnsRightFirst = 0x4000,
+        Stereo3DCheckerboardLeftFirst = 0x8000,
+        Stereo3DCheckerboardRightFirst = 0x10000,
+        VirtualStereo = 0x20000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 

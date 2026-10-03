@@ -85,6 +85,8 @@ void VirtualOutput::applyChanges(const OutputConfiguration &config)
 
     State next = m_state;
     next.enabled = props->enabled.value_or(m_state.enabled);
+    next.anaglyph = props->anaglyph.value_or(m_state.anaglyph);
+    next.otherStereoFormats = props->otherStereoFormats.value_or(m_state.otherStereoFormats);
     next.transform = props->transform.value_or(m_state.transform);
     next.position = props->pos.value_or(m_state.position);
     next.scale = props->scale.value_or(m_state.scale);

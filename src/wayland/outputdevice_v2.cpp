@@ -19,7 +19,7 @@
 namespace KWin
 {
 
-static const quint32 s_version = 26;
+static const quint32 s_version = 27;
 
 class OutputDeviceRegistryV2Private : public QtWaylandServer::kde_output_device_registry_v2
 {
@@ -148,6 +148,9 @@ static uint32_t kwinCapabilitiesToOutputDeviceCapabilities(BackendOutput::Capabi
     if (caps & BackendOutput::Capability::HdrIccProfile) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_hdr_icc_profile;
     }
+    if (caps & BackendOutput::Capability::VirtualStereo) {
+        ret |= QtWaylandServer::kde_output_device_v2::capability_virtual_stereo;
+    }
     if (caps & BackendOutput::Capability::AbmLevel) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_abm_level;
     }
@@ -219,6 +222,7 @@ public:
     void sendAutoBrightness(Resource *resource);
     void sendHdrIccProfilePath(Resource *resource);
     void sendHdrColorProfileSource(Resource *resource);
+    void sendStereoFormats(Resource *resource);
     void sendAbmLevel(Resource *resource);
 
     OutputDeviceV2Interface *q;
@@ -270,6 +274,8 @@ public:
     bool m_autoBrightness = false;
     QString m_hdrIccProfilePath;
     color_profile_source m_hdrColorProfile = color_profile_source::color_profile_source_EDID;
+    bool m_anaglyph = false;
+    bool m_otherStereoFormats = false;
     uint32_t m_abmLevel = 0;
 
 protected:
@@ -360,6 +366,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     updateHdrIccProfilePath();
     updateHdrColorProfileSource();
     updateAbmLevel();
+    updateStereoFormats();
 
     connect(handle, &BackendOutput::positionChanged,
             this, &OutputDeviceV2Interface::updateGlobalPosition);
@@ -403,6 +410,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     connect(handle, &BackendOutput::automaticBrightnessChanged, this, &OutputDeviceV2Interface::updateAutoBrightness);
     connect(handle, &BackendOutput::hdrIccProfilePathChanged, this, &OutputDeviceV2Interface::updateHdrIccProfilePath);
     connect(handle, &BackendOutput::hdrColorProfileSourceChanged, this, &OutputDeviceV2Interface::updateHdrColorProfileSource);
+    connect(handle, &BackendOutput::stereoFormatsChanged, this, &OutputDeviceV2Interface::updateStereoFormats);
     connect(handle, &BackendOutput::abmLevelChanged, this, &OutputDeviceV2Interface::updateAbmLevel);
 
     // Delay the done event to batch property updates.
@@ -500,6 +508,7 @@ void OutputDeviceV2InterfacePrivate::kde_output_device_v2_bind_resource(Resource
     sendHdrIccProfilePath(resource);
     sendHdrColorProfileSource(resource);
     sendAbmLevel(resource);
+    sendStereoFormats(resource);
     if (!m_uuid.isEmpty()) {
         sendDone(resource);
     }
@@ -508,6 +517,9 @@ void OutputDeviceV2InterfacePrivate::kde_output_device_v2_bind_resource(Resource
 wl_resource *OutputDeviceV2InterfacePrivate::sendNewMode(Resource *resource, OutputDeviceModeV2Interface *mode)
 {
     auto privateMode = OutputDeviceModeV2InterfacePrivate::get(mode);
+    if (resource->version() < KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_VIRTUAL_STEREO_SINCE_VERSION && (privateMode->m_modeline.flags() & OutputModeline::Flag::VirtualStereo)) {
+        return nullptr;
+    }
     // bind mode to client
     const auto modeResource = privateMode->createResource(resource);
 
@@ -520,8 +532,22 @@ wl_resource *OutputDeviceV2InterfacePrivate::sendNewMode(Resource *resource, Out
 
 void OutputDeviceV2InterfacePrivate::sendCurrentMode(Resource *outputResource)
 {
-    const auto modeResource = OutputDeviceModeV2InterfacePrivate::get(m_currentMode)->findResource(outputResource);
-    send_current_mode(outputResource->handle, modeResource->handle);
+    auto current = m_currentMode;
+    const auto handle = current->handle().lock();
+    if (outputResource->version() < KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_VIRTUAL_STEREO_SINCE_VERSION && (handle->flags() & OutputModeline::Flag::VirtualStereo)) {
+        using Flag = OutputModeline::Flag;
+        const auto basicFlags = Flag::Preferred | Flag::Generated | Flag::Custom | Flag::ReducedBlanking;
+        for (const auto &mode : m_modes) {
+            const auto candidate = mode->handle().lock();
+            if (!(candidate->flags() & ~basicFlags) && candidate->size() == handle->size() && candidate->refreshRate() == handle->refreshRate()) {
+                current = mode.get();
+                break;
+            }
+        }
+    }
+    if (const auto resource = OutputDeviceModeV2InterfacePrivate::get(current)->findResource(outputResource)) {
+        send_current_mode(outputResource->handle, resource->handle);
+    }
 }
 
 void OutputDeviceV2InterfacePrivate::sendGeometry(Resource *resource)
@@ -1262,6 +1288,26 @@ void OutputDeviceV2Interface::updateHdrColorProfileSource()
     }
 }
 
+void OutputDeviceV2InterfacePrivate::sendStereoFormats(Resource *resource)
+{
+    if (resource->version() >= KDE_OUTPUT_DEVICE_V2_STEREO_FORMATS_SINCE_VERSION) {
+        send_stereo_formats(resource->handle, m_anaglyph, m_otherStereoFormats);
+    }
+}
+
+void OutputDeviceV2Interface::updateStereoFormats()
+{
+    if (d->m_anaglyph != d->m_handle->anaglyph() || d->m_otherStereoFormats != d->m_handle->otherStereoFormats()) {
+        d->m_anaglyph = d->m_handle->anaglyph();
+        d->m_otherStereoFormats = d->m_handle->otherStereoFormats();
+        const auto resources = d->resourceMap();
+        for (const auto &resource : resources) {
+            d->sendStereoFormats(resource);
+        }
+        scheduleDone();
+    }
+}
+
 void OutputDeviceV2Interface::updateAbmLevel()
 {
     if (d->m_abmLevel != d->m_handle->abmLevel()) {
@@ -1366,6 +1412,33 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
         }
         if (m_modeline.flags() & OutputModeline::Flag::Stereo3DSideBySideFull) {
             flags |= 0x20;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DAnaglyphModern) {
+            flags |= 0x40;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DAnaglyphCrt) {
+            flags |= 0x80;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DRowsLeftFirst) {
+            flags |= 0x100;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DRowsRightFirst) {
+            flags |= 0x200;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DColumnsLeftFirst) {
+            flags |= 0x400;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DColumnsRightFirst) {
+            flags |= 0x800;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DCheckerboardLeftFirst) {
+            flags |= 0x1000;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DCheckerboardRightFirst) {
+            flags |= 0x2000;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::VirtualStereo) {
+            flags |= 0x4000;
         }
         send_flags(resource->handle, flags);
     }

@@ -117,7 +117,6 @@ private:
     ColorPipeline m_appliedPostBlendPipeline;
     std::shared_ptr<ColorDescription> m_appliedLayerBlendingColor;
     // a layout on the 2D mode (no 3D signal): side by side, top and bottom or anaglyph
-    StereoLayout m_manualLayout = StereoLayout::None;
     PresentationMode m_desiredPresentationMode = PresentationMode::VSync;
     bool m_autoRotateAvailable = false;
     bool m_autoBrightnessAvailable = false;

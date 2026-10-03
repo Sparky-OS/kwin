@@ -86,6 +86,7 @@ public:
         HdrIccProfile = 1 << 17,
         AbmLevel = 1 << 18,
         Disable = 1 << 19,
+        VirtualStereo = 1 << 20,
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -360,6 +361,8 @@ public:
      */
     QPoint deviceOffset() const;
 
+    bool anaglyph() const;
+    bool otherStereoFormats() const;
     uint32_t abmLevel() const;
 
     DrmDevice *scanoutDevice() const;
@@ -434,6 +437,7 @@ Q_SIGNALS:
     void automaticBrightnessChanged();
     void hdrIccProfilePathChanged();
     void hdrColorProfileSourceChanged();
+    void stereoFormatsChanged();
     void abmLevelChanged();
 
 protected:
@@ -522,6 +526,8 @@ protected:
         AutoBrightnessCurve autoBrightnessCurve;
         BrightnessReason lastBrightnessAdjustmentReason = BrightnessReason::ManualAdjustment;
         uint32_t abmLevel = 0;
+        bool anaglyph = false;
+        bool otherStereoFormats = false;
     };
 
     void setInformation(const Information &information);

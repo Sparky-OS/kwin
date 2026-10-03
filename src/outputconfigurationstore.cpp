@@ -54,8 +54,48 @@ std::optional<OutputModeline> LegacyOutputModeline::match(const QList<OutputMode
 // HDMI 3D modes are listed with the others but only ever set by the user
 static bool isStereo3D(OutputModeline::Flags flags)
 {
-    return flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf) || flags.testFlag(OutputModeline::Flag::Stereo3DTopAndBottom)
+    return flags.testFlag(OutputModeline::Flag::VirtualStereo) || flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf) || flags.testFlag(OutputModeline::Flag::Stereo3DTopAndBottom)
         || flags.testFlag(OutputModeline::Flag::Stereo3DFramePacking) || flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideFull);
+}
+
+static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &saved, bool anaglyph, bool otherStereoFormats, const std::optional<QList<OutputModeline>> &customModes)
+{
+    using Flag = OutputModeline::Flag;
+    if (!(saved.flags() & Flag::VirtualStereo)) {
+        return false;
+    }
+    const auto layouts = saved.flags() & ~(Flag::Preferred | Flag::Generated | Flag::Custom | Flag::ReducedBlanking | Flag::VirtualStereo);
+    const bool anaglyphLayout = layouts == Flag::Stereo3DAnaglyphModern || layouts == Flag::Stereo3DAnaglyphCrt;
+    const bool halfLayout = layouts == Flag::Stereo3DSideBySideHalf || layouts == Flag::Stereo3DTopAndBottom;
+    const bool spatialLayout = layouts == Flag::Stereo3DRowsLeftFirst || layouts == Flag::Stereo3DRowsRightFirst
+        || layouts == Flag::Stereo3DColumnsLeftFirst || layouts == Flag::Stereo3DColumnsRightFirst
+        || layouts == Flag::Stereo3DCheckerboardLeftFirst || layouts == Flag::Stereo3DCheckerboardRightFirst;
+    if (!(anaglyph && anaglyphLayout) && !(otherStereoFormats && (halfLayout || spatialLayout))) {
+        return false;
+    }
+    if ((anaglyphLayout || spatialLayout) && output->edid().requiresYcbcr420(saved.size(), saved.refreshRate())) {
+        return false;
+    }
+    const auto modes = output->modes();
+    bool nativeSize = false;
+    bool baseExists = false;
+    for (const auto &mode : modes) {
+        if (mode->isRemoved() || isStereo3D(mode->flags())) {
+            continue;
+        }
+        if (mode->size() == saved.size()) {
+            nativeSize |= bool(mode->flags() & Flag::Preferred);
+            baseExists |= mode->refreshRate() == saved.refreshRate()
+                && (mode->flags() & ~OutputModeline::Flags(Flag::Preferred)) == (saved.flags() & ~(Flag::Preferred | Flag::VirtualStereo | layouts));
+        }
+    }
+    if ((saved.flags() & Flag::Custom) && customModes) {
+        // the twin of a custom mode has that mode's timings
+        baseExists |= std::ranges::any_of(*customModes, [&saved](const OutputModeline &custom) {
+            return custom.cvt() == saved.cvt() && custom.basic() == saved.basic();
+        });
+    }
+    return baseExists && (!spatialLayout || nativeSize);
 }
 
 OutputConfigurationStore::OutputConfigurationStore()
@@ -414,6 +454,8 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
             .automaticBrightness = output->automaticBrightness(),
             .autoBrightnessCurve = output->autoBrightnessCurve(),
             .abmLevel = output->abmLevel(),
+            .anaglyph = output->anaglyph(),
+            .otherStereoFormats = output->otherStereoFormats(),
         };
         *outputIt = SetupState{
             .outputIndex = *outputIndex,
@@ -437,7 +479,9 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
         });
 
         std::optional<OutputModeline> effectiveMode;
-        if (state.mode) {
+        if (state.mode && canRestoreVirtualMode(output, *state.mode, state.anaglyph.value_or(false), state.otherStereoFormats.value_or(false), state.customModes)) {
+            effectiveMode = state.mode;
+        } else if (state.mode) {
             // Note that a custom mode can potentially have a matching object in the output->modes()
             // list but no matching entry in the state.customModes list.
             if (state.mode->flags() & OutputModeline::Flag::Custom) {
@@ -448,7 +492,7 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
                 }
             } else {
                 const auto availableModes = output->modes();
-                if (state.mode->match(availableModes)) {
+                if (!(state.mode->flags() & OutputModeline::Flag::VirtualStereo) && state.mode->match(availableModes)) {
                     effectiveMode = state.mode;
                 }
             }
@@ -528,6 +572,8 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .automaticBrightness = state.automaticBrightness,
             .autoBrightnessCurve = state.autoBrightnessCurve,
             .abmLevel = state.abmLevel,
+            .anaglyph = state.anaglyph,
+            .otherStereoFormats = state.otherStereoFormats,
         };
     }
     return ret;
@@ -682,7 +728,9 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
         const OutputState existingData = outputIndex ? m_outputs[*outputIndex] : OutputState{};
 
         std::optional<OutputModeline> modeline;
-        if (existingData.mode) {
+        if (existingData.mode && canRestoreVirtualMode(output, *existingData.mode, existingData.anaglyph.value_or(false), existingData.otherStereoFormats.value_or(false), existingData.customModes)) {
+            modeline = existingData.mode;
+        } else if (existingData.mode) {
             // Note that a custom mode can potentially have a matching object in the output->modes()
             // list but no matching entry in the state.customModes list.
             if (existingData.mode->flags() & OutputModeline::Flag::Custom) {
@@ -693,7 +741,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
                 }
             } else {
                 const auto availableModes = output->modes();
-                if (existingData.mode->match(availableModes)) {
+                if (!(existingData.mode->flags() & OutputModeline::Flag::VirtualStereo) && existingData.mode->match(availableModes)) {
                     modeline = existingData.mode;
                 }
             }
@@ -772,6 +820,8 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             // TODO generate a more fitting brightness map per screen?
             .autoBrightnessCurve = existingData.autoBrightnessCurve,
             .abmLevel = existingData.abmLevel.value_or(0),
+            .anaglyph = existingData.anaglyph.value_or(false),
+            .otherStereoFormats = existingData.otherStereoFormats.value_or(false),
         };
         if (setupState) {
             priority = std::max(setupState->priority + 1, priority);
@@ -1403,6 +1453,12 @@ void OutputConfigurationStore::load()
         if (const auto it = data.find("autoBrightnessCurve"); it != data.end() && it->isArray()) {
             state.autoBrightnessCurve = AutoBrightnessCurve::fromArray(it->toArray());
         }
+        if (data.value("anaglyph").isBool()) {
+            state.anaglyph = data.value("anaglyph").toBool();
+        }
+        if (data.value("otherStereoFormats").isBool()) {
+            state.otherStereoFormats = data.value("otherStereoFormats").toBool();
+        }
         if (const auto it = data.find("abmLevel"); it != data.end()) {
             const int level = it->toInt(-1);
             if (level >= 0 && level <= 4) {
@@ -1717,6 +1773,12 @@ void OutputConfigurationStore::save()
         }
         if (output.autoBrightnessCurve) {
             o["autoBrightnessCurve"] = output.autoBrightnessCurve->toArray();
+        }
+        if (output.anaglyph) {
+            o["anaglyph"] = *output.anaglyph;
+        }
+        if (output.otherStereoFormats) {
+            o["otherStereoFormats"] = *output.otherStereoFormats;
         }
         if (output.abmLevel.has_value()) {
             o["abmLevel"] = int(*output.abmLevel);

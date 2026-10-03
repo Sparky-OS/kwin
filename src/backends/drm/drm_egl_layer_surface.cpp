@@ -316,6 +316,51 @@ bool EglGbmLayerSurface::drawAnaglyph(const QSize &fboSize, const Region &repain
     return true;
 }
 
+bool EglGbmLayerSurface::drawStereoPattern(const QSize &fboSize, const Region &repaint)
+{
+    if (!m_surface->stereoPatternShader && !m_surface->stereoPatternShaderFailed) {
+        m_surface->stereoPatternShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/stereopattern.frag"));
+        if (!m_surface->stereoPatternShader) {
+            m_surface->stereoPatternShaderFailed = true;
+            qCWarning(KWIN_DRM) << "Failed to load the stereo pattern shader, showing the desktop flat";
+        }
+    }
+    if (!m_surface->stereoPatternShader) {
+        return false;
+    }
+    ShaderBinder binder(m_surface->stereoPatternShader.get());
+    GLShader *shader = binder.shader();
+    shader->setColorspaceUniforms(m_surface->blendingColor, m_surface->layerBlendingColor, RenderingIntent::AbsoluteColorimetricNoAdaptation);
+    // the right eye's own picture when the scene was rendered once per eye, else the one desktop
+    const std::shared_ptr<GLTexture> rightEye = m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : nullptr;
+    shader->setUniform("leftEye", 0);
+    shader->setUniform("rightEye", rightEye ? 1 : 0);
+    const int layout = int(m_stereoLayout) - int(StereoLayout::RowsLeftFirst);
+    shader->setUniform("pattern", layout / 2);
+    shader->setUniform("rightFirst", layout % 2);
+    shader->setUniform("outputHeight", fboSize.height());
+    QMatrix4x4 mat;
+    mat.scale(1, -1);
+    mat.ortho(QRectF(QPointF(), fboSize));
+    shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
+    if (const auto vbo = uploadGeometry(repaint, m_surface->gbmSwapchain->size())) {
+        if (rightEye) {
+            glActiveTexture(GL_TEXTURE1);
+            rightEye->bind();
+            glActiveTexture(GL_TEXTURE0);
+        }
+        m_surface->currentShadowSlot->texture()->bind();
+        vbo->render(GL_TRIANGLES);
+        m_surface->currentShadowSlot->texture()->unbind();
+        if (rightEye) {
+            glActiveTexture(GL_TEXTURE1);
+            rightEye->unbind();
+            glActiveTexture(GL_TEXTURE0);
+        }
+    }
+    return true;
+}
+
 std::optional<OutputLayerBeginFrameInfo> EglGbmLayerSurface::startRightEye()
 {
     if (!m_surface || !m_surface->needsShadowBuffer || !m_surface->currentShadowSlot) {
@@ -362,6 +407,7 @@ void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSi
 bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputFrame *frame)
 {
     // in 3D both eyes change together, so the whole scanout buffer is new every frame
+    const bool spatial = isSpatialStereo(m_stereoLayout) && m_surface->needsShadowBuffer;
     const bool anaglyph = isAnaglyph(m_stereoLayout) && m_surface->needsShadowBuffer;
     const bool stereo = m_stereoLayout != StereoLayout::None && m_surface->needsShadowBuffer;
     const Region scanoutDamage = stereo ? Region(Rect(QPoint(), m_surface->gbmSwapchain->size())) : damagedDeviceRegion;
@@ -397,7 +443,9 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
         glDisable(GL_BLEND);
         if (anaglyph && drawAnaglyph(fbo->size(), repaint)) {
             // both eyes mixed; the repaint is the whole buffer in 3D
-        } else if (stereo && !anaglyph) {
+        } else if (spatial && drawStereoPattern(fbo->size(), repaint)) {
+            // The pattern is anchored to scanout pixels.
+        } else if (stereo && !anaglyph && !spatial) {
             // the desktop into both eyes, left eye first: left half and right half for
             // side by side, top half and bottom half for top and bottom, each eye in full
             // for frame packing (black between them) and side by side full

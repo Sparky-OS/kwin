@@ -239,3 +239,5 @@ find_package(StereoDeclare 1 CONFIG QUIET)
 if(TARGET StereoDeclare::stereo-declare AND KWIN_BUILD_X11)
     integrationTest(NAME testStereoDeclareHelper SRCS stereo_declare_helper_test.cpp LIBS StereoDeclare::stereo-declare X11::X11)
 endif()
+
+integrationTest(NAME testVirtualStereoProtocol SRCS virtual_stereo_protocol_test.cpp)

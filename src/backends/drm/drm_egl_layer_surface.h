@@ -128,9 +128,12 @@ private:
         std::unique_ptr<GLRenderTimeQuery> compositingTimeQuery;
 
         // the two eyes mixed as red/cyan (anaglyph layouts)
+        std::unique_ptr<GLShader> stereoPatternShader;
+        bool stereoPatternShaderFailed = false;
         std::unique_ptr<GLShader> anaglyphShader;
         bool anaglyphShaderFailed = false;
     };
+    bool drawStereoPattern(const QSize &fboSize, const Region &repaint);
     bool drawAnaglyph(const QSize &fboSize, const Region &repaint);
     bool checkSurface(const QSize &size, const FormatModifierMap &formats, BackendOutput::ColorPowerTradeoff tradeoff, uint32_t requiredAlphaBits);
     bool doesSurfaceFit(Surface *surface, const QSize &size, const FormatModifierMap &formats, BackendOutput::ColorPowerTradeoff tradeoff, uint32_t requiredAlphaBits) const;

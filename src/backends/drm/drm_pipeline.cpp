@@ -284,6 +284,13 @@ std::expected<void, OutputError> DrmPipeline::prepareAtomicPlane(DrmAtomicCommit
     if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         sourceRect = targetRect = Rect(QPoint(0, 0), stereoFrameSize(*m_pending.mode->nativeMode(), stereoLayout));
     }
+    if (layer->type() == OutputLayerType::Primary && isSpatialStereo(stereoLayout)
+        && (sourceRect != Rect(QPoint(), m_pending.mode->size()) || sourceRect != targetRect || planeTransform != DrmPlane::Transformation::Rotate0)) {
+        return std::unexpected(OutputError{
+            .code = OutputErrorCode::Scaling,
+            .message = QStringLiteral("Spatial stereo needs the whole primary plane, unscaled and unrotated"),
+        });
+    }
     plane->set(commit, sourceRect, targetRect);
     if (plane->vmHotspotX.isValid() && plane->vmHotspotY.isValid()) {
         commit->addProperty(plane->vmHotspotX, std::round(layer->hotspot().x()));

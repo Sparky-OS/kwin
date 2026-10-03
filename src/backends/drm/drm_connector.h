@@ -32,20 +32,27 @@ class DrmCrtc;
 class DrmConnectorMode : public OutputMode
 {
 public:
-    DrmConnectorMode(DrmConnector *connector, drmModeModeInfo nativeMode);
+    DrmConnectorMode(DrmConnector *connector, drmModeModeInfo nativeMode, bool ycbcr420Only = false);
     DrmConnectorMode(DrmConnector *connector, const OutputModeline &modeline);
 
+    DrmConnectorMode(const std::shared_ptr<DrmConnectorMode> &base, OutputModeline::Flag layout);
+    std::shared_ptr<DrmConnectorMode> virtualBase() const;
+    bool requiresYcbcr420() const;
+    static std::shared_ptr<OutputMode> resolveVirtualMode(const std::shared_ptr<OutputMode> &current, const QList<std::shared_ptr<OutputMode>> &modes);
+
     drmModeModeInfo *nativeMode();
-    std::shared_ptr<DrmBlob> blob();
+    virtual std::shared_ptr<DrmBlob> blob();
     std::chrono::nanoseconds vblankTime() const;
 
     bool operator==(const DrmConnectorMode &otherMode) const;
     bool operator==(const drmModeModeInfo &otherMode) const;
 
 private:
+    std::shared_ptr<DrmConnectorMode> m_virtualBase;
     DrmConnector *m_connector;
     drmModeModeInfo m_nativeMode;
     std::shared_ptr<DrmBlob> m_blob;
+    bool m_ycbcr420Only = false;
 };
 
 class KWIN_EXPORT DrmConnector : public DrmObject
@@ -73,6 +80,9 @@ public:
     QByteArray mstPath() const;
 
     QList<std::shared_ptr<DrmConnectorMode>> modes() const;
+    static QList<std::shared_ptr<OutputMode>> withVirtualStereoModes(const QList<std::shared_ptr<OutputMode>> &baseModes,
+                                                                 const QList<std::shared_ptr<OutputMode>> &previousModes,
+                                                                 bool anaglyph, bool otherStereoFormats);
     std::shared_ptr<DrmConnectorMode> generateMode(const OutputModeline &modeline);
 
     BackendOutput::SubPixel subpixel() const;
