@@ -582,6 +582,9 @@ std::unique_ptr<Connection> Connection::setup(AdditionalWaylandInterfaces flags)
         if (flags & AdditionalWaylandInterface::AlphaModifierV1 && interface == wp_alpha_modifier_v1_interface.name) {
             c->alphaModifier = std::make_unique<AlphaModifierV1>(*c->registry, name, version);
         }
+        if (flags & AdditionalWaylandInterface::StereoContentV1 && interface == kde_stereo_content_manager_v1_interface.name) {
+            c->stereoContentManager = std::make_unique<StereoContentManagerV1>(*c->registry, name, version);
+        }
         if (flags.testFlag(AdditionalWaylandInterface::Seat) && interface == wl_seat_interface.name) {
             c->kwinSeat = std::make_unique<WlSeat>(*c->registry, name, version);
         }
@@ -733,6 +736,7 @@ Connection::~Connection()
     colorRepresentation.reset();
     viewporter.reset();
     alphaModifier.reset();
+    stereoContentManager.reset();
     kwinSeat.reset();
 
     delete queue; // Must be destroyed last
@@ -946,6 +950,11 @@ WaylandClient::LinuxDmabufV1 *linuxDmabuf()
 ColorRepresentationV1 *colorRepresentation()
 {
     return s_waylandConnection->colorRepresentation.get();
+}
+
+StereoContentManagerV1 *stereoContentManager()
+{
+    return s_waylandConnection->stereoContentManager.get();
 }
 
 AlphaModifierV1 *alphaModifier()
@@ -2017,6 +2026,26 @@ AlphaModifierSurfaceV1::AlphaModifierSurfaceV1(::wp_alpha_modifier_surface_v1 *o
 }
 
 AlphaModifierSurfaceV1::~AlphaModifierSurfaceV1()
+{
+    destroy();
+}
+
+StereoContentManagerV1::StereoContentManagerV1(::wl_registry *registry, uint32_t id, int version)
+    : QtWayland::kde_stereo_content_manager_v1(registry, id, version)
+{
+}
+
+StereoContentManagerV1::~StereoContentManagerV1()
+{
+    destroy();
+}
+
+StereoContentV1::StereoContentV1(::kde_stereo_content_v1 *object)
+    : QtWayland::kde_stereo_content_v1(object)
+{
+}
+
+StereoContentV1::~StereoContentV1()
 {
     destroy();
 }

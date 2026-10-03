@@ -26,6 +26,7 @@
 #include "utils/serviceutils.h"
 #include "virtualdesktops.h"
 #include "wayland/alphamodifier_v1.h"
+#include "wayland/stereocontent_v1.h"
 #include "wayland/appmenu.h"
 #include "wayland/backgroundeffect_v1.h"
 #include "wayland/clientconnection.h"
@@ -528,6 +529,7 @@ bool WaylandServer::init()
 
     m_externalBrightness = new ExternalBrightnessV1(m_display, m_display);
     m_alphaModifierManager = new AlphaModifierManagerV1(m_display, m_display);
+    new StereoContentManagerV1(m_display, m_display);
     new FixesInterface(m_display, m_display);
     m_fifoManager = new FifoManagerV1(m_display, m_display);
     m_singlePixelBuffer = new SinglePixelBufferManagerV1(m_display, m_display);

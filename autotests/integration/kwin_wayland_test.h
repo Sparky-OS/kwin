@@ -27,6 +27,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "qwayland-alpha-modifier-v1.h"
+#include "qwayland-kde-stereo-content-v1.h"
 #include "qwayland-color-management-v1.h"
 #include "qwayland-color-representation-v1.h"
 #include "qwayland-cursor-shape-v1.h"
@@ -828,6 +829,7 @@ enum class AdditionalWaylandInterface : uint64_t {
     ColorRepresentation = 1ull << 32,
     Viewporter = 1ull << 33,
     AlphaModifierV1 = 1ull << 34,
+    StereoContentV1 = 1ull << 35,
 };
 Q_DECLARE_FLAGS(AdditionalWaylandInterfaces, AdditionalWaylandInterface)
 
@@ -1056,6 +1058,20 @@ public:
     ~AlphaModifierSurfaceV1() override;
 };
 
+class StereoContentManagerV1 : public QtWayland::kde_stereo_content_manager_v1
+{
+public:
+    explicit StereoContentManagerV1(::wl_registry *registry, uint32_t id, int version);
+    ~StereoContentManagerV1() override;
+};
+
+class StereoContentV1 : public QtWayland::kde_stereo_content_v1
+{
+public:
+    explicit StereoContentV1(::kde_stereo_content_v1 *object);
+    ~StereoContentV1() override;
+};
+
 class WlKeyboard;
 class WlPointer;
 class WlTouch;
@@ -1206,6 +1222,7 @@ struct Connection
     std::unique_ptr<ColorRepresentationV1> colorRepresentation;
     std::unique_ptr<WaylandClient::Viewporter> viewporter;
     std::unique_ptr<AlphaModifierV1> alphaModifier;
+    std::unique_ptr<StereoContentManagerV1> stereoContentManager;
     // TODO port everything away from KWayland::Client::Seat
     std::unique_ptr<WlSeat> kwinSeat;
 };
@@ -1287,6 +1304,7 @@ WaylandClient::LinuxDmabufV1 *linuxDmabuf();
 ColorRepresentationV1 *colorRepresentation();
 WaylandClient::Viewporter *viewporter();
 AlphaModifierV1 *alphaModifier();
+StereoContentManagerV1 *stereoContentManager();
 
 bool waitForWaylandSurface(Window *window);
 

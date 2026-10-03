@@ -7,6 +7,7 @@
 #pragma once
 
 #include "core/graphicsbuffer.h"
+#include "effect/globals.h"
 #include "core/region.h"
 #include "surface.h"
 // Qt
@@ -35,6 +36,7 @@ class ColorSurfaceV1;
 class ColorFeedbackSurfaceV1;
 class LinuxDrmSyncObjSurfaceV1;
 class AlphaModifierSurfaceV1;
+class StereoContentSurfaceV1;
 class FifoV1Surface;
 class FifoBarrier;
 class ColorRepresentationSurfaceV1;
@@ -67,6 +69,7 @@ struct SurfaceState
         YuvCoefficients = 1 << 15,
         SourceGeometry = 1 << 16,
         DestinationSize = 1 << 17,
+        StereoContent = 1 << 18,
     };
     Q_DECLARE_FLAGS(Fields, Field)
 
@@ -97,6 +100,9 @@ struct SurfaceState
     } acquirePoint;
     std::shared_ptr<SyncObjReleasePoint> releasePoint;
     double alphaMultiplier = 1;
+    StereoContent stereoContent = StereoContentNone;
+    uint8_t stereoContentClass = 0;
+    uint8_t stereoContentSubclass = 0;
     YUVMatrixCoefficients yuvCoefficients = YUVMatrixCoefficients::Identity;
     EncodingRange range = EncodingRange::Full;
     bool fifoBarrier = false;
@@ -204,6 +210,7 @@ public:
     QList<ColorFeedbackSurfaceV1 *> colorFeedbackSurfaces;
     LinuxDrmSyncObjSurfaceV1 *syncObjV1 = nullptr;
     AlphaModifierSurfaceV1 *alphaModifier = nullptr;
+    StereoContentSurfaceV1 *stereoContent = nullptr;
     FifoV1Surface *fifoSurface = nullptr;
     ColorRepresentationSurfaceV1 *colorRepresentation = nullptr;
     ExtBlurSurfaceV1 *extBlur = nullptr;

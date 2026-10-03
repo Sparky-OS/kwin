@@ -4770,6 +4770,26 @@ void Window::setDeclaredStereoContent(StereoContent content)
     updateStereoContent();
 }
 
+uint8_t Window::declaredStereoContentClass() const
+{
+    return m_declaredStereoContentClass;
+}
+
+uint8_t Window::declaredStereoContentSubclass() const
+{
+    return m_declaredStereoContentSubclass;
+}
+
+void Window::setDeclaredStereoContentClass(uint8_t contentClass, uint8_t subclass)
+{
+    if (m_declaredStereoContentClass == contentClass && m_declaredStereoContentSubclass == subclass) {
+        return;
+    }
+    m_declaredStereoContentClass = contentClass;
+    m_declaredStereoContentSubclass = subclass;
+    Q_EMIT declaredStereoContentClassChanged();
+}
+
 } // namespace KWin
 
 #include "moc_window.cpp"
