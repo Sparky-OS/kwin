@@ -308,6 +308,9 @@ private:
     Xcb::Property fetchStereoContent() const;
     void readStereoContent(Xcb::Property &prop);
     void getStereoContent();
+    Xcb::Property fetchStereoContentClass() const;
+    void readStereoContentClass(Xcb::Property &property);
+    void getStereoContentClass();
 
     void configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, qreal rh, int gravity, bool from_tool);
     void getSyncCounter();

@@ -524,6 +524,8 @@ void X11Window::propertyNotifyEvent(xcb_property_notify_event_t *e)
             getSkipCloseAnimation();
         } else if (e->atom == atoms->kde_net_wm_stereo_content) {
             getStereoContent();
+        } else if (e->atom == atoms->kde_net_wm_stereo_content_class) {
+            getStereoContentClass();
         } else if (e->atom == atoms->xwayland_xrandr_emulation) {
             configure(Xcb::toXNative(m_bufferGeometry));
         }

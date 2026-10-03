@@ -378,6 +378,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     auto skipCloseAnimationCookie = fetchSkipCloseAnimation();
     auto colorSchemeCookie = fetchPreferredColorScheme();
     auto stereoContentCookie = fetchStereoContent();
+    auto stereoContentClassCookie = fetchStereoContentClass();
     auto transientCookie = fetchTransient();
     auto activitiesCookie = fetchActivities();
     auto applicationMenuServiceNameCookie = fetchApplicationMenuServiceName();
@@ -403,6 +404,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     getSyncCounter();
     setCaption(readName());
     readStereoContent(stereoContentCookie);
+    readStereoContentClass(stereoContentClassCookie);
 
     setupWindowRules();
     connect(this, &X11Window::windowClassChanged, this, &X11Window::evaluateWindowRules);
@@ -4211,6 +4213,31 @@ void X11Window::getStereoContent()
 {
     Xcb::Property property = fetchStereoContent();
     readStereoContent(property);
+}
+
+Xcb::Property X11Window::fetchStereoContentClass() const
+{
+    return Xcb::Property(false, window(), atoms->kde_net_wm_stereo_content_class, XCB_ATOM_CARDINAL, 0, 2);
+}
+
+void X11Window::readStereoContentClass(Xcb::Property &property)
+{
+    // _KDE_NET_WM_STEREO_CONTENT_CLASS: CARDINAL/32, exactly two values:
+    // class (0 none, 1 photo, 2 video, 3 game, 4 scientific), then sub-class.
+    // Both are 8-bit, append-only identifiers; unknown identifiers are retained.
+    const auto values = property.array<uint32_t>();
+    if (!values || values->size() != 2 || property.data()->bytes_after != 0
+        || (*values)[0] > 255 || (*values)[1] > 255) {
+        setDeclaredStereoContentClass(0, 0);
+        return;
+    }
+    setDeclaredStereoContentClass((*values)[0], (*values)[1]);
+}
+
+void X11Window::getStereoContentClass()
+{
+    auto property = fetchStereoContentClass();
+    readStereoContentClass(property);
 }
 
 //********************************************
