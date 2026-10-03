@@ -40,7 +40,8 @@ enum class StereoLayout {
     ColumnsRightFirst,
     CheckerboardLeftFirst,
     CheckerboardRightFirst,
-
+    SequentialLeftFirst,
+    SequentialRightFirst,
 };
 
 inline bool isSpatialStereo(StereoLayout layout)
@@ -51,6 +52,12 @@ inline bool isSpatialStereo(StereoLayout layout)
 inline bool isAnaglyph(StereoLayout layout)
 {
     return layout == StereoLayout::AnaglyphCrt || layout == StereoLayout::AnaglyphModern;
+}
+
+// each refresh shows one eye, alternately; the eye is tied to the vblank sequence, see drm_frame_sequential.h
+inline bool isFrameSequential(StereoLayout layout)
+{
+    return layout == StereoLayout::SequentialLeftFirst || layout == StereoLayout::SequentialRightFirst;
 }
 
 /**
@@ -99,6 +106,13 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
     }
     if (flags & OutputModeline::Flag::Stereo3DCheckerboardRightFirst) {
         return StereoLayout::CheckerboardRightFirst;
+    }
+
+    if (flags & OutputModeline::Flag::Stereo3DSequentialLeftFirst) {
+        return StereoLayout::SequentialLeftFirst;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DSequentialRightFirst) {
+        return StereoLayout::SequentialRightFirst;
     }
 
     if (flags & OutputModeline::Flag::Stereo3DSideBySideHalf) {

@@ -190,6 +190,9 @@ public:
         Stereo3DCheckerboardLeftFirst = 0x8000,
         Stereo3DCheckerboardRightFirst = 0x10000,
         VirtualStereo = 0x20000,
+        // one eye per refresh of the base timing, alternating; twins of 2D modes at 100 Hz or more
+        Stereo3DSequentialLeftFirst = 0x40000,
+        Stereo3DSequentialRightFirst = 0x80000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
