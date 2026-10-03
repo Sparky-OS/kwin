@@ -355,3 +355,8 @@ add_test(NAME kcm_kwinxwayland_smoketest COMMAND kcmshell6 --smoke-test kcm_kwin
 set_tests_properties(kcm_kwinxwayland_smoketest PROPERTIES
     ENVIRONMENT_MODIFICATION QT_PLUGIN_PATH=path_list_prepend:${CMAKE_BINARY_DIR}/bin
 )
+
+add_executable(testStereoDownscale test_stereo_downscale.cpp)
+target_link_libraries(testStereoDownscale Qt::Test kwin)
+add_test(NAME kwin-testStereoDownscale COMMAND testStereoDownscale)
+ecm_mark_as_test(testStereoDownscale)

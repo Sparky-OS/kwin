@@ -33,6 +33,7 @@ public:
         std::shared_ptr<ColorDescription> colorDescription;
         RenderingIntent renderingIntent;
         std::shared_ptr<SyncReleasePoint> bufferReleasePoint;
+        QVector4D stereoEyeBounds;
         QVector4D box;
         QVector4D borderRadius;
         int borderThickness = 0;

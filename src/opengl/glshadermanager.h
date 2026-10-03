@@ -32,6 +32,7 @@ enum class ShaderTrait {
     MapMultiPlaneTexture = (1 << 6),
     RoundedCorners = (1 << 7),
     Border = (1 << 8),
+    StereoAreaFilter = (1 << 9),
 };
 
 Q_DECLARE_FLAGS(ShaderTraits, ShaderTrait)
