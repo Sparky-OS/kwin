@@ -92,6 +92,7 @@ public:
     std::optional<double> desiredMaxLuminance() const;
     bool supportsPQ() const;
     bool supportsBT2020() const;
+    bool requiresYcbcr420(const QSize &size, uint32_t refreshRate) const;
 
     /**
      * @returns a string that is intended to identify the monitor uniquely.
@@ -135,6 +136,7 @@ private:
 
     QByteArray m_identifier;
 
+    QList<std::pair<QSize, uint32_t>> m_ycbcr420OnlyModes;
     QByteArray m_raw;
     bool m_isValid = false;
 };

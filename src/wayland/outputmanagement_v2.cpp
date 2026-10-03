@@ -24,7 +24,7 @@
 namespace KWin
 {
 
-static const quint32 s_version = 21;
+static const quint32 s_version = 22;
 
 class OutputManagementV2InterfacePrivate : public QtWaylandServer::kde_output_management_v2
 {
@@ -82,6 +82,7 @@ protected:
     void kde_output_configuration_v2_set_auto_brightness(Resource *resource, ::wl_resource *outputdevice, uint32_t enabled) override;
     void kde_output_configuration_v2_set_hdr_icc_profile_path(Resource *resource, ::wl_resource *outputdevice, const QString &profile_path) override;
     void kde_output_configuration_v2_set_hdr_color_profile_source(Resource *resource, ::wl_resource *outputdevice, uint32_t color_profile_source) override;
+    void kde_output_configuration_v2_set_stereo_formats(Resource *resource, wl_resource *outputdevice, uint32_t anaglyph, uint32_t otherStereoFormats) override;
     void kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level) override;
 
     void sendFailure(Resource *resource, const QString &reason);
@@ -557,6 +558,21 @@ void OutputConfigurationV2Interface::kde_output_configuration_v2_set_hdr_color_p
     }
     if (OutputDeviceV2Interface *output = OutputDeviceV2Interface::get(outputdevice)) {
         config.changeSet(output->handle())->hdrColorProfileSource = waylandToKWinColorProfileSource(source);
+    }
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_formats(Resource *resource, wl_resource *outputdevice, uint32_t anaglyph, uint32_t otherStereoFormats)
+{
+    if (invalid) {
+        return;
+    }
+    if (anaglyph > 1 || otherStereoFormats > 1) {
+        failureReason = i18n("Invalid stereo format toggle value");
+        return;
+    }
+    if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
+        config.changeSet(output->handle())->anaglyph = bool(anaglyph);
+        config.changeSet(output->handle())->otherStereoFormats = bool(otherStereoFormats);
     }
 }
 

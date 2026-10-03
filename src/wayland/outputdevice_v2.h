@@ -108,6 +108,7 @@ private:
     void updateHdrIccProfilePath();
     void updateHdrColorProfileSource();
     void updateAbmLevel();
+    void updateStereoFormats();
 
     void scheduleDone();
 

@@ -360,3 +360,8 @@ add_executable(testStereoDownscale test_stereo_downscale.cpp)
 target_link_libraries(testStereoDownscale Qt::Test kwin)
 add_test(NAME kwin-testStereoDownscale COMMAND testStereoDownscale)
 ecm_mark_as_test(testStereoDownscale)
+
+add_executable(testStereoPattern test_stereo_pattern.cpp)
+target_link_libraries(testStereoPattern Qt::Test kwin)
+add_test(NAME kwin-testStereoPattern COMMAND testStereoPattern)
+ecm_mark_as_test(testStereoPattern)

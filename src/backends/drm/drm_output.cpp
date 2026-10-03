@@ -119,47 +119,10 @@ bool DrmOutput::shouldDisableNonPrimaryPlanes() const
         || activeStereoLayout() != StereoLayout::None;
 }
 
-// A display's HDMI 3D modes are listed with its other modes, and choosing one is turning 3D
-// on. The layouts that need no 3D mode, on any output's 2D mode, are switched on per output
-// with KWIN_DRM_STEREO_3D=CONNECTOR=layout[,...] until the display settings offer them:
-// "sbs" (side by side, half) and "tab" (top and bottom) for a display whose 3D format is set
-// by hand because it doesn't detect a 3D signal, "anaglyph-crt" / "anaglyph-modern" (also
-// "anaglyph") for red/cyan glasses, e.g. HDMI-A-1=anaglyph-modern. A 3D mode, when chosen,
-// takes precedence.
-static StereoLayout manualStereoSetting(const QString &outputName)
-{
-    const QStringList entries = qEnvironmentVariable("KWIN_DRM_STEREO_3D").split(QLatin1Char(','), Qt::SkipEmptyParts);
-    for (const QString &entry : entries) {
-        const QStringList pair = entry.split(QLatin1Char('='));
-        if (pair.size() != 2 || pair[0].trimmed() != outputName) {
-            continue;
-        }
-        const QString layout = pair[1].trimmed().toLower();
-        if (layout == QLatin1String("sbs")) {
-            return StereoLayout::SideBySideHalf;
-        } else if (layout == QLatin1String("tab")) {
-            return StereoLayout::TopAndBottom;
-        } else if (layout == QLatin1String("anaglyph") || layout == QLatin1String("anaglyph-crt")) {
-            return StereoLayout::AnaglyphCrt;
-        } else if (layout == QLatin1String("anaglyph-modern")) {
-            return StereoLayout::AnaglyphModern;
-        }
-    }
-    return StereoLayout::None;
-}
-
 StereoLayout DrmOutput::activeStereoLayout() const
 {
-    if (!m_pipeline) {
-        return StereoLayout::None;
-    }
-    // a 3D mode is sent in its own structure; otherwise a layout on the 2D mode, if asked for
-    if (const auto mode = m_pipeline->mode()) {
-        if (const StereoLayout layout = stereoLayoutForMode(mode->flags()); layout != StereoLayout::None) {
-            return layout;
-        }
-    }
-    return m_manualLayout;
+    const auto mode = m_pipeline ? m_pipeline->mode() : nullptr;
+    return mode ? stereoLayoutForMode(mode->flags()) : StereoLayout::None;
 }
 
 bool DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay)
@@ -229,12 +192,21 @@ void DrmOutput::refreshModes(State *nextState) const
             nextState->modes.append(m_pipeline->connector()->generateMode(custom.size, custom.refreshRate / 1000.0f, custom.flags | OutputModeline::Flag::Custom));
         }
     }
+    nextState->modes = DrmConnector::withVirtualStereoModes(nextState->modes, previousModes, nextState->anaglyph, nextState->otherStereoFormats);
 }
 
 void DrmOutput::maybeFixCurrentMode(State *next) const
 {
+    const auto resolved = DrmConnectorMode::resolveVirtualMode(next->currentMode, next->modes);
+    if (resolved != next->currentMode) {
+        next->currentMode = resolved;
+        next->desiredMode = resolved ? resolved->modeline() : OutputModeline();
+    }
     if (!next->currentMode) {
-        next->currentMode = next->modes.constFirst();
+        const auto it = std::ranges::find_if(next->modes, [](const auto &mode) {
+            return stereoLayoutForMode(mode->flags()) == StereoLayout::None;
+        });
+        next->currentMode = it == next->modes.end() ? nullptr : *it;
     } else if (!next->modes.contains(next->currentMode)) {
         next->currentMode->setRemoved();
         next->modes.push_front(next->currentMode);
@@ -246,7 +218,7 @@ static const bool s_allowColorspaceNVidia = qEnvironmentVariableIntValue("KWIN_D
 
 BackendOutput::Capabilities DrmOutput::computeCapabilities() const
 {
-    Capabilities capabilities = Capability::Dpms | Capability::IccProfile | Capability::CustomModes | Capability::HdrIccProfile;
+    Capabilities capabilities = Capability::VirtualStereo | Capability::Dpms | Capability::IccProfile | Capability::CustomModes | Capability::HdrIccProfile;
     if (m_connector->overscan.isValid() || m_connector->underscan.isValid()) {
         capabilities |= Capability::Overscan;
     }
@@ -585,6 +557,8 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->manualTransform = props->manualTransform.value_or(m_state.manualTransform);
     m_nextState->overscan = props->overscan.value_or(m_state.overscan);
     m_nextState->rgbRange = props->rgbRange.value_or(m_state.rgbRange);
+    m_nextState->anaglyph = props->anaglyph.value_or(m_state.anaglyph);
+    m_nextState->otherStereoFormats = props->otherStereoFormats.value_or(m_state.otherStereoFormats);
     m_nextState->highDynamicRange = props->highDynamicRange.value_or(m_state.highDynamicRange);
     m_nextState->referenceLuminance = props->referenceLuminance.value_or(m_state.referenceLuminance);
     m_nextState->wideColorGamut = props->wideColorGamut.value_or(m_state.wideColorGamut);
@@ -623,13 +597,26 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->dpmsMode = props->dpmsMode.value_or(m_state.dpmsMode);
     if (props->customModes) {
         m_nextState->customModes = *props->customModes;
+    }
+    if (props->customModes || props->anaglyph || props->otherStereoFormats) {
         refreshModes(&*m_nextState);
     }
     if (props->currentMode) {
-        m_nextState->currentMode = props->currentMode->match(m_nextState->modes);
+        auto requested = props->currentMode->match(m_nextState->modes);
+        if (!requested && (props->currentMode->flags() & OutputModeline::Flag::VirtualStereo)) {
+            const auto previous = props->currentMode->match(m_state.modes);
+            if (previous) {
+                requested = std::static_pointer_cast<DrmConnectorMode>(previous)->virtualBase();
+                m_nextState->desiredMode = requested->modeline();
+            }
+        }
+        m_nextState->currentMode = requested;
     }
-    if (props->customModes || props->currentMode) {
+    if (props->customModes || props->currentMode || props->anaglyph || props->otherStereoFormats) {
         maybeFixCurrentMode(&*m_nextState);
+    }
+    if (!m_nextState->currentMode) {
+        return false;
     }
     m_nextState->maxPossibleArtificialHdrHeadroom = calculateMaxArtificialHdrHeadroom(*m_nextState);
     m_nextState->originalColorDescription = createColorDescription(*m_nextState);
@@ -645,8 +632,10 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     const bool bt2020 = m_nextState->wideColorGamut && (capabilities() & Capability::WideColorGamut);
     const bool hdr = m_nextState->highDynamicRange && (capabilities() & Capability::HighDynamicRange);
     const auto mode = std::static_pointer_cast<DrmConnectorMode>(m_nextState->currentMode);
+    if (isSpatialStereo(stereoLayoutForMode(mode->flags())) && m_nextState->overscan != 0) {
+        return false;
+    }
     m_pipeline->setMode(mode);
-    m_manualLayout = manualStereoSetting(name());
     m_pipeline->setOverscan(m_nextState->overscan);
     m_pipeline->setRgbRange(m_nextState->rgbRange);
     m_pipeline->setEnable(m_nextState->enabled);

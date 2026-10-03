@@ -346,6 +346,8 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.scale = props->scale.value_or(m_state.scale);
     next.scaleSetting = props->scaleSetting.value_or(m_state.scaleSetting);
     next.rgbRange = props->rgbRange.value_or(m_state.rgbRange);
+    next.anaglyph = props->anaglyph.value_or(m_state.anaglyph);
+    next.otherStereoFormats = props->otherStereoFormats.value_or(m_state.otherStereoFormats);
     next.autoRotatePolicy = props->autoRotationPolicy.value_or(m_state.autoRotatePolicy);
     next.iccProfilePath = props->iccProfilePath.value_or(m_state.iccProfilePath);
     if (props->iccProfilePath) {
@@ -500,6 +502,9 @@ void BackendOutput::setState(const State &state)
     }
     if (oldState.hdrColorProfileSource != state.hdrColorProfileSource) {
         Q_EMIT hdrColorProfileSourceChanged();
+    }
+    if (oldState.anaglyph != state.anaglyph || oldState.otherStereoFormats != state.otherStereoFormats) {
+        Q_EMIT stereoFormatsChanged();
     }
     if (oldState.abmLevel != state.abmLevel) {
         Q_EMIT abmLevelChanged();
@@ -827,6 +832,16 @@ BackendOutput::BrightnessReason BackendOutput::lastBrightnessAdjustmentReason() 
 QList<CustomModeDefinition> BackendOutput::customModes() const
 {
     return m_state.customModes;
+}
+
+bool BackendOutput::anaglyph() const
+{
+    return m_state.anaglyph;
+}
+
+bool BackendOutput::otherStereoFormats() const
+{
+    return m_state.otherStereoFormats;
 }
 
 uint32_t BackendOutput::abmLevel() const

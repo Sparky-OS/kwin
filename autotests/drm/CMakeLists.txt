@@ -66,3 +66,8 @@ add_executable(testMockDrm mockDrmTest.cpp)
 target_link_libraries(testMockDrm LibDrmTest Qt::Test)
 add_test(NAME kwin-testMockDrm COMMAND testMockDrm)
 ecm_mark_as_test(testMockDrm)
+
+add_executable(testVirtualStereo virtualStereoTest.cpp)
+target_link_libraries(testVirtualStereo LibDrmTest Qt::Test)
+add_test(NAME kwin-testVirtualStereo COMMAND testVirtualStereo)
+ecm_mark_as_test(testVirtualStereo)

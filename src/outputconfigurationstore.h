@@ -93,6 +93,8 @@ private:
         std::optional<bool> automaticBrightness;
         std::optional<AutoBrightnessCurve> autoBrightnessCurve;
         std::optional<uint32_t> abmLevel;
+        std::optional<bool> anaglyph;
+        std::optional<bool> otherStereoFormats;
     };
     struct SetupState
     {

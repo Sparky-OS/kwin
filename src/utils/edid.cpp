@@ -244,6 +244,38 @@ Edid::Edid(QByteArrayView data)
         m_minVrrRefreshRateHz.reset();
     }
 
+    QList<uint8_t> fullChromaVics;
+    QList<uint8_t> only420Vics;
+    for (auto ext = di_edid_get_extensions(edid); *ext; ++ext) {
+        const auto cta = di_edid_ext_get_cta(*ext);
+        if (!cta) {
+            continue;
+        }
+        for (auto block = di_edid_cta_get_data_blocks(cta); *block; ++block) {
+            if (const auto video = di_cta_data_block_get_video(*block)) {
+                for (auto svd = video->svds; *svd; ++svd) {
+                    fullChromaVics.append((*svd)->vic);
+                }
+            }
+            if (const auto video = di_cta_data_block_get_ycbcr420_video(*block)) {
+                for (auto svd = video->svds; *svd; ++svd) {
+                    only420Vics.append((*svd)->vic);
+                }
+            }
+        }
+    }
+    for (const auto vic : only420Vics) {
+        if (fullChromaVics.contains(vic)) {
+            continue;
+        }
+        if (const auto format = di_cta_video_format_from_vic(vic)) {
+            const int64_t htotal = format->h_active + format->h_front + format->h_sync + format->h_back;
+            const int64_t vtotal = format->v_active + format->v_front + format->v_sync + format->v_back;
+            const uint32_t rate = format->pixel_clock_hz * 1000 * (format->interlaced ? 2 : 1) / (htotal * vtotal);
+            m_ycbcr420OnlyModes.append({QSize(format->h_active, format->v_active), rate});
+        }
+    }
+
     const di_displayid *displayid = nullptr;
     const di_edid_ext *const *exts = di_edid_get_extensions(edid);
     for (; *exts != nullptr; exts++) {
@@ -394,6 +426,18 @@ std::optional<double> Edid::desiredMaxLuminance() const
 bool Edid::supportsPQ() const
 {
     return m_hdrMetadata && m_hdrMetadata->supportsPQ;
+}
+
+bool Edid::requiresYcbcr420(const QSize &size, uint32_t refreshRate) const
+{
+    for (const auto &[modeSize, rate] : m_ycbcr420OnlyModes) {
+        // CTA timings may use either the integer or 1000/1001 refresh rate.
+        if (size == modeSize && (std::abs(int64_t(refreshRate) - rate) <= 1
+                                || std::abs(int64_t(refreshRate) - int64_t(rate) * 1000 / 1001) <= 1)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Edid::supportsBT2020() const
