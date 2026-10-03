@@ -267,6 +267,24 @@ void ItemRendererOpenGL::createRenderNode(Item *item, RenderContext *context, co
                     .layerDebugBox = m_debug.layerEnabled ? std::optional(item->rect()) : std::nullopt,
                 });
                 renderNode.geometry.postProcessTextureCoordinates(texture->planes().at(0)->matrix(UnnormalizedCoordinates));
+                if (surfaceItem->stereoContent() != StereoContentNone) {
+                    renderNode.traits |= ShaderTrait::StereoAreaFilter;
+                    const auto quads = surfaceItem->eyeQuads(context->stereoEye == StereoEye::Right ? StereoEye::Right : StereoEye::Left);
+                    const auto matrix = texture->planes().at(0)->matrix(UnnormalizedCoordinates);
+                    QVector2D low(1, 1);
+                    QVector2D high(0, 0);
+                    for (const auto &quad : quads) {
+                        for (int i = 0; i < 4; ++i) {
+                            const auto uv = matrix.map(QPointF(quad[i].u(), quad[i].v()));
+                            low.setX(std::min(low.x(), float(uv.x())));
+                            low.setY(std::min(low.y(), float(uv.y())));
+                            high.setX(std::max(high.x(), float(uv.x())));
+                            high.setY(std::max(high.y(), float(uv.y())));
+                        }
+                    }
+                    renderNode.stereoEyeBounds = QVector4D(low.x(), low.y(), high.x(), high.y());
+                }
+
                 if (surfaceItem->colorDescription()->yuvCoefficients() != YUVMatrixCoefficients::Identity) {
                     renderNode.traits |= ShaderTrait::YuvConversion;
                 }
@@ -487,6 +505,10 @@ void ItemRendererOpenGL::renderItem(const RenderTarget &renderTarget, const Rend
         }
         if (traits & ShaderTrait::TransformColorspace) {
             shader->setColorspaceUniforms(renderNode.colorDescription, renderTarget.colorDescription(), renderNode.renderingIntent);
+        }
+        if (traits & ShaderTrait::StereoAreaFilter) {
+            shader->setUniform("stereoTextureSize", QVector2D(renderNode.textures[0]->width(), renderNode.textures[0]->height()));
+            shader->setUniform("stereoEyeBounds", renderNode.stereoEyeBounds);
         }
         if (traits & ShaderTrait::YuvConversion) {
             shader->setUniform(GLShader::Mat4Uniform::YuvToRgb, renderNode.colorDescription->yuvMatrix());

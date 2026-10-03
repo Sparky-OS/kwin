@@ -1,6 +1,6 @@
 #version 140
 
-#if GL_OES_standard_derivatives && TRAIT_ROUNDED_CORNERS && TRAIT_BORDER
+#if GL_OES_standard_derivatives && ((TRAIT_ROUNDED_CORNERS && TRAIT_BORDER) || TRAIT_STEREO_AREA_FILTER)
 #extension GL_OES_standard_derivatives : enable
 #endif
 
@@ -53,6 +53,58 @@ uniform vec4 modulation;
 
 out vec4 fragColor;
 
+#if TRAIT_STEREO_AREA_FILTER
+uniform vec2 stereoTextureSize;
+uniform vec4 stereoEyeBounds;
+
+vec4 sampleStereo(vec2 uv)
+{
+#if TRAIT_MAP_MULTI_PLANE_TEXTURE
+    return vec4(texture(sampler, uv).x, texture(sampler1, uv).rg, 1.0);
+#elif TRAIT_MAP_EXTERNAL_TEXTURE
+    return texture2D(sampler, uv);
+#else
+    return texture(sampler, uv);
+#endif
+}
+
+vec4 stereoAreaSample()
+{
+    vec2 footprint = max(fwidth(texcoord0) * stereoTextureSize, vec2(1.0));
+    if (max(footprint.x, footprint.y) <= 2.0) {
+        return sampleStereo(texcoord0);
+    }
+    // Integrate the covered texel areas, clamping within this eye only.
+    vec2 center = texcoord0 * stereoTextureSize;
+    vec2 low = center - footprint * 0.5;
+    vec2 high = center + footprint * 0.5;
+    vec2 eyeLow = stereoEyeBounds.xy * stereoTextureSize + vec2(0.5);
+    vec2 eyeHigh = max(eyeLow, stereoEyeBounds.zw * stereoTextureSize - vec2(0.5));
+    vec4 sum = vec4(0.0);
+    // Subsampled chroma can change slope inside a luma texel pair.
+#if TRAIT_MAP_MULTI_PLANE_TEXTURE
+    const float step = 1.0;
+#else
+    const float step = 2.0;
+#endif
+    // One bilinear lookup integrates up to four texels with separable weights.
+    for (float y = floor(low.y); y < ceil(high.y); y += step) {
+        vec2 wy = max(vec2(0.0), min(vec2(y + 1.0, y + step), vec2(high.y))
+                               - max(vec2(y, y + 1.0), vec2(low.y)));
+        float weightY = wy.x + wy.y;
+        for (float x = floor(low.x); x < ceil(high.x); x += step) {
+            vec2 wx = max(vec2(0.0), min(vec2(x + 1.0, x + step), vec2(high.x))
+                                   - max(vec2(x, x + 1.0), vec2(low.x)));
+            float weightX = wx.x + wx.y;
+            vec2 center = vec2(x, y) + vec2(0.5) + vec2(wx.y / weightX, wy.y / weightY);
+            vec2 uv = clamp(center, eyeLow, eyeHigh) / stereoTextureSize;
+            sum += sampleStereo(uv) * (weightX * weightY);
+        }
+    }
+    return sum / (footprint.x * footprint.y);
+}
+#endif
+
 void main(void)
 {
     vec4 result;
@@ -66,6 +118,9 @@ void main(void)
 #if TRAIT_MAP_EXTERNAL_TEXTURE
     // external textures require texture2D for sampling
     result = texture2D(sampler, texcoord0);
+#endif
+#if TRAIT_STEREO_AREA_FILTER
+    result = stereoAreaSample();
 #endif
 #if TRAIT_UNIFORM_COLOR
     result = geometryColor;

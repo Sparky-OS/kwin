@@ -33,6 +33,7 @@ enum class ShaderTrait {
     RoundedCorners = (1 << 7),
     Border = (1 << 8),
     YuvConversion = (1 << 9),
+    StereoAreaFilter = (1 << 10),
 };
 
 Q_DECLARE_FLAGS(ShaderTraits, ShaderTrait)
