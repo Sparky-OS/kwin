@@ -218,3 +218,8 @@ add_subdirectory(scripting)
 add_subdirectory(effects)
 add_subdirectory(fakes)
 add_subdirectory(activation)
+
+find_package(StereoDeclare 1 CONFIG QUIET)
+if(TARGET StereoDeclare::stereo-declare AND KWIN_BUILD_X11)
+    integrationTest(NAME testStereoDeclareHelper SRCS stereo_declare_helper_test.cpp LIBS StereoDeclare::stereo-declare X11::X11)
+endif()
