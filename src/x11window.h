@@ -100,6 +100,7 @@ public:
      * full-resolution stereo content, else (1, 1).
      */
     QSizeF stereoClientScale() const;
+    QSizeF programSizeScale() const;
     QSizeF minSize() const override;
     QSizeF maxSize() const override;
 
@@ -358,6 +359,8 @@ private:
     qreal m_bufferScale = 1;
     // how much larger the X11 window is than its place on screen (full-resolution stereo)
     QSizeF m_stereoClientScale = QSizeF(1, 1);
+    // how much larger the program's own sizes are than its place on screen
+    QSizeF m_programSizeScale = QSizeF(1, 1);
     // the program's own window size, as mapped or last asked for: a fullscreen
     // full-resolution stereo window keeps it, and the output scales it
     QSizeF m_programSize;

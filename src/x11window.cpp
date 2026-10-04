@@ -486,8 +486,8 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
 
     RectF geom = session ? session->geometry : Xcb::fromXNative(windowGeometry.rect());
     if (!session) {
-        const QSizeF stereoScale = stereoClientScale();
-        geom.setSize(QSizeF(geom.width() / stereoScale.width(), geom.height() / stereoScale.height()));
+        const QSizeF programScale = programSizeScale();
+        geom.setSize(QSizeF(geom.width() / programScale.width(), geom.height() / programScale.height()));
     }
     bool placementDone = false;
 
@@ -3065,18 +3065,18 @@ void X11Window::getWmNormalHints()
     updateAllowedActions(); // affects isResizeable()
 }
 
-// the size hints are the X11 window's, larger than its place on screen for full-resolution stereo
+// the size hints are in the program's own units (programSizeScale())
 QSizeF X11Window::minSize() const
 {
     const QSizeF size = Xcb::fromXNative(m_geometryHints.minSize());
-    const QSizeF scale = stereoClientScale();
+    const QSizeF scale = programSizeScale();
     return rules()->checkMinSize(QSizeF(size.width() / scale.width(), size.height() / scale.height()));
 }
 
 QSizeF X11Window::maxSize() const
 {
     const QSizeF size = Xcb::fromXNative(m_geometryHints.maxSize());
-    const QSizeF scale = stereoClientScale();
+    const QSizeF scale = programSizeScale();
     return rules()->checkMaxSize(QSizeF(size.width() / scale.width(), size.height() / scale.height()));
 }
 
@@ -3133,6 +3133,17 @@ QSizeF X11Window::stereoClientScale() const
     }
 }
 
+// The units of a program's own sizes (its resize requests, its size hints, its window as
+// mapped) against its place on screen. A program that declares stereo itself sizes its window
+// at one view's size, which is its place on screen, whichever library asks (Mesa, gl-stereo,
+// wiz3D, a toolkit), and KWin configures the X11 window larger, as for Xwayland's emulated
+// resolutions. A window rule's content holds both views in the size its program chose, so that
+// program's sizes are the X11 window's.
+QSizeF X11Window::programSizeScale() const
+{
+    return declaredStereoContent() == stereoContent() ? QSizeF(1, 1) : stereoClientScale();
+}
+
 // Input on a full-resolution stereo window goes to its left view: one view of the X11
 // window over the window's place on screen.
 QSizeF X11Window::inputScale() const
@@ -3159,14 +3170,15 @@ void X11Window::handleStereoContentChanged()
     if (!m_managed) {
         return;
     }
-    // the X11 window keeps its size and its place on screen changes; a fullscreen or
-    // maximized window keeps its place and its X11 window changes
-    const QSizeF scale = stereoClientScale();
+    // the program's own size stays: a program declaring stereo itself keeps its place on
+    // screen and its X11 window changes, a window rule keeps the X11 window and its place on
+    // screen changes; a fullscreen or maximized window keeps its place
+    const QSizeF programScale = programSizeScale();
     RectF frame = moveResizeGeometry();
     if (!isFullScreen() && requestedMaximizeMode() == MaximizeRestore) {
         const QSizeF clientSize = frameSizeToClientSize(frame.size());
-        frame.setSize(clientSizeToFrameSize(QSizeF(clientSize.width() * m_stereoClientScale.width() / scale.width(),
-                                                   clientSize.height() * m_stereoClientScale.height() / scale.height())));
+        frame.setSize(clientSizeToFrameSize(QSizeF(clientSize.width() * m_programSizeScale.width() / programScale.width(),
+                                                   clientSize.height() * m_programSizeScale.height() / programScale.height())));
     }
     resize(frame.size());
 }
@@ -3279,15 +3291,15 @@ void X11Window::configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, q
     const int configureSizeMask = XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT;
     const int configureGeometryMask = configurePositionMask | configureSizeMask;
 
-    // the requested size is the X11 window's, larger than its place on screen for full-resolution stereo
+    // the requested size is in the program's own units (programSizeScale())
     if (value_mask & XCB_CONFIG_WINDOW_WIDTH) {
         m_programSize.setWidth(rw);
     }
     if (value_mask & XCB_CONFIG_WINDOW_HEIGHT) {
         m_programSize.setHeight(rh);
     }
-    rw /= m_stereoClientScale.width();
-    rh /= m_stereoClientScale.height();
+    rw /= m_programSizeScale.width();
+    rh /= m_programSizeScale.height();
 
     // "maximized" is a user setting -> we do not allow the client to resize itself
     // away from this & against the users explicit wish
@@ -3601,9 +3613,10 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     const RectF bufferGeometry = nextFrameRectToBufferRect(frameGeometry);
     const qreal bufferScale = kwinApp()->xwaylandScale();
     const QSizeF stereoClientScale = this->stereoClientScale();
+    const QSizeF programSizeScale = this->programSizeScale();
 
     if (m_bufferGeometry == bufferGeometry && m_clientGeometry == clientGeometry && m_frameGeometry == frameGeometry && m_bufferScale == bufferScale
-        && m_stereoClientScale == stereoClientScale) {
+        && m_stereoClientScale == stereoClientScale && m_programSizeScale == programSizeScale) {
         return;
     }
 
@@ -3620,6 +3633,7 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     m_bufferScale = bufferScale;
     const bool stereoScaleChanged = m_stereoClientScale != stereoClientScale;
     m_stereoClientScale = stereoClientScale;
+    m_programSizeScale = programSizeScale;
     m_output = workspace()->outputAt(frameGeometry.center());
 
     if (!areGeometryUpdatesBlocked()) {
@@ -3682,7 +3696,8 @@ void X11Window::configure(const Rect &nativeGeometry)
         if (isFullScreen() && !m_programSize.isEmpty()) {
             // fullscreen keeps the program's own frame (its rendering stays at full size)
             // and the output's 3D mode scales it, whatever its resolution
-            effectiveGeometry.setSize(Xcb::toXNative(m_programSize));
+            effectiveGeometry.setSize(Xcb::toXNative(QSizeF(m_programSize.width() * m_stereoClientScale.width() / m_programSizeScale.width(),
+                                                            m_programSize.height() * m_stereoClientScale.height() / m_programSizeScale.height())));
         } else {
             effectiveGeometry.setWidth(std::round(effectiveGeometry.width() * m_stereoClientScale.width()));
             effectiveGeometry.setHeight(std::round(effectiveGeometry.height() * m_stereoClientScale.height()));
