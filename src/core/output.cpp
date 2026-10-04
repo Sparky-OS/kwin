@@ -625,6 +625,11 @@ bool LogicalOutput::isInternal() const
     return m_backendOutput->isInternal();
 }
 
+bool LogicalOutput::hasStereoEyes() const
+{
+    return m_backendOutput->hasStereoEyes();
+}
+
 uint32_t LogicalOutput::refreshRate() const
 {
     return m_backendOutput->refreshRate();

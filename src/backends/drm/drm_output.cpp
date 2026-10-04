@@ -125,6 +125,11 @@ StereoLayout DrmOutput::activeStereoLayout() const
     return mode ? stereoLayoutForMode(mode->flags()) : StereoLayout::None;
 }
 
+bool DrmOutput::hasStereoEyes() const
+{
+    return activeStereoLayout() != StereoLayout::None;
+}
+
 std::expected<void, OutputError> DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay)
 {
     if (!m_pipeline) {

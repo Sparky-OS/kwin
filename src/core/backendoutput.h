@@ -176,6 +176,11 @@ public:
     bool isInternal() const;
 
     /**
+     * Returns @c true if the output sends separate images to the viewer's eyes.
+     */
+    virtual bool hasStereoEyes() const;
+
+    /**
      * Returns the ratio between physical pixels and logical pixels.
      */
     qreal scale() const;

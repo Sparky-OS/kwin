@@ -12,6 +12,12 @@
 
         This interface provides a way to request a screenshot of a rectangular area,
         a screen, or a window.
+
+        If the capture contains a declared stereo window or an output in a 3D mode,
+        the raw result is full-resolution side by side: it is twice as wide as one
+        view, with the left eye in the left half and the right eye in the right half.
+        Both eyes have the same scale. JPS writers swap the halves to follow the JPS
+        right-eye-first convention.
     -->
     <interface name="org.kde.KWin.ScreenShot2">
         <!--
@@ -57,6 +63,9 @@
             * "scale" (d): The ratio between the native size and the logical
                            size of the contents, corresponds to QImage::devicePixelRatio().
                            Available since version 4.
+            * "stereo" (b): Whether the raw image is a stereo pair. A stereo pair is
+                             double width with the left eye in the left half and the
+                             right eye in the right half. Available since version 6.
         -->
         <method name="CaptureWindow">
             <arg name="handle" type="s" direction="in" />
@@ -104,6 +113,9 @@
             * "scale" (d): The ratio between the native size and the logical
                            size of the contents, corresponds to QImage::devicePixelRatio().
                            Available since version 4.
+            * "stereo" (b): Whether the raw image is a stereo pair. A stereo pair is
+                             double width with the left eye in the left half and the
+                             right eye in the right half. Available since version 6.
         -->
         <method name="CaptureActiveWindow">
             <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="QVariantMap" />
@@ -149,6 +161,9 @@
             * "scale" (d): The ratio between the native size and the logical
                            size of the contents, corresponds to QImage::devicePixelRatio().
                            Available since version 4.
+            * "stereo" (b): Whether the raw image is a stereo pair. A stereo pair is
+                             double width with the left eye in the left half and the
+                             right eye in the right half. Available since version 6.
         -->
         <method name="CaptureArea">
             <arg name="x" type="i" direction="in" />
@@ -197,6 +212,9 @@
             * "scale" (d): The ratio between the native size and the logical
                            size of the contents, corresponds to QImage::devicePixelRatio().
                            Available since version 4.
+            * "stereo" (b): Whether the raw image is a stereo pair. A stereo pair is
+                             double width with the left eye in the left half and the
+                             right eye in the right half. Available since version 6.
         -->
         <method name="CaptureScreen">
             <arg name="name" type="s" direction="in" />
@@ -243,6 +261,9 @@
             * "scale" (d): The ratio between the native size and the logical
                            size of the contents, corresponds to QImage::devicePixelRatio().
                            Available since version 4.
+            * "stereo" (b): Whether the raw image is a stereo pair. A stereo pair is
+                             double width with the left eye in the left half and the
+                             right eye in the right half. Available since version 6.
         -->
         <method name="CaptureActiveScreen">
             <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="QVariantMap" />
@@ -289,6 +310,9 @@
             * "scale" (d): The ratio between the native size and the logical
                            size of the contents, corresponds to QImage::devicePixelRatio().
                            Available since version 4.
+            * "stereo" (b): Whether the raw image is a stereo pair. A stereo pair is
+                             double width with the left eye in the left half and the
+                             right eye in the right half. Available since version 6.
 
             The following results get returned when taking a window screenshot:
 
@@ -315,6 +339,10 @@
             @pipe: The pipe file descriptor where the screenshot will be written
 
             Take a screenshot of the workspace, i.e. all screens united.
+            A stereo output occupies a double-width section with its two
+            eyes next to each other; a 2D output occupies one section. The
+            "stereo" result is false because this is an ordinary image containing
+            per-output stereo sections.
 
             Supported since version 3.
 
@@ -343,6 +371,9 @@
             * "scale" (d): The ratio between the native size and the logical
                            size of the contents, corresponds to QImage::devicePixelRatio().
                            Available since version 4.
+            * "stereo" (b): Always false for this all-screens strip. Stereo output
+                             sections are already placed side by side in the image.
+                             Available since version 6.
         -->
         <method name="CaptureWorkspace">
             <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="QVariantMap" />

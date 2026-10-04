@@ -327,8 +327,11 @@ void Test::setOutputConfig(const QList<OutputInfo> &infos)
     OutputConfiguration config;
     for (int i = 0; i < outputs.size(); i++) {
         const auto &info = infos[i];
+        const OutputModeline desiredMode = info.modes.isEmpty()
+            ? OutputModeline(info.geometry.size() * info.scale, 60000)
+            : info.modes.front();
         *config.changeSet(outputs[i]) = OutputChangeSet{
-            .desiredMode = OutputModeline(info.geometry.size() * info.scale, 60000),
+            .desiredMode = desiredMode,
             .enabled = true,
             .pos = info.geometry.topLeft(),
             .scale = info.scale,

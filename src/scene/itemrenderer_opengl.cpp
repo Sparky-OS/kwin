@@ -15,6 +15,7 @@
 #include "opengl/eglnativefence.h"
 #include "scene/decorationitem.h"
 #include "scene/imageitem.h"
+#include "scene/windowitem.h"
 #include "scene/opengl/atlas.h"
 #include "scene/opengl/ninepatch.h"
 #include "scene/opengl/texture.h"
@@ -23,6 +24,7 @@
 #include "scene/surfaceitem.h"
 #include "scene/workspacescene.h"
 #include "utils/common.h"
+#include "window.h"
 
 namespace KWin
 {
@@ -116,9 +118,18 @@ static RenderGeometry clipQuads(ItemRenderer *renderer, const Item *item, const 
 {
     // a stereo surface shows the view of the eye being rendered, the left one outside 3D
     const SurfaceItem *surfaceItem = qobject_cast<const SurfaceItem *>(item);
-    const WindowQuadList quads = surfaceItem && surfaceItem->stereoContent() != StereoContentNone
-        ? surfaceItem->eyeQuads(context->stereoEye == StereoEye::Right ? StereoEye::Right : StereoEye::Left)
-        : item->quads(renderer);
+    WindowQuadList quads;
+    if (surfaceItem && surfaceItem->stereoContent() != StereoContentNone) {
+        const WindowItem *windowItem = nullptr;
+        for (const Item *parent = surfaceItem; parent && !windowItem; parent = parent->parentItem()) {
+            windowItem = qobject_cast<const WindowItem *>(parent);
+        }
+        const Window *window = windowItem ? windowItem->window() : nullptr;
+        const bool hasStereoEyes = context->stereoCapture || (window && window->output() && window->output()->hasStereoEyes());
+        quads = surfaceItem->eyeQuads(hasStereoEyes && context->stereoEye == StereoEye::Right ? StereoEye::Right : StereoEye::Left);
+    } else {
+        quads = item->quads(renderer);
+    }
 
     const qreal scale = context->renderTargetScale;
     const QPointF itemToDeviceTranslation = context->transformStack.top().map(QPointF(0., 0.))
@@ -412,6 +423,7 @@ bool ItemRendererOpenGL::renderItem(const RenderTarget &renderTarget, const Rend
         .viewportOrigin = viewport.scaledRenderRect().topLeft(),
         .renderOffset = viewport.renderOffset(),
         .stereoEye = stereoEye(),
+        .stereoCapture = stereoCapture(),
     };
 
     renderContext.transformStack.push(QMatrix4x4());

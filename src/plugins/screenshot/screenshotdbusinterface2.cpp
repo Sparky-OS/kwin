@@ -223,7 +223,7 @@ ScreenShotDBusInterface2::~ScreenShotDBusInterface2()
 
 int ScreenShotDBusInterface2::version() const
 {
-    return 5;
+    return 6;
 }
 
 std::optional<pid_t> ScreenShotDBusInterface2::determineCallerPid() const
@@ -422,8 +422,8 @@ QVariantMap ScreenShotDBusInterface2::CaptureWorkspace(const QVariantMap &option
         return QVariantMap();
     }
 
-    takeScreenShot(effects->virtualScreenGeometry(), screenShotFlagsFromOptions(options),
-                   new ScreenShotSinkPipe2(fileDescriptor, message()), pidToHide(pid, options));
+    takeScreenShotWorkspace(screenShotFlagsFromOptions(options),
+                            new ScreenShotSinkPipe2(fileDescriptor, message()), pidToHide(pid, options));
 
     setDelayedReply(true);
     return QVariantMap();
@@ -435,6 +435,7 @@ void ScreenShotDBusInterface2::takeScreenShot(LogicalOutput *screen, ScreenShotF
     if (const auto result = m_effect->takeScreenShot(screen, flags, pid)) {
         sink->flush(*result, QVariantMap{
                                  {QStringLiteral("screen"), screen->name()},
+                                 {QStringLiteral("stereo"), screenShotIsStereo(screen)},
                              });
     } else {
         sink->cancel();
@@ -446,7 +447,23 @@ void ScreenShotDBusInterface2::takeScreenShot(const Rect &area, ScreenShotFlags 
                                               ScreenShotSinkPipe2 *sink, std::optional<pid_t> pid)
 {
     if (const auto result = m_effect->takeScreenShot(area, flags, pid)) {
-        sink->flush(*result, {});
+        sink->flush(*result, QVariantMap{
+                                 {QStringLiteral("stereo"), screenShotIsStereo(area)},
+                             });
+    } else {
+        sink->cancel();
+    }
+    sink->deleteLater();
+}
+
+void ScreenShotDBusInterface2::takeScreenShotWorkspace(ScreenShotFlags flags,
+                                                       ScreenShotSinkPipe2 *sink,
+                                                       std::optional<pid_t> pid)
+{
+    if (const auto result = m_effect->takeScreenShotWorkspace(flags, pid)) {
+        sink->flush(*result, QVariantMap{
+                                 {QStringLiteral("stereo"), false},
+                             });
     } else {
         sink->cancel();
     }
@@ -459,6 +476,7 @@ void ScreenShotDBusInterface2::takeScreenShot(Window *window, ScreenShotFlags fl
     if (const auto result = m_effect->takeScreenShot(window, flags)) {
         sink->flush(*result, QVariantMap{
                                  {QStringLiteral("windowId"), window->internalId().toString()},
+                                 {QStringLiteral("stereo"), screenShotIsStereo(window)},
                              });
     } else {
         sink->cancel();

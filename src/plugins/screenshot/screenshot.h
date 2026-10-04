@@ -31,6 +31,10 @@ class Rect;
 class ScreenShotDBusInterface2;
 class Window;
 
+bool screenShotIsStereo(LogicalOutput *screen);
+bool screenShotIsStereo(const Rect &area);
+bool screenShotIsStereo(Window *window);
+
 /**
  * The ScreenShotManager provides a convenient way to capture the contents of a given window,
  * screen or an area in the global coordinates.
@@ -45,6 +49,7 @@ public:
 
     std::optional<QImage> takeScreenShot(LogicalOutput *screen, ScreenShotFlags flags, std::optional<pid_t> pidToHide);
     std::optional<QImage> takeScreenShot(const Rect &area, ScreenShotFlags flags, std::optional<pid_t> pidToHide);
+    std::optional<QImage> takeScreenShotWorkspace(ScreenShotFlags flags, std::optional<pid_t> pidToHide);
     std::optional<QImage> takeScreenShot(Window *window, ScreenShotFlags flags = {});
 
 private:

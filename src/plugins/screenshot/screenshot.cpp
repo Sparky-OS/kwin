@@ -32,6 +32,10 @@
 #include "workspace.h"
 
 #include <QPainter>
+#include <algorithm>
+#include <functional>
+#include <numeric>
+#include <ranges>
 
 namespace KWin
 {
@@ -39,6 +43,84 @@ namespace KWin
 static bool shouldFilterWindowFromCapture(Window *window, std::optional<pid_t> pidToHide)
 {
     return window->excludeFromCapture() || (pidToHide.has_value() && window->pid() == *pidToHide);
+}
+
+static QImage readFramebuffer(EglContext *context, GLFramebuffer *target, const GLTexture *texture, QImage::Format format)
+{
+    GLFramebuffer::pushFramebuffer(target);
+    QImage snapshot = QImage(texture->size(), format);
+    context->glReadnPixels(0, 0, snapshot.width(), snapshot.height(), GL_RGBA, GL_UNSIGNED_BYTE, snapshot.sizeInBytes(), static_cast<GLvoid *>(snapshot.bits()));
+    snapshot.flip(Qt::Vertical);
+    GLFramebuffer::popFramebuffer();
+    return snapshot;
+}
+
+static bool showsStereoContent(const RectF &area)
+{
+    return std::ranges::any_of(kwinApp()->scene()->containerItem()->childItems(), [&area](Item *item) {
+        const auto windowItem = qobject_cast<WindowItem *>(item);
+        return windowItem && windowItem->isVisible()
+            && windowItem->window()->stereoContent() != StereoContentNone
+            && windowItem->mapToScene(windowItem->boundingRect()).intersects(area);
+    });
+}
+
+bool screenShotIsStereo(LogicalOutput *screen)
+{
+    return screen->hasStereoEyes() || showsStereoContent(screen->geometryF());
+}
+
+bool screenShotIsStereo(const Rect &area)
+{
+    return std::ranges::any_of(workspace()->outputs(), [&area](LogicalOutput *output) {
+        return output->hasStereoEyes() && output->geometry().intersects(area);
+    }) || showsStereoContent(RectF(area));
+}
+
+bool screenShotIsStereo(Window *window)
+{
+    return window->stereoContent() != StereoContentNone;
+}
+
+class StereoCaptureScope
+{
+public:
+    explicit StereoCaptureScope(ItemRenderer *renderer)
+        : m_renderer(renderer)
+    {
+        m_renderer->setStereoCapture(true);
+    }
+
+    ~StereoCaptureScope()
+    {
+        m_renderer->setStereoEye(StereoEye::None);
+        m_renderer->setStereoCapture(false);
+    }
+
+    ItemRenderer *const m_renderer;
+};
+
+static QImage stereoImage(const QImage &left, const QImage &right)
+{
+    Q_ASSERT(left.size() == right.size());
+    QImage image(QSize(left.width() * 2, left.height()), left.format());
+    QPainter painter(&image);
+    painter.drawImage(QPoint(0, 0), left);
+    painter.drawImage(QPoint(left.width(), 0), right);
+    painter.end();
+    return image;
+}
+
+static QImage renderStereoImage(ItemRenderer *renderer, const std::function<QImage()> &render)
+{
+    StereoCaptureScope eyeScope(renderer);
+    renderer->setStereoEye(StereoEye::Left);
+    const QImage left = render();
+
+    renderer->setStereoEye(StereoEye::Right);
+    const QImage right = render();
+
+    return stereoImage(left, right);
 }
 
 ScreenShotManager::ScreenShotManager()
@@ -104,16 +186,23 @@ std::optional<QImage> ScreenShotManager::takeScreenShot(LogicalOutput *screen, S
     if (!beginInfo) {
         return std::nullopt;
     }
-    sceneView.paint(beginInfo->renderTarget, QPoint(), fullDamage);
+    ItemRenderer *renderer = kwinApp()->scene()->renderer(device);
+    QImage snapshot;
+    const bool stereo = screenShotIsStereo(screen);
+    if (stereo) {
+        snapshot = renderStereoImage(renderer, [&sceneView, &beginInfo, &fullDamage, context, target = target.get(), texture = offscreenTexture.get()] {
+            sceneView.paint(beginInfo->renderTarget, QPoint(), fullDamage);
+            return readFramebuffer(context.get(), target, texture, QImage::Format_RGBX8888);
+        });
+    } else {
+        sceneView.paint(beginInfo->renderTarget, QPoint(), fullDamage);
+    }
     if (!layer.endFrame(fullDamage, fullDamage, nullptr)) {
         return std::nullopt;
     }
-
-    GLFramebuffer::pushFramebuffer(target.get());
-    QImage snapshot = QImage(offscreenTexture->size(), QImage::Format_RGBX8888);
-    context->glReadnPixels(0, 0, snapshot.width(), snapshot.height(), GL_RGBA, GL_UNSIGNED_BYTE, snapshot.sizeInBytes(), static_cast<GLvoid *>(snapshot.bits()));
-    snapshot.flip(Qt::Vertical);
-    GLFramebuffer::popFramebuffer();
+    if (!stereo) {
+        snapshot = readFramebuffer(context.get(), target.get(), offscreenTexture.get(), QImage::Format_RGBX8888);
+    }
 
     snapshot.setDevicePixelRatio(scale);
     return snapshot;
@@ -174,19 +263,91 @@ std::optional<QImage> ScreenShotManager::takeScreenShot(const Rect &area, Screen
     if (!beginInfo) {
         return std::nullopt;
     }
-    sceneView.paint(beginInfo->renderTarget, QPoint(), fullDamage);
+    ItemRenderer *renderer = kwinApp()->scene()->renderer(device);
+    QImage snapshot;
+    const bool stereo = screenShotIsStereo(area);
+    if (stereo) {
+        snapshot = renderStereoImage(renderer, [&sceneView, &beginInfo, &fullDamage, context, target = target.get(), texture = offscreenTexture.get()] {
+            sceneView.paint(beginInfo->renderTarget, QPoint(), fullDamage);
+            return readFramebuffer(context.get(), target, texture, QImage::Format_RGBX8888);
+        });
+    } else {
+        sceneView.paint(beginInfo->renderTarget, QPoint(), fullDamage);
+    }
     if (!layer.endFrame(fullDamage, fullDamage, nullptr)) {
         return std::nullopt;
     }
-
-    GLFramebuffer::pushFramebuffer(target.get());
-    QImage snapshot = QImage(offscreenTexture->size(), QImage::Format_RGBX8888);
-    context->glReadnPixels(0, 0, snapshot.width(), snapshot.height(), GL_RGBA, GL_UNSIGNED_BYTE, snapshot.sizeInBytes(), static_cast<GLvoid *>(snapshot.bits()));
-    snapshot.flip(Qt::Vertical);
-    GLFramebuffer::popFramebuffer();
+    if (!stereo) {
+        snapshot = readFramebuffer(context.get(), target.get(), offscreenTexture.get(), QImage::Format_RGBX8888);
+    }
 
     snapshot.setDevicePixelRatio(scale);
     return snapshot;
+}
+
+std::optional<QImage> ScreenShotManager::takeScreenShotWorkspace(ScreenShotFlags flags, std::optional<pid_t> pidToHide)
+{
+    const auto outputs = workspace()->outputs();
+    if (outputs.isEmpty()) {
+        return std::nullopt;
+    }
+
+    Rect workspaceGeometry = outputs.front()->geometry();
+    for (LogicalOutput *output : outputs | std::views::drop(1)) {
+        workspaceGeometry = workspaceGeometry.united(output->geometry());
+    }
+
+    if (std::none_of(outputs.begin(), outputs.end(), [](LogicalOutput *output) {
+            return screenShotIsStereo(output);
+        })) {
+        return takeScreenShot(workspaceGeometry, flags, pidToHide);
+    }
+
+    const qreal scale = flags & ScreenShotNativeResolution
+        ? std::ranges::max(outputs, {}, &LogicalOutput::scale)->scale()
+        : 1.0;
+    struct Section {
+        QImage image;
+        int x;
+        int y;
+        int width;
+        int height;
+    };
+    QList<Section> sections;
+    int resultWidth = 0;
+    int resultHeight = workspaceGeometry.height();
+    for (LogicalOutput *output : outputs) {
+        const bool stereo = screenShotIsStereo(output);
+        const auto image = takeScreenShot(output, flags, pidToHide);
+        if (!image) {
+            return std::nullopt;
+        }
+
+        const Rect geometry = output->geometry();
+        const int leftStereoWidth = std::accumulate(outputs.begin(), outputs.end(), 0, [output](int width, LogicalOutput *other) {
+            return width + (screenShotIsStereo(other) && other->geometry().right() <= output->geometry().x()
+                                ? other->geometry().width()
+                                : 0);
+        });
+        const int x = geometry.x() - workspaceGeometry.x() + leftStereoWidth;
+        const int width = geometry.width() * (stereo ? 2 : 1);
+        const int y = geometry.y() - workspaceGeometry.y();
+        resultWidth = std::max(resultWidth, x + width);
+        resultHeight = std::max(resultHeight, y + geometry.height());
+        sections.append(Section{*image, x, y, width, geometry.height()});
+    }
+
+    QImage result(QSize(qRound(resultWidth * scale), qRound(resultHeight * scale)), QImage::Format_ARGB32_Premultiplied);
+    result.fill(Qt::transparent);
+    result.setDevicePixelRatio(scale);
+    QPainter painter(&result);
+    for (const Section &section : sections) {
+        const QRect target(qRound(section.x * scale), qRound(section.y * scale),
+                           qRound(section.width * scale), qRound(section.height * scale));
+        painter.drawImage(target, section.image);
+    }
+    painter.end();
+    return result;
 }
 
 std::optional<QImage> ScreenShotManager::takeScreenShot(Window *window, ScreenShotFlags flags)
@@ -222,25 +383,28 @@ std::optional<QImage> ScreenShotManager::takeScreenShot(Window *window, ScreenSh
     WorkspaceScene *scene = kwinApp()->scene();
     auto renderer = scene->renderer(device);
 
-    renderer->beginFrame(renderTarget, viewport);
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    renderer->renderItem(renderTarget, viewport, window->windowItem(), Scene::PAINT_WINDOW_TRANSFORMED, Region::infinite(), WindowPaintData{}, [flags, w = window->windowItem()](Item *item) {
-        const bool deco = flags & ScreenShotFlag::ScreenShotIncludeDecoration;
-        const bool shadow = deco && (flags & ScreenShotFlag::ScreenShotIncludeShadow);
-        return (!deco && item == w->decorationItem())
-            || (!shadow && item == w->shadowItem());
-    }, {});
-    if ((flags & ScreenShotFlag::ScreenShotIncludeCursor) && scene->cursorItem()->isVisible()) {
-        renderer->renderItem(renderTarget, viewport, scene->cursorItem(), 0, Region::infinite(), WindowPaintData{}, {}, {});
+    const auto renderEye = [&renderTarget, &viewport, renderer, window, flags, scene, context, &offscreenTarget, texture = offscreenTexture.get()] {
+        renderer->beginFrame(renderTarget, viewport);
+        glClearColor(0.0, 0.0, 0.0, 0.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        renderer->renderItem(renderTarget, viewport, window->windowItem(), Scene::PAINT_WINDOW_TRANSFORMED, Region::infinite(), WindowPaintData{}, [flags, w = window->windowItem()](Item *item) {
+            const bool deco = flags & ScreenShotFlag::ScreenShotIncludeDecoration;
+            const bool shadow = deco && (flags & ScreenShotFlag::ScreenShotIncludeShadow);
+            return (!deco && item == w->decorationItem())
+                || (!shadow && item == w->shadowItem());
+        }, {});
+        if ((flags & ScreenShotFlag::ScreenShotIncludeCursor) && scene->cursorItem()->isVisible()) {
+            renderer->renderItem(renderTarget, viewport, scene->cursorItem(), 0, Region::infinite(), WindowPaintData{}, {}, {});
+        }
+        renderer->endFrame();
+        return readFramebuffer(context.get(), &offscreenTarget, texture, QImage::Format_RGBA8888_Premultiplied);
+    };
+    QImage snapshot;
+    if (screenShotIsStereo(window)) {
+        snapshot = renderStereoImage(renderer, renderEye);
+    } else {
+        snapshot = renderEye();
     }
-    renderer->endFrame();
-
-    GLFramebuffer::pushFramebuffer(&offscreenTarget);
-    QImage snapshot = QImage(offscreenTexture->size(), QImage::Format_RGBA8888_Premultiplied);
-    context->glReadnPixels(0, 0, snapshot.width(), snapshot.height(), GL_RGBA, GL_UNSIGNED_BYTE, snapshot.sizeInBytes(), static_cast<GLvoid *>(snapshot.bits()));
-    snapshot.flip(Qt::Vertical);
-    GLFramebuffer::popFramebuffer();
 
     snapshot.setDevicePixelRatio(scale);
     return snapshot;

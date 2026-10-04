@@ -63,6 +63,7 @@ public:
         const QPointF viewportOrigin;
         const QPoint renderOffset;
         const StereoEye stereoEye;
+        const bool stereoCapture;
     };
 
     explicit ItemRendererOpenGL(RenderDevice *device);
