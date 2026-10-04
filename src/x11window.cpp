@@ -3099,8 +3099,9 @@ void X11Window::sendSyntheticConfigureNotify()
     u.event.window = window();
     u.event.x = m_client.x();
     u.event.y = m_client.y();
-    u.event.width = m_client.width();
-    u.event.height = m_client.height();
+    // in the program's own units: one view for a program that declares stereo itself
+    u.event.width = std::round(m_client.width() * m_programSizeScale.width() / m_stereoClientScale.width());
+    u.event.height = std::round(m_client.height() * m_programSizeScale.height() / m_stereoClientScale.height());
     u.event.border_width = 0;
     u.event.above_sibling = XCB_WINDOW_NONE;
     u.event.override_redirect = 0;
@@ -3705,6 +3706,12 @@ void X11Window::configure(const Rect &nativeGeometry)
     }
     if (m_client.size() != effectiveGeometry.size()) {
         m_client.setGeometry(effectiveGeometry);
+        // The X server reports the X11 window's size to the program, twice its own for a
+        // program that declares stereo itself; KWin's configure event follows it with the
+        // program's own size, so the last word the program reads is one view (ICCCM 4.2.3).
+        if (m_stereoClientScale != m_programSizeScale) {
+            sendSyntheticConfigureNotify();
+        }
     } else if (m_client.position() != effectiveGeometry.topLeft()) {
         m_client.move(effectiveGeometry.topLeft());
 
