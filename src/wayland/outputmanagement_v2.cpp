@@ -24,7 +24,7 @@
 namespace KWin
 {
 
-static const quint32 s_version = 22;
+static const quint32 s_version = 24;
 
 class OutputManagementV2InterfacePrivate : public QtWaylandServer::kde_output_management_v2
 {
@@ -83,6 +83,7 @@ protected:
     void kde_output_configuration_v2_set_hdr_icc_profile_path(Resource *resource, ::wl_resource *outputdevice, const QString &profile_path) override;
     void kde_output_configuration_v2_set_hdr_color_profile_source(Resource *resource, ::wl_resource *outputdevice, uint32_t color_profile_source) override;
     void kde_output_configuration_v2_set_stereo_formats(Resource *resource, wl_resource *outputdevice, uint32_t anaglyph, uint32_t otherStereoFormats) override;
+    void kde_output_configuration_v2_set_stereo_pair(Resource *resource, wl_resource *outputdevice, wl_resource *partner, uint32_t mode, uint32_t role, uint32_t reflection) override;
     void kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level) override;
 
     void sendFailure(Resource *resource, const QString &reason);
@@ -574,6 +575,37 @@ void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_form
         config.changeSet(output->handle())->anaglyph = bool(anaglyph);
         config.changeSet(output->handle())->otherStereoFormats = bool(otherStereoFormats);
     }
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_pair(Resource *resource, wl_resource *outputdevice, wl_resource *partnerResource, uint32_t mode, uint32_t role, uint32_t reflection)
+{
+    if (invalid) {
+        return;
+    }
+    if (mode > static_cast<uint32_t>(StereoPairMode::Ized3d)
+        || role > static_cast<uint32_t>(StereoPairRole::Front)
+        || reflection > static_cast<uint32_t>(StereoPairReflection::Vertical)) {
+        failureReason = i18n("Invalid stereo pair value");
+        return;
+    }
+    auto output = OutputDeviceV2Interface::get(outputdevice);
+    auto partner = partnerResource ? OutputDeviceV2Interface::get(partnerResource) : nullptr;
+    if (!output || (mode != static_cast<uint32_t>(StereoPairMode::None) && !partner)) {
+        invalid = true;
+        return;
+    }
+    const auto change = config.changeSet(output->handle());
+    if (mode == static_cast<uint32_t>(StereoPairMode::None)) {
+        change->stereoPartner = QString();
+        change->stereoPairMode = StereoPairMode::None;
+        change->stereoPairRole = StereoPairRole::Left;
+        change->stereoPairReflection = StereoPairReflection::None;
+        return;
+    }
+    change->stereoPartner = partner->handle()->uuid();
+    change->stereoPairMode = static_cast<StereoPairMode>(mode);
+    change->stereoPairRole = static_cast<StereoPairRole>(role);
+    change->stereoPairReflection = static_cast<StereoPairReflection>(reflection);
 }
 
 void OutputConfigurationV2Interface::kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level)
