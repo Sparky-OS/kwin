@@ -528,7 +528,7 @@ void DrmPipeline::applyPendingChanges()
     const StereoLayout oldLayout = m_next.mode ? stereoLayoutForMode(m_next.mode->flags()) : StereoLayout::None;
     const StereoLayout newLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
     if (oldLayout != newLayout) {
-        m_frameSequentialScheduler.reset();
+        m_frameSequentialScheduler = FrameSequentialScheduler(newLayout);
     }
     m_next = m_pending;
     m_commitThread->setModeInfo(m_pending.mode->refreshRate(), m_pending.mode->vblankTime());
@@ -557,15 +557,21 @@ void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<
                               << "wrong-eye slots after" << m_frameSequentialScheduler.missedRefreshes() << "missed refreshes";
         }
     }
-    RenderLoopPrivate::get(m_output->renderLoop())->notifyVblank(timestamp);
+    if (m_output) {
+        RenderLoopPrivate::get(m_output->renderLoop())->notifyVblank(timestamp);
+    }
     m_commitThread->pageFlipped(timestamp);
     // the commit thread adjusts the safety margin on every commit
-    m_output->renderLoop()->setPresentationSafetyMargin(m_commitThread->safetyMargin());
-    m_output->maybeUpdateDpmsState();
+    if (m_output) {
+        m_output->renderLoop()->setPresentationSafetyMargin(m_commitThread->safetyMargin());
+        m_output->maybeUpdateDpmsState();
+    }
     if (isFrameSequential(stereoLayout)) {
         // The same framebuffer is committed for the other eye when there is
         // no newly rendered pair. A new pair is rendered only on its first eye.
-        m_output->renderLoop()->scheduleRepaint();
+        if (m_output) {
+            m_output->renderLoop()->scheduleRepaint();
+        }
     }
     if (gpu()->needsModeset()) {
         gpu()->maybeModeset(nullptr, nullptr);
@@ -681,6 +687,11 @@ void DrmPipeline::setCrtc(DrmCrtc *crtc)
 
 void DrmPipeline::setMode(const std::shared_ptr<DrmConnectorMode> &mode)
 {
+    const StereoLayout oldLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
+    const StereoLayout newLayout = mode ? stereoLayoutForMode(mode->flags()) : StereoLayout::None;
+    if (oldLayout != newLayout) {
+        m_frameSequentialScheduler = FrameSequentialScheduler(newLayout);
+    }
     m_pending.mode = mode;
 }
 

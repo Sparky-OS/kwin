@@ -63,18 +63,7 @@ bool VirtualOutput::present(const QList<OutputLayer *> &layersToUpdate, const st
 
 bool VirtualOutput::hasStereoEyes() const
 {
-    return currentMode()->flags() & (OutputModeline::Flag::Stereo3DSideBySideHalf
-                                     | OutputModeline::Flag::Stereo3DTopAndBottom
-                                     | OutputModeline::Flag::Stereo3DFramePacking
-                                     | OutputModeline::Flag::Stereo3DSideBySideFull
-                                     | OutputModeline::Flag::Stereo3DAnaglyphModern
-                                     | OutputModeline::Flag::Stereo3DAnaglyphCrt
-                                     | OutputModeline::Flag::Stereo3DRowsLeftFirst
-                                     | OutputModeline::Flag::Stereo3DRowsRightFirst
-                                     | OutputModeline::Flag::Stereo3DColumnsLeftFirst
-                                     | OutputModeline::Flag::Stereo3DColumnsRightFirst
-                                     | OutputModeline::Flag::Stereo3DCheckerboardLeftFirst
-                                     | OutputModeline::Flag::Stereo3DCheckerboardRightFirst);
+    return currentMode()->flags() & OutputModeline::AllStereo3D;
 }
 
 void VirtualOutput::init(const QSize &pixelSize, qreal scale, const QList<OutputModeline> &modes)

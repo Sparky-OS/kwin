@@ -57,6 +57,10 @@ DrmFramebuffer::DrmFramebuffer(const std::shared_ptr<DrmFramebufferData> &data, 
         m_readable = true;
     }
     m_syncFd = std::move(readFence);
+    if (!buffer) {
+        m_readable = true;
+        return;
+    }
 #if defined(Q_OS_LINUX)
     if (!m_syncFd.isValid()) {
         dma_buf_export_sync_file req{

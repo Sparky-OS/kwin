@@ -81,6 +81,18 @@ static std::unique_ptr<MockGpu> findPrimaryDevice(int crtcCount)
         }
     }
 
+    // Headless test containers expose the render node without a primary node.
+    // The mock DRM implementation only needs an open DRM fd, so use that node
+    // instead of requiring a card device to be passed into the container.
+    for (drmDevice *device : std::as_const(devices)) {
+        if (device->available_nodes & (1 << DRM_NODE_RENDER)) {
+            int fd = open(device->nodes[DRM_NODE_RENDER], O_RDWR | O_CLOEXEC);
+            if (fd != -1) {
+                return std::make_unique<MockGpu>(fd, device->nodes[DRM_NODE_RENDER], crtcCount);
+            }
+        }
+    }
+
     return nullptr;
 }
 

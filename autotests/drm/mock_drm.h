@@ -198,6 +198,7 @@ public:
     QList<drmModePlanePtr> drmPlanes;
 
     QList<MockFb *> fbs;
+    QList<QList<Prop>> atomicCommits;
     std::vector<std::unique_ptr<MockPropertyBlob>> propertyBlobs;
 
     QList<drmModeResPtr> resPtrs;

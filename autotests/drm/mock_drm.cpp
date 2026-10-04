@@ -978,6 +978,7 @@ static bool checkIfEqual(const drmModeModeInfo &one, const drmModeModeInfo &two)
 int drmModeAtomicCommit(int fd, drmModeAtomicReqPtr req, uint32_t flags, void *user_data)
 {
     GPU(fd, -EINVAL);
+    gpu->atomicCommits.push_back(req->props);
     if (!req->legacyEmulation && (!gpu->clientCaps.contains(DRM_CLIENT_CAP_ATOMIC) || !gpu->clientCaps[DRM_CLIENT_CAP_ATOMIC])) {
         qWarning("drmModeAtomicCommit requires the atomic capability");
         return -(errno = EINVAL);

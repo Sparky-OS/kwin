@@ -140,6 +140,21 @@ public:
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
+    inline static constexpr Flags AllStereo3D = Flags(Flag::Stereo3DSideBySideHalf)
+        | Flag::Stereo3DTopAndBottom
+        | Flag::Stereo3DFramePacking
+        | Flag::Stereo3DSideBySideFull
+        | Flag::Stereo3DAnaglyphModern
+        | Flag::Stereo3DAnaglyphCrt
+        | Flag::Stereo3DRowsLeftFirst
+        | Flag::Stereo3DRowsRightFirst
+        | Flag::Stereo3DColumnsLeftFirst
+        | Flag::Stereo3DColumnsRightFirst
+        | Flag::Stereo3DCheckerboardLeftFirst
+        | Flag::Stereo3DCheckerboardRightFirst
+        | Flag::Stereo3DSequentialLeftFirst
+        | Flag::Stereo3DSequentialRightFirst;
+
     OutputModeline();
     OutputModeline(const QSize &size, uint32_t refreshRate, Flags flags = {});
 
