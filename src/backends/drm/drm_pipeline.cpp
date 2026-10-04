@@ -9,6 +9,7 @@
 
 #include "drm_pipeline.h"
 #include "drm_stereo.h"
+#include "drm_stereo_pair.h"
 
 #include <errno.h>
 
@@ -243,7 +244,8 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
         return Error::InvalidArguments;
     }
     const auto transform = layer->offloadTransform();
-    const auto planeTransform = DrmPlane::outputTransformToPlaneTransform(transform);
+    const auto pairTransform = m_output && m_output->isStereoPair() ? m_output->stereoPairTransform() : OutputTransform::Normal;
+    const auto planeTransform = DrmPlane::outputTransformToPlaneTransform(transform.combine(pairTransform));
     if (plane->rotation.isValid()) {
         if (!plane->rotation.hasEnum(planeTransform)) {
             return Error::InvalidArguments;
@@ -258,7 +260,15 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
     Rect targetRect = layer->targetRect();
     // frame packing, side by side full and frame sequential: the primary plane holds both eyes
     const StereoLayout stereoLayout = stereoLayoutForMode(m_pending.mode->flags());
-    if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
+    if (layer->type() == OutputLayerType::Primary && m_output && m_output->isStereoPair()) {
+        const drmModeModeInfo &mode = *m_pending.mode->nativeMode();
+        if (m_output->stereoPairMode() == StereoPairMode::Ized3d) {
+            sourceRect = targetRect = Rect(QPoint(), m_pending.mode->size());
+        } else {
+            sourceRect = stereoPairSourceRect(mode, m_output->stereoPairRole());
+            targetRect = Rect(QPoint(0, 0), m_pending.mode->size());
+        }
+    } else if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         const drmModeModeInfo &mode = *m_pending.mode->nativeMode();
         if (isFrameSequential(stereoLayout)) {
             const StereoEye eye = m_frameSequentialScheduler.nextEye();

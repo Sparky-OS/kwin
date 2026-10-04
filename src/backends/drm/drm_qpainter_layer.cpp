@@ -92,7 +92,7 @@ bool DrmQPainterLayer::doesSwapchainFit() const
 
 std::shared_ptr<DrmFramebuffer> DrmQPainterLayer::currentBuffer() const
 {
-    return m_currentFramebuffer;
+    return m_sharedBuffer ? m_sharedBuffer : m_currentFramebuffer;
 }
 
 void DrmQPainterLayer::releaseBuffers()

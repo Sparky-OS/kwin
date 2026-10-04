@@ -508,8 +508,56 @@ Workspace::~Workspace()
 
 OutputConfigurationError Workspace::applyOutputConfiguration(OutputConfiguration &config)
 {
+    const auto outputs = kwinApp()->outputBackend()->outputs();
+    const auto effectiveUuid = [&config](BackendOutput *output) {
+        return config.changeSet(output)->uuid.value_or(output->uuid());
+    };
+    const auto effectivePartner = [&config](BackendOutput *output) {
+        return config.changeSet(output)->stereoPartner.value_or(output->stereoPartner());
+    };
+    const auto effectiveMode = [&config](BackendOutput *output) {
+        return config.changeSet(output)->currentMode.value_or(output->currentMode()->modeline());
+    };
+    for (BackendOutput *output : outputs) {
+        const auto change = config.changeSet(output);
+        const auto mode = change->stereoPairMode.value_or(output->stereoPairMode());
+        const QString partnerUuid = effectivePartner(output);
+        if (mode == StereoPairMode::None) {
+            if (!partnerUuid.isEmpty()) {
+                return OutputConfigurationError::Unknown;
+            }
+            continue;
+        }
+        if (!output->isEnabled() && !change->enabled.value_or(output->isEnabled())) {
+            return OutputConfigurationError::Unknown;
+        }
+        const auto partnerIt = std::ranges::find_if(outputs, [&](BackendOutput *candidate) {
+            return candidate != output && effectiveUuid(candidate) == partnerUuid;
+        });
+        if (partnerIt == outputs.end() || partnerUuid.isEmpty()) {
+            return OutputConfigurationError::Unknown;
+        }
+        BackendOutput *partner = *partnerIt;
+        if (effectivePartner(partner) != effectiveUuid(output)
+            || config.changeSet(partner)->stereoPairMode.value_or(partner->stereoPairMode()) != mode
+            || effectiveMode(partner).size() != effectiveMode(output).size()
+            || effectiveMode(partner).refreshRate() != effectiveMode(output).refreshRate()
+            || config.changeSet(partner)->scaleSetting.value_or(partner->scaleSetting()) != change->scaleSetting.value_or(output->scaleSetting())) {
+            return OutputConfigurationError::Unknown;
+        }
+        const auto role = change->stereoPairRole.value_or(output->stereoPairRole());
+        const auto partnerRole = config.changeSet(partner)->stereoPairRole.value_or(partner->stereoPairRole());
+        const bool rolesMatch = mode == StereoPairMode::Ized3d
+            ? ((role == StereoPairRole::Back && partnerRole == StereoPairRole::Front)
+               || (role == StereoPairRole::Front && partnerRole == StereoPairRole::Back))
+            : ((role == StereoPairRole::Left && partnerRole == StereoPairRole::Right)
+               || (role == StereoPairRole::Right && partnerRole == StereoPairRole::Left));
+        if (!rolesMatch) {
+            return OutputConfigurationError::Unknown;
+        }
+    }
     assignBrightnessDevices(config);
-    const auto backendOutputs = kwinApp()->outputBackend()->outputs();
+    const auto backendOutputs = outputs;
     if (config.source == OutputConfiguration::Source::User) {
         // if the user adjusted brightness setting of an output,
         // adjust its brightness map to fit the new preference

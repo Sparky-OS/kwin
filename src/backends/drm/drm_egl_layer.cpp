@@ -56,6 +56,9 @@ EglGbmLayer::EglGbmLayer(EglGbmBackend *eglBackend, DrmGpu *gpu, DrmPlane::TypeI
 QSize EglGbmLayer::scanoutSize() const
 {
     const StereoLayout layout = drmOutput()->activeStereoLayout();
+    if (m_type == OutputLayerType::Primary && drmOutput()->isStereoPair() && drmOutput()->stereoPairMode() == StereoPairMode::Ized3d) {
+        return pipeline()->mode()->size();
+    }
     if (m_type == OutputLayerType::Primary && isFullFrameStereo(layout)) {
         return stereoFrameSize(*pipeline()->mode()->nativeMode(), layout);
     }
@@ -72,6 +75,8 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::doBeginFrame()
     } else {
         m_surface.setStereoLayout(stereoLayout);
     }
+    m_surface.setStereoPair(drmOutput()->isStereoPair() ? drmOutput()->stereoPairMode() : StereoPairMode::None,
+                            drmOutput()->stereoPairRole());
     return m_surface.startRendering(scanoutSize(),
                                     drmOutput()->transform().combine(OutputTransform::FlipY),
                                     supportedDrmFormats(),
@@ -187,7 +192,7 @@ bool EglGbmLayer::importScanoutBuffer(GraphicsBuffer *buffer, const std::shared_
 
 std::shared_ptr<DrmFramebuffer> EglGbmLayer::currentBuffer() const
 {
-    return m_scanoutBuffer ? m_scanoutBuffer : m_surface.currentBuffer();
+    return m_sharedBuffer ? m_sharedBuffer : (m_scanoutBuffer ? m_scanoutBuffer : m_surface.currentBuffer());
 }
 
 void EglGbmLayer::releaseBuffers()

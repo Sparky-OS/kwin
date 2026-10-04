@@ -84,6 +84,10 @@ private:
         std::optional<bool> allowSdrSoftwareBrightness;
         std::optional<BackendOutput::ColorPowerTradeoff> colorPowerTradeoff;
         std::optional<QString> uuid;
+        std::optional<QString> stereoPartner;
+        std::optional<StereoPairMode> stereoPairMode;
+        std::optional<StereoPairRole> stereoPairRole;
+        std::optional<StereoPairReflection> stereoPairReflection;
         std::optional<bool> detectedDdcCi;
         std::optional<bool> allowDdcCi;
         std::optional<uint32_t> maxBitsPerColor;

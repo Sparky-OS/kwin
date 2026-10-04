@@ -106,6 +106,8 @@ private:
     std::optional<bool> m_vrr;
     std::unordered_map<uint32_t /* object */, std::unordered_map<uint32_t /* property */, uint64_t /* value */>> m_properties;
     bool m_modeset = false;
+    size_t m_pendingPageflips = 1;
+    std::optional<std::chrono::nanoseconds> m_firstPageflipTimestamp;
     PresentationMode m_mode = PresentationMode::VSync;
 };
 

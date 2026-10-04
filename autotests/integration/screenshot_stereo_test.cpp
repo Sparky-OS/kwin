@@ -34,6 +34,7 @@ private Q_SLOTS:
     void testDeclaredWindowOnTwoDimensionalOutput();
     void testDeclaredWindowOnFrameSequentialOutput();
     void testAnaglyphOutputKeepsRawEyes();
+    void testStereoPairOutputsKeepRawEyes();
     void testThreeDimensionalOutputWithoutDeclaredWindow();
     void testOrdinaryCapture();
     void testWorkspaceStereoOutputOnLeft();
@@ -99,10 +100,24 @@ void ScreenshotStereoTest::initTestCase()
 
 void ScreenshotStereoTest::init()
 {
+    OutputConfiguration clearPair;
+    for (LogicalOutput *output : workspace()->outputs()) {
+        const auto change = clearPair.changeSet(output->backendOutput());
+        change->stereoPartner = QString();
+        change->stereoPairMode = StereoPairMode::None;
+        change->stereoPairRole = StereoPairRole::Left;
+        change->stereoPairReflection = StereoPairReflection::None;
+    }
+    QVERIFY(workspace()->applyOutputConfiguration(clearPair) == OutputConfigurationError::None);
     Test::setOutputConfig({Test::OutputInfo{
         .geometry = Rect(QPoint(), s_outputSize),
         .modes = {plainMode(), stereoMode(), anaglyphMode(), frameSequentialMode()},
     }});
+    OutputConfiguration resetMode;
+    for (LogicalOutput *output : workspace()->outputs()) {
+        resetMode.changeSet(output->backendOutput())->currentMode = plainMode();
+    }
+    QVERIFY(workspace()->applyOutputConfiguration(resetMode) == OutputConfigurationError::None);
     QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1));
 }
 
@@ -213,6 +228,74 @@ void ScreenshotStereoTest::testAnaglyphOutputKeepsRawEyes()
     QCOMPARE(image->pixelColor(110, 90), QColor(Qt::red));
     QCOMPARE(image->pixelColor(s_outputSize.width() + 110, 90), QColor(Qt::blue));
     QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+}
+
+void ScreenshotStereoTest::testStereoPairOutputsKeepRawEyes()
+{
+    Test::setOutputConfig({
+        Test::OutputInfo{
+            .geometry = Rect(QPoint(), s_outputSize),
+            .modes = {plainMode()},
+        },
+        Test::OutputInfo{
+            .geometry = Rect(QPoint(s_outputSize.width(), 0), s_outputSize),
+            .modes = {plainMode()},
+        },
+    });
+
+    const auto outputs = workspace()->outputs();
+    QCOMPARE(outputs.size(), 2);
+    OutputConfiguration configuration;
+    const auto setPair = [&](LogicalOutput *output, const QString &uuid, const QString &partner, StereoPairRole role) {
+        const auto change = configuration.changeSet(output->backendOutput());
+        change->uuid = uuid;
+        change->stereoPartner = partner;
+        change->stereoPairMode = StereoPairMode::DualProjection;
+        change->stereoPairRole = role;
+    };
+    setPair(outputs.front(), QStringLiteral("stereo-left"), QStringLiteral("stereo-right"), StereoPairRole::Left);
+    setPair(outputs.back(), QStringLiteral("stereo-right"), QStringLiteral("stereo-left"), StereoPairRole::Right);
+    workspace()->applyOutputConfiguration(configuration);
+    QVERIFY(Test::waylandSync());
+    QVERIFY(outputs.front()->hasStereoEyes());
+    QVERIFY(outputs.back()->hasStereoEyes());
+
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
+    declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
+    Window *window = Test::renderAndWaitForShown(surface.get(), stereoSurface());
+    QVERIFY(window);
+    window->move(QPoint(100, 80));
+    std::unique_ptr<KWayland::Client::Surface> secondSurface(Test::createSurface());
+    auto secondDeclaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*secondSurface));
+    secondDeclaration->set_content(Test::StereoContentV1::content_side_by_side_full);
+    std::unique_ptr<Test::XdgToplevel> secondShellSurface(Test::createXdgToplevelSurface(secondSurface.get()));
+    Window *secondWindow = Test::renderAndWaitForShown(secondSurface.get(), stereoSurface());
+    QVERIFY(secondWindow);
+    secondWindow->move(QPoint(s_outputSize.width() + 100, 80));
+    QVERIFY(Test::waylandSync());
+
+    ScreenShotManager manager;
+    for (int i = 0; i < outputs.size(); ++i) {
+        const auto image = manager.takeScreenShot(outputs[i], {}, std::nullopt);
+        QVERIFY(image);
+        saveEvidence(QStringLiteral("stereo-pair-%1").arg(i), *image);
+        QCOMPARE(image->size(), QSize(s_outputSize.width() * 2, s_outputSize.height()));
+        QCOMPARE(image->pixelColor(110, 90), QColor(Qt::red));
+        QCOMPARE(image->pixelColor(s_outputSize.width() + 110, 90), QColor(Qt::blue));
+    }
+    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+
+    OutputConfiguration clearPair;
+    for (LogicalOutput *output : outputs) {
+        const auto change = clearPair.changeSet(output->backendOutput());
+        change->stereoPartner = QString();
+        change->stereoPairMode = StereoPairMode::None;
+        change->stereoPairRole = StereoPairRole::Left;
+        change->stereoPairReflection = StereoPairReflection::None;
+    }
+    QCOMPARE(workspace()->applyOutputConfiguration(clearPair), OutputConfigurationError::None);
 }
 
 void ScreenshotStereoTest::testOrdinaryCapture()

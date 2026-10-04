@@ -53,6 +53,7 @@ DrmAtomicCommit::DrmAtomicCommit(DrmGpu *gpu)
 DrmAtomicCommit::DrmAtomicCommit(const QList<DrmPipeline *> &pipelines)
     : DrmCommit(pipelines.front()->gpu())
     , m_pipelines(pipelines)
+    , m_pendingPageflips(pipelines.size())
 {
 }
 
@@ -174,6 +175,17 @@ bool DrmAtomicCommit::doCommit(uint32_t flags)
 void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence)
 {
     Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+    if (!m_modeset && m_pendingPageflips > 1) {
+        if (!m_firstPageflipTimestamp) {
+            m_firstPageflipTimestamp = timestamp;
+        }
+        --m_pendingPageflips;
+        if (m_pendingPageflips > 0) {
+            return;
+        }
+        qCDebug(KWIN_DRM) << "Stereo pair pageflip gap"
+                          << std::chrono::duration_cast<std::chrono::microseconds>(timestamp - *m_firstPageflipTimestamp).count() << "us";
+    }
     for (const auto &[plane, buffer] : m_buffers) {
         plane->setCurrentBuffer(buffer);
     }

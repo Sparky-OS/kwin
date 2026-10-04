@@ -120,6 +120,7 @@ public:
     static Error commitPipelines(const QList<DrmPipeline *> &pipelines, DrmGpu *gpu, CommitMode mode, const QList<DrmObject *> &unusedObjects = {});
 
 private:
+    friend class DrmGpu;
     bool isBufferForDirectScanout() const;
     uint32_t calculateUnderscan();
     static Error errnoToError();

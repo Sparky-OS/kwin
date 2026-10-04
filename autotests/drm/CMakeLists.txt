@@ -77,6 +77,16 @@ target_link_libraries(testVirtualStereo LibDrmTest Qt::Test)
 add_test(NAME kwin-testVirtualStereo COMMAND testVirtualStereo)
 ecm_mark_as_test(testVirtualStereo)
 
+add_executable(testStereoPair stereoPairTest.cpp)
+target_link_libraries(testStereoPair LibDrmTest Qt::Test)
+add_test(NAME kwin-testStereoPair COMMAND testStereoPair)
+ecm_mark_as_test(testStereoPair)
+
+add_executable(testMockDrmStereoPair mockStereoPairTest.cpp)
+target_link_libraries(testMockDrmStereoPair LibDrmTest Qt::Test)
+add_test(NAME kwin-testMockDrmStereoPair COMMAND testMockDrmStereoPair)
+ecm_mark_as_test(testMockDrmStereoPair)
+
 add_executable(testFrameSequential frameSequentialTest.cpp)
 target_link_libraries(testFrameSequential LibDrmTest Qt::Test)
 add_test(NAME kwin-testFrameSequential COMMAND testFrameSequential)

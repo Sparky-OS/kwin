@@ -66,6 +66,7 @@ public:
      * both eyes of the scanout buffer; needs the shadow buffer (DrmOutput::needsShadowBuffer).
      */
     void setStereoLayout(StereoLayout layout, const QSize &eyeSize = QSize(), const QPoint &rightEyeOffset = QPoint());
+    void setStereoPair(StereoPairMode mode, StereoPairRole role);
     /**
      * With stereo content the scene is rendered once per eye: the shadow buffer from
      * startRendering() holds the left eye, this one the right eye. Call it between
@@ -134,6 +135,7 @@ private:
     };
     bool drawStereoPattern(const QSize &fboSize, const Region &repaint);
     bool drawAnaglyph(const QSize &fboSize, const Region &repaint);
+    bool drawIzed3d(const QSize &fboSize, const Region &repaint);
     bool checkSurface(const QSize &size, const FormatModifierMap &formats, BackendOutput::ColorPowerTradeoff tradeoff, uint32_t requiredAlphaBits);
     bool doesSurfaceFit(Surface *surface, const QSize &size, const FormatModifierMap &formats, BackendOutput::ColorPowerTradeoff tradeoff, uint32_t requiredAlphaBits) const;
     std::unique_ptr<Surface> createSurface(const QSize &size, const FormatModifierMap &formats, BackendOutput::ColorPowerTradeoff tradeoff, uint32_t requiredAlphaBits) const;
@@ -154,6 +156,8 @@ private:
     // frame packing and side by side full: one eye's size, and where the right eye starts
     QSize m_eyeSize;
     QPoint m_rightEyeOffset;
+    StereoPairMode m_stereoPairMode = StereoPairMode::None;
+    StereoPairRole m_stereoPairRole = StereoPairRole::Left;
     const BufferTarget m_requestedBufferTarget;
 };
 

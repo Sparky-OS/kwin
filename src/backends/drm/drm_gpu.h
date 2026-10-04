@@ -16,6 +16,7 @@
 #include "utils/version.h"
 
 #include <QList>
+#include <QHash>
 #include <QPointer>
 #include <QSize>
 #include <QSocketNotifier>
@@ -128,6 +129,8 @@ public:
 
     void addDefunctCommit(std::unique_ptr<DrmCommit> &&commit);
 
+    DrmPipeline::Error presentStereoPair(DrmOutput *output, const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame);
+
 Q_SIGNALS:
     void activeChanged(bool active);
     void outputAdded(DrmAbstractOutput *output);
@@ -188,6 +191,13 @@ private:
     QHash<GraphicsBuffer *, std::weak_ptr<DrmFramebufferData>> m_fbCache;
     std::vector<std::unique_ptr<DrmCommit>> m_defunctCommits;
     QTimer m_delayedModesetTimer;
+
+    struct PendingStereoPair {
+        DrmOutput *output = nullptr;
+        QList<OutputLayer *> layers;
+        std::shared_ptr<OutputFrame> frame;
+    };
+    QHash<QString, PendingStereoPair> m_pendingStereoPairs;
 };
 
 }

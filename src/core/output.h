@@ -196,6 +196,26 @@ private:
     bool m_removed = false;
 };
 
+enum class StereoPairMode {
+    None,
+    DualProjection,
+    MirrorRig,
+    Ized3d,
+};
+
+enum class StereoPairRole {
+    Left,
+    Right,
+    Back,
+    Front,
+};
+
+enum class StereoPairReflection {
+    None,
+    Horizontal,
+    Vertical,
+};
+
 // TODO: Replace it with the OutputModeline type.
 struct CustomModeDefinition
 {

@@ -99,6 +99,16 @@ DrmPlane *DrmPipelineLayer::plane() const
     return m_plane;
 }
 
+void DrmPipelineLayer::setSharedBuffer(const std::shared_ptr<DrmFramebuffer> &buffer)
+{
+    m_sharedBuffer = buffer;
+}
+
+void DrmPipelineLayer::clearSharedBuffer()
+{
+    m_sharedBuffer.reset();
+}
+
 DrmPipeline *DrmPipelineLayer::pipeline() const
 {
     return drmOutput()->pipeline();
