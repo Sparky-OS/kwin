@@ -309,6 +309,14 @@ void DrmOutput::updateInformation()
 std::expected<void, OutputError> DrmOutput::testPresentation(const std::shared_ptr<OutputFrame> &frame)
 {
     m_desiredPresentationMode = frame->presentationMode();
+    const bool frameSequential = isFrameSequential(activeStereoLayout());
+    if (frameSequential && !m_gpu->atomicModeSetting()) {
+        // The legacy page-flip API cannot crop the side-by-side framebuffer.
+        return std::unexpected(OutputError{
+            .code = OutputErrorCode::OtherHardwareLimitation,
+            .message = QStringLiteral("Frame-sequential output needs atomic modesetting"),
+        });
+    }
     const auto layers = m_pipeline->layers();
     const bool nonPrimaryEnabled = std::ranges::any_of(layers, [](OutputLayer *layer) {
         return layer->isEnabled() && layer->type() != OutputLayerType::Primary;
@@ -326,7 +334,7 @@ std::expected<void, OutputError> DrmOutput::testPresentation(const std::shared_p
         // so testing again isn't super useful
         return {};
     }
-    m_pipeline->setPresentationMode(frame->presentationMode());
+    m_pipeline->setPresentationMode(frameSequential ? PresentationMode::VSync : frame->presentationMode());
     if (nonPrimaryEnabled) {
         // the cursor plane needs to be disabled before we enable tearing; see DrmOutput::presentAsync
         if (frame->presentationMode() == PresentationMode::AdaptiveAsync) {

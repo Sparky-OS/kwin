@@ -7,6 +7,7 @@
 #pragma once
 
 #include "core/output.h"
+#include "core/rect.h"
 
 #include <QPoint>
 #include <QSize>
@@ -133,12 +134,14 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
 /**
  * The layouts that send both eyes in full in one frame bigger than the mode, which is one
  * eye: frame packing (the left eye, the mode's vertical blanking, then the right eye from
- * line vtotal on) and side by side full (the right eye from column hdisplay on), as the
- * kernel times them (CRTC_STEREO_DOUBLE). The scanout buffer is that whole frame.
+ * line vtotal on), side by side full (the right eye from column hdisplay on), and frame
+ * sequential (the two eyes from column hdisplay on, selected one refresh at a time). The
+ * scanout buffer is that whole frame.
  */
 inline bool isFullFrameStereo(StereoLayout layout)
 {
-    return layout == StereoLayout::FramePacking || layout == StereoLayout::SideBySideFull;
+    return layout == StereoLayout::FramePacking || layout == StereoLayout::SideBySideFull
+        || layout == StereoLayout::SequentialLeftFirst || layout == StereoLayout::SequentialRightFirst;
 }
 
 inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
@@ -147,6 +150,8 @@ inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
     case StereoLayout::FramePacking:
         return QSize(mode.hdisplay, mode.vtotal + mode.vdisplay);
     case StereoLayout::SideBySideFull:
+    case StereoLayout::SequentialLeftFirst:
+    case StereoLayout::SequentialRightFirst:
         return QSize(2 * mode.hdisplay, mode.vdisplay);
     default:
         return QSize(mode.hdisplay, mode.vdisplay);
@@ -157,6 +162,11 @@ inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
 inline QPoint stereoRightEyeOffset(const drmModeModeInfo &mode, StereoLayout layout)
 {
     return layout == StereoLayout::FramePacking ? QPoint(0, mode.vtotal) : QPoint(mode.hdisplay, 0);
+}
+
+inline Rect frameSequentialSourceRect(const drmModeModeInfo &mode, StereoEye eye)
+{
+    return Rect(eye == StereoEye::Left ? QPoint(0, 0) : QPoint(mode.hdisplay, 0), QSize(mode.hdisplay, mode.vdisplay));
 }
 
 }

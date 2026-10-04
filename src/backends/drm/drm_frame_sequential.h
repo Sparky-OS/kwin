@@ -43,14 +43,17 @@ public:
     // the eye the refresh with this vblank sequence must show
     StereoEye eyeForSequence(uint32_t sequence) const
     {
-        const uint32_t offset = sequence - m_phase;
+        const uint32_t offset = sequence - m_phase.value_or(0);
         return (offset & 1) == (m_leftFirst ? 0u : 1u) ? StereoEye::Left : StereoEye::Right;
     }
 
     // the eye the pipeline must submit now, for the refresh after the last completed one
     StereoEye nextEye() const
     {
-        return eyeForSequence(m_lastCompleted.value_or(m_phase - 1) + 1);
+        if (!m_phase) {
+            return m_leftFirst ? StereoEye::Left : StereoEye::Right;
+        }
+        return eyeForSequence(m_lastCompleted.value_or(*m_phase - 1) + 1);
     }
 
     /**
@@ -66,6 +69,15 @@ public:
         m_wrongEyeSlots = 0;
     }
 
+    void reset()
+    {
+        m_phase.reset();
+        m_lastCompleted.reset();
+        m_lastShownEye.reset();
+        m_missedRefreshes = 0;
+        m_wrongEyeSlots = 0;
+    }
+
     /**
      * a page-flip event: @p sequence is the vblank sequence the submitted frame took.
      * Counts the refreshes between this and the last completion (missed: the previous
@@ -74,6 +86,12 @@ public:
      */
     void noteCompletion(uint32_t sequence, StereoEye submittedEye)
     {
+        if (!m_phase) {
+            // The first event after a modeset supplies the sequence that the
+            // reset could not know. The first submitted eye is still the
+            // selected first eye; later refreshes use this sequence as phase.
+            m_phase = sequence;
+        }
         if (m_lastCompleted) {
             const uint32_t gap = sequence - *m_lastCompleted - 1;
             m_missedRefreshes += gap;
@@ -107,7 +125,7 @@ public:
 
 private:
     bool m_leftFirst;
-    uint32_t m_phase = 0;
+    std::optional<uint32_t> m_phase;
     std::optional<uint32_t> m_lastCompleted;
     std::optional<StereoEye> m_lastShownEye;
     uint64_t m_missedRefreshes = 0;

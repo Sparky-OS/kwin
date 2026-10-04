@@ -51,7 +51,7 @@ EglGbmLayer::EglGbmLayer(EglGbmBackend *eglBackend, DrmGpu *gpu, DrmPlane::TypeI
 {
 }
 
-// the scanout buffer: for frame packing and side by side full the whole frame holding both
+// the scanout buffer: for frame packing, side by side full and frame sequential the whole frame holding both
 // eyes, otherwise the layer's size
 QSize EglGbmLayer::scanoutSize() const
 {

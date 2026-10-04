@@ -454,10 +454,12 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             std::array<Rect, 2> deviceEyes;
             switch (m_stereoLayout) {
             case StereoLayout::SideBySideHalf:
+            case StereoLayout::SequentialLeftFirst:
+            case StereoLayout::SequentialRightFirst:
+            case StereoLayout::SideBySideFull:
                 deviceEyes = {Rect(0, 0, w / 2, h), Rect(w / 2, 0, w - w / 2, h)};
                 break;
             case StereoLayout::FramePacking:
-            case StereoLayout::SideBySideFull:
                 glClearColor(0, 0, 0, 1);
                 glClear(GL_COLOR_BUFFER_BIT);
                 deviceEyes = {Rect(QPoint(0, 0), m_eyeSize), Rect(m_rightEyeOffset, m_eyeSize)};

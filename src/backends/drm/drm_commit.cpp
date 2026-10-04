@@ -139,6 +139,11 @@ void DrmAtomicCommit::addBuffer(DrmPlane *plane, const std::shared_ptr<DrmFrameb
     }
 }
 
+void DrmAtomicCommit::setFrameSequentialEye(DrmPipeline *pipeline, StereoEye eye)
+{
+    m_frameSequentialEyes[pipeline] = eye;
+}
+
 void DrmAtomicCommit::setVrr(DrmCrtc *crtc, bool vrr)
 {
     addProperty(crtc->vrrEnabled, vrr ? 1 : 0);
@@ -221,7 +226,7 @@ std::expected<void, OutputError> DrmAtomicCommit::doCommit(uint32_t flags)
     return {};
 }
 
-void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp)
+void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence)
 {
     Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
     for (const auto &[plane, buffer] : m_buffers) {
@@ -245,9 +250,19 @@ void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp)
     // Iterate a copy: pageFlipped() can reset DrmCommitThread::m_committed, which
     // destroys this commit - and with it m_pipelines - mid-loop.
     const auto pipelines = m_pipelines;
+    const auto frameSequentialEyes = m_frameSequentialEyes;
     for (const auto pipeline : pipelines) {
-        pipeline->pageFlipped(timestamp);
+        const auto eye = frameSequentialEyes.find(pipeline);
+        pipeline->pageFlipped(timestamp, sequence, eye == frameSequentialEyes.end() ? std::nullopt : std::optional(eye->second));
     }
+}
+
+std::optional<StereoEye> DrmAtomicCommit::frameSequentialEye(DrmPipeline *pipeline) const
+{
+    if (const auto it = m_frameSequentialEyes.find(pipeline); it != m_frameSequentialEyes.end()) {
+        return it->second;
+    }
+    return std::nullopt;
 }
 
 bool DrmAtomicCommit::areBuffersReadable() const
@@ -289,6 +304,9 @@ void DrmAtomicCommit::merge(DrmAtomicCommit *onTop)
         m_buffers[plane] = buffer;
         m_frames[plane] = onTop->m_frames[plane];
         m_planes.emplace(plane);
+    }
+    for (const auto &[pipeline, eye] : onTop->m_frameSequentialEyes) {
+        m_frameSequentialEyes[pipeline] = eye;
     }
     for (const auto &[prop, blob] : onTop->m_blobs) {
         m_blobs[prop] = blob;
@@ -372,7 +390,7 @@ bool DrmLegacyCommit::doPageflip(PresentationMode mode)
     return drmModePageFlip(gpu()->fd(), m_crtc->id(), m_buffer->framebufferId(), flags, reinterpret_cast<void *>(registerPageflip())) == 0;
 }
 
-void DrmLegacyCommit::pageFlipped(std::chrono::nanoseconds timestamp)
+void DrmLegacyCommit::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence)
 {
     Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
     m_crtc->setCurrent(m_buffer);
@@ -383,7 +401,7 @@ void DrmLegacyCommit::pageFlipped(std::chrono::nanoseconds timestamp)
         m_frame->presented(timestamp, m_mode);
         m_frame.reset();
     }
-    m_pipeline->pageFlipped(timestamp);
+    m_pipeline->pageFlipped(timestamp, sequence, std::nullopt);
 }
 
 }
