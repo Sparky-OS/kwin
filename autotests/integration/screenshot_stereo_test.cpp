@@ -32,6 +32,7 @@ private Q_SLOTS:
     void cleanup();
 
     void testDeclaredWindowOnTwoDimensionalOutput();
+    void testDeclaredWindowOnFrameSequentialOutput();
     void testAnaglyphOutputKeepsRawEyes();
     void testThreeDimensionalOutputWithoutDeclaredWindow();
     void testOrdinaryCapture();
@@ -55,6 +56,11 @@ static OutputModeline stereoMode()
 static OutputModeline anaglyphMode()
 {
     return OutputModeline(s_outputSize, 60000, OutputModeline::Flag::Stereo3DAnaglyphModern);
+}
+
+static OutputModeline frameSequentialMode()
+{
+    return OutputModeline(s_outputSize, 120000, OutputModeline::Flag::Stereo3DSequentialLeftFirst);
 }
 
 static QImage stereoSurface()
@@ -95,7 +101,7 @@ void ScreenshotStereoTest::init()
 {
     Test::setOutputConfig({Test::OutputInfo{
         .geometry = Rect(QPoint(), s_outputSize),
-        .modes = {plainMode(), stereoMode(), anaglyphMode()},
+        .modes = {plainMode(), stereoMode(), anaglyphMode(), frameSequentialMode()},
     }});
     QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1));
 }
@@ -153,6 +159,31 @@ void ScreenshotStereoTest::testThreeDimensionalOutputWithoutDeclaredWindow()
     saveEvidence(QStringLiteral("stereo-output"), *image);
     QCOMPARE(image->size(), QSize(s_outputSize.width() * 2, s_outputSize.height()));
     QCOMPARE(image->pixelColor(10, 10), image->pixelColor(s_outputSize.width() + 10, 10));
+    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+}
+
+void ScreenshotStereoTest::testDeclaredWindowOnFrameSequentialOutput()
+{
+    const auto output = workspace()->outputs().front();
+    OutputConfiguration configuration;
+    configuration.changeSet(output->backendOutput())->currentMode = frameSequentialMode();
+    workspace()->applyOutputConfiguration(configuration);
+    QVERIFY(Test::waylandSync());
+    QVERIFY(output->hasStereoEyes());
+
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
+    declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
+    Window *window = Test::renderAndWaitForShown(surface.get(), stereoSurface());
+    QVERIFY(window);
+    QVERIFY(Test::waylandSync());
+
+    ScreenShotManager manager;
+    const auto image = manager.takeScreenShot(window);
+    QVERIFY(image);
+    saveEvidence(QStringLiteral("declared-window-frame-sequential"), *image);
+    checkStereoResult(*image, Qt::red, Qt::blue);
     QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
 }
 
