@@ -223,6 +223,7 @@ public:
     void sendHdrIccProfilePath(Resource *resource);
     void sendHdrColorProfileSource(Resource *resource);
     void sendStereoFormats(Resource *resource);
+    void sendStereoPair(Resource *resource);
     void sendAbmLevel(Resource *resource);
 
     OutputDeviceV2Interface *q;
@@ -367,6 +368,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     updateHdrColorProfileSource();
     updateAbmLevel();
     updateStereoFormats();
+    updateStereoPair();
 
     connect(handle, &BackendOutput::positionChanged,
             this, &OutputDeviceV2Interface::updateGlobalPosition);
@@ -411,6 +413,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     connect(handle, &BackendOutput::hdrIccProfilePathChanged, this, &OutputDeviceV2Interface::updateHdrIccProfilePath);
     connect(handle, &BackendOutput::hdrColorProfileSourceChanged, this, &OutputDeviceV2Interface::updateHdrColorProfileSource);
     connect(handle, &BackendOutput::stereoFormatsChanged, this, &OutputDeviceV2Interface::updateStereoFormats);
+    connect(handle, &BackendOutput::stereoPairChanged, this, &OutputDeviceV2Interface::updateStereoPair);
     connect(handle, &BackendOutput::abmLevelChanged, this, &OutputDeviceV2Interface::updateAbmLevel);
 
     // Delay the done event to batch property updates.
@@ -509,6 +512,7 @@ void OutputDeviceV2InterfacePrivate::kde_output_device_v2_bind_resource(Resource
     sendHdrColorProfileSource(resource);
     sendAbmLevel(resource);
     sendStereoFormats(resource);
+    sendStereoPair(resource);
     if (!m_uuid.isEmpty()) {
         sendDone(resource);
     }
@@ -1295,6 +1299,26 @@ void OutputDeviceV2InterfacePrivate::sendStereoFormats(Resource *resource)
     }
 }
 
+void OutputDeviceV2InterfacePrivate::sendStereoPair(Resource *resource)
+{
+    if (resource->version() >= KDE_OUTPUT_DEVICE_V2_STEREO_PAIR_SINCE_VERSION) {
+        send_stereo_pair(resource->handle,
+                         m_handle->stereoPartner(),
+                         static_cast<uint32_t>(m_handle->stereoPairMode()),
+                         static_cast<uint32_t>(m_handle->stereoPairRole()),
+                         static_cast<uint32_t>(m_handle->stereoPairReflection()));
+    }
+}
+
+void OutputDeviceV2Interface::updateStereoPair()
+{
+    const auto resources = d->resourceMap();
+    for (const auto &resource : resources) {
+        d->sendStereoPair(resource);
+    }
+    scheduleDone();
+}
+
 void OutputDeviceV2Interface::updateStereoFormats()
 {
     if (d->m_anaglyph != d->m_handle->anaglyph() || d->m_otherStereoFormats != d->m_handle->otherStereoFormats()) {
@@ -1439,6 +1463,12 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
         }
         if (m_modeline.flags() & OutputModeline::Flag::VirtualStereo) {
             flags |= 0x4000;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DSequentialLeftFirst) {
+            flags |= 0x40000;
+        }
+        if (m_modeline.flags() & OutputModeline::Flag::Stereo3DSequentialRightFirst) {
+            flags |= 0x80000;
         }
         send_flags(resource->handle, flags);
     }

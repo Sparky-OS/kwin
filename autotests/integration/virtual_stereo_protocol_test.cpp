@@ -35,6 +35,11 @@ public:
     int toggleEvents = 0;
     uint32_t anaglyph = 0;
     uint32_t other = 0;
+    QString stereoPartner;
+    uint32_t stereoPairMode = 0;
+    uint32_t stereoPairRole = 0;
+    uint32_t stereoPairReflection = 0;
+    QString uuid;
 protected:
     void kde_output_device_v2_mode(::kde_output_device_mode_v2 *mode) override { modes.push_back(std::make_unique<RecordedMode>(mode)); }
     void kde_output_device_v2_current_mode(::kde_output_device_mode_v2 *mode) override { current = mode; }
@@ -45,6 +50,14 @@ protected:
         anaglyph = a;
         other = o;
     }
+    void kde_output_device_v2_stereo_pair(const QString &partner, uint32_t mode, uint32_t role, uint32_t reflection) override
+    {
+        stereoPartner = partner;
+        stereoPairMode = mode;
+        stereoPairRole = role;
+        stereoPairReflection = reflection;
+    }
+    void kde_output_device_v2_uuid(const QString &value) override { uuid = value; }
 };
 
 class RecordedRegistry : public QtWayland::kde_output_device_registry_v2
@@ -70,8 +83,8 @@ private Q_SLOTS:
     {
         QTest::addColumn<int>("version");
         QTest::newRow("older-21") << 21;
-        QTest::newRow("older-23") << 23;
-        QTest::newRow("stereo-24") << 24;
+        QTest::newRow("older-26") << 26;
+        QTest::newRow("stereo-27") << 27;
     }
     void protocol()
     {
@@ -103,7 +116,7 @@ private Q_SLOTS:
             if (interface == kde_output_device_registry_v2_interface.name) {
                 devices.init(registry, name, std::min(uint32_t(version), advertised));
             } else if (interface == kde_output_management_v2_interface.name) {
-                management = std::make_unique<Test::WaylandOutputManagementV2>(registry, name, std::min(22u, advertised));
+                management = std::make_unique<Test::WaylandOutputManagementV2>(registry, name, std::min(27u, advertised));
             }
         });
         QSignalSpy announced(&registry, &KWayland::Client::Registry::interfacesAnnounced);
@@ -115,11 +128,11 @@ private Q_SLOTS:
         auto &device = *devices.outputs.front();
         QTRY_VERIFY(device.doneCount > 0);
         QVERIFY(management);
-        QCOMPARE(device.modes.size(), version >= 24 ? 4u : 2u);
+        QCOMPARE(device.modes.size(), version >= 27 ? 4u : 2u);
         QCOMPARE(device.modes[0]->flags, 0u);
         QCOMPARE(device.modes[1]->flags, 4u);
-        QCOMPARE(device.toggleEvents, version >= 24 ? 1 : 0);
-        if (version >= 24) {
+        QCOMPARE(device.toggleEvents, version >= 27 ? 1 : 0);
+        if (version >= 27) {
             QCOMPARE(device.modes[2]->flags, 0x4004u);
             QCOMPARE(device.modes[3]->flags, 0x4100u);
             std::unique_ptr<Test::WaylandOutputConfigurationV2> config(management->createConfiguration());
@@ -146,7 +159,74 @@ private Q_SLOTS:
         output->applyChanges(activate);
         QVERIFY(Test::waylandSync());
         QTRY_VERIFY(device.doneCount > doneBefore);
-        QCOMPARE(device.current, device.modes[version >= 24 ? 2 : 0]->object());
+        QCOMPARE(device.current, device.modes[version >= 27 ? 2 : 0]->object());
+        devices.stop();
+    }
+
+    void pair()
+    {
+        using Flag = OutputModeline::Flag;
+        const OutputModeline base(QSize(1920, 1080), 60000, Flag::Preferred);
+        auto backend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+        backend->setVirtualOutputs({VirtualBackend::OutputInfo{.size = base.size(), .modes = {base}, .edidIdentifierOverride = QByteArrayLiteral("PairA")},
+                                    VirtualBackend::OutputInfo{.size = base.size(), .modes = {base}, .edidIdentifierOverride = QByteArrayLiteral("PairB")}});
+        const auto outputs = backend->outputs();
+        QCOMPARE(outputs.size(), 2);
+        workspace()->outputConfigureStore()->clear();
+
+        KWayland::Client::EventQueue queue;
+        queue.setup(Test::waylandConnection());
+        KWayland::Client::Registry registry;
+        registry.setEventQueue(&queue);
+        RecordedRegistry devices;
+        std::unique_ptr<Test::WaylandOutputManagementV2> management;
+        connect(&registry, &KWayland::Client::Registry::interfaceAnnounced, &registry, [&](const QByteArray &interface, uint32_t name, uint32_t advertised) {
+            if (interface == kde_output_device_registry_v2_interface.name) {
+                devices.init(registry, name, std::min(27u, advertised));
+            } else if (interface == kde_output_management_v2_interface.name) {
+                management = std::make_unique<Test::WaylandOutputManagementV2>(registry, name, std::min(27u, advertised));
+            }
+        });
+        QSignalSpy announced(&registry, &KWayland::Client::Registry::interfacesAnnounced);
+        registry.create(Test::waylandConnection());
+        registry.setup();
+        QVERIFY(announced.wait());
+        QVERIFY(Test::waylandSync());
+        QTRY_COMPARE(devices.outputs.size(), 2u);
+        QVERIFY(management);
+        auto findDevice = [&devices](const QString &uuid) -> RecordedOutput * {
+            for (const auto &device : devices.outputs) {
+                if (device->uuid == uuid) {
+                    return device.get();
+                }
+            }
+            return nullptr;
+        };
+        auto *left = findDevice(outputs[0]->uuid());
+        auto *right = findDevice(outputs[1]->uuid());
+        QVERIFY(left);
+        QVERIFY(right);
+        QTRY_VERIFY(left->doneCount > 0 && right->doneCount > 0);
+
+        std::unique_ptr<Test::WaylandOutputConfigurationV2> config(management->createConfiguration());
+        QSignalSpy applied(config.get(), &Test::WaylandOutputConfigurationV2::applied);
+        config->set_stereo_pair(left->object(), right->object(), 1, 0, 0);
+        config->set_stereo_pair(right->object(), left->object(), 1, 1, 0);
+        config->apply();
+        QVERIFY(applied.wait());
+        QTRY_COMPARE(outputs[0]->stereoPartner(), outputs[1]->uuid());
+        QCOMPARE(outputs[0]->stereoPairMode(), StereoPairMode::DualProjection);
+        QCOMPARE(outputs[0]->stereoPairRole(), StereoPairRole::Left);
+        QCOMPARE(outputs[1]->stereoPairRole(), StereoPairRole::Right);
+        QCOMPARE(left->stereoPartner, outputs[1]->uuid());
+        QCOMPARE(left->stereoPairMode, 1u);
+        QCOMPARE(left->stereoPairRole, 0u);
+        QCOMPARE(right->stereoPairRole, 1u);
+
+        const auto stored = workspace()->outputConfigureStore()->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+        QVERIFY(stored);
+        QCOMPARE(stored->first.constChangeSet(outputs[0])->stereoPartner.value(), outputs[1]->uuid());
+        QCOMPARE(stored->first.constChangeSet(outputs[1])->stereoPartner.value(), outputs[0]->uuid());
         devices.stop();
     }
 };

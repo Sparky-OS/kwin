@@ -109,6 +109,7 @@ private:
     void updateHdrColorProfileSource();
     void updateAbmLevel();
     void updateStereoFormats();
+    void updateStereoPair();
 
     void scheduleDone();
 
