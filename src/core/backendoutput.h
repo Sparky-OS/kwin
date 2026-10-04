@@ -175,6 +175,12 @@ public:
     virtual bool hasStereoEyes() const;
 
     /**
+     * Returns whether the next frame-sequential refresh is the first eye of a pair.
+     * Non-frame-sequential outputs always need their normal rendering path.
+     */
+    virtual bool frameSequentialNeedsNewFrame() const;
+
+    /**
      * Returns the ratio between physical pixels and logical pixels.
      */
     qreal scale() const;

@@ -76,6 +76,7 @@ public:
      */
     StereoLayout activeStereoLayout() const;
     bool hasStereoEyes() const override;
+    bool frameSequentialNeedsNewFrame() const override;
 
     void removePipeline();
     void maybeUpdateDpmsState();

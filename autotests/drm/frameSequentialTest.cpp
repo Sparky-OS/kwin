@@ -159,6 +159,12 @@ private Q_SLOTS:
         scheduler.noteCompletion(101, StereoEye::Right);
         // The next submission is the first eye of the next pair.
         QCOMPARE(scheduler.nextEye(), StereoEye::Left);
+        QCOMPARE(scheduler.firstEye(), StereoEye::Left);
+
+        FrameSequentialScheduler rightFirst(StereoLayout::SequentialRightFirst);
+        rightFirst.reset(100);
+        QCOMPARE(rightFirst.firstEye(), StereoEye::Right);
+        QCOMPARE(rightFirst.nextEye(), StereoEye::Right);
     }
 };
 

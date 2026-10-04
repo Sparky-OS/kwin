@@ -56,6 +56,11 @@ public:
         return eyeForSequence(m_lastCompleted.value_or(*m_phase - 1) + 1);
     }
 
+    StereoEye firstEye() const
+    {
+        return m_leftFirst ? StereoEye::Left : StereoEye::Right;
+    }
+
     /**
      * relock the eye order: refresh @p sequence is the next one and shows the first eye.
      * Called on mode entry, modesets, and after dpms.

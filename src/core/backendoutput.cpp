@@ -276,6 +276,11 @@ bool BackendOutput::hasStereoEyes() const
     return false;
 }
 
+bool BackendOutput::frameSequentialNeedsNewFrame() const
+{
+    return true;
+}
+
 BackendOutput::Capabilities BackendOutput::capabilities() const
 {
     return m_information.capabilities;
