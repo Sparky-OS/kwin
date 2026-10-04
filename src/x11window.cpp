@@ -3134,12 +3134,8 @@ QSizeF X11Window::stereoClientScale() const
     }
 }
 
-// The units of a program's own sizes (its resize requests, its size hints, its window as
-// mapped) against its place on screen. A program that declares stereo itself sizes its window
-// at one view's size, which is its place on screen, whichever library asks (Mesa, gl-stereo,
-// wiz3D, a toolkit), and KWin configures the X11 window larger, as for Xwayland's emulated
-// resolutions. A window rule's content holds both views in the size its program chose, so that
-// program's sizes are the X11 window's.
+// The units of a program's own sizes against its place on screen: one view for a program
+// that declares stereo itself, the X11 window for one declared by a window rule.
 QSizeF X11Window::programSizeScale() const
 {
     return declaredStereoContent() == stereoContent() ? QSizeF(1, 1) : stereoClientScale();
@@ -3706,9 +3702,7 @@ void X11Window::configure(const Rect &nativeGeometry)
     }
     if (m_client.size() != effectiveGeometry.size()) {
         m_client.setGeometry(effectiveGeometry);
-        // The X server reports the X11 window's size to the program, twice its own for a
-        // program that declares stereo itself; KWin's configure event follows it with the
-        // program's own size, so the last word the program reads is one view (ICCCM 4.2.3).
+        // tell a program that declares stereo itself its own size (ICCCM 4.2.3)
         if (m_stereoClientScale != m_programSizeScale) {
             sendSyntheticConfigureNotify();
         }
