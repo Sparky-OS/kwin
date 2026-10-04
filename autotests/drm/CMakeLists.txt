@@ -68,3 +68,8 @@ add_executable(testVirtualStereo virtualStereoTest.cpp)
 target_link_libraries(testVirtualStereo LibDrmTest Qt::Test)
 add_test(NAME kwin-testVirtualStereo COMMAND testVirtualStereo)
 ecm_mark_as_test(testVirtualStereo)
+
+add_executable(testFrameSequential frameSequentialTest.cpp)
+target_link_libraries(testFrameSequential LibDrmTest Qt::Test)
+add_test(NAME kwin-testFrameSequential COMMAND testFrameSequential)
+ecm_mark_as_test(testFrameSequential)
