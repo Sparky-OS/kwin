@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "drm_frame_sequential.h"
+#include "drm_stereo.h"
 
 #include <QTest>
 
@@ -133,6 +134,31 @@ private Q_SLOTS:
         QCOMPARE(scheduler.wrongEyeSlots(), 0u);
         QCOMPARE(scheduler.nextEye(), StereoEye::Left);
         QVERIFY(!scheduler.lastCompleted().has_value());
+    }
+
+    void scanoutUsesFullSideBySideFrame()
+    {
+        drmModeModeInfo mode{};
+        mode.hdisplay = 1920;
+        mode.vdisplay = 1080;
+
+        QCOMPARE(stereoFrameSize(mode, StereoLayout::SequentialLeftFirst), QSize(3840, 1080));
+        QCOMPARE(stereoRightEyeOffset(mode, StereoLayout::SequentialLeftFirst), QPoint(1920, 0));
+        QCOMPARE(frameSequentialSourceRect(mode, StereoEye::Left), Rect(QPoint(0, 0), QSize(1920, 1080)));
+        QCOMPARE(frameSequentialSourceRect(mode, StereoEye::Right), Rect(QPoint(1920, 0), QSize(1920, 1080)));
+    }
+
+    void frameArrivingDuringPairWaitsForLeftRefresh()
+    {
+        FrameSequentialScheduler scheduler;
+        scheduler.reset(100);
+        scheduler.noteCompletion(100, StereoEye::Left);
+        // A newly drawn frame must not replace the held pair on the right refresh.
+        QCOMPARE(scheduler.nextEye(), StereoEye::Right);
+        QVERIFY(scheduler.nextEye() != StereoEye::Left);
+        scheduler.noteCompletion(101, StereoEye::Right);
+        // The next submission is the first eye of the next pair.
+        QCOMPARE(scheduler.nextEye(), StereoEye::Left);
     }
 };
 

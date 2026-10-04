@@ -167,7 +167,7 @@ DrmPipeline::Error DrmPipeline::commitPipelinesAtomic(const QList<DrmPipeline *>
         for (const auto pipeline : pipelines) {
             pipeline->m_next.needsModeset = pipeline->m_pending.needsModeset = false;
         }
-        commit->pageFlipped(std::chrono::steady_clock::now().time_since_epoch());
+        commit->pageFlipped(std::chrono::steady_clock::now().time_since_epoch(), std::nullopt);
         return Error::None;
     }
     case CommitMode::Test: {
@@ -256,10 +256,18 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
     commit->addBuffer(plane, fb, frame);
     Rect sourceRect = layer->sourceRect().toRect();
     Rect targetRect = layer->targetRect();
-    // frame packing and side by side full: the primary plane is the whole frame holding both eyes
+    // frame packing, side by side full and frame sequential: the primary plane holds both eyes
     const StereoLayout stereoLayout = stereoLayoutForMode(m_pending.mode->flags());
     if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
-        sourceRect = targetRect = Rect(QPoint(0, 0), stereoFrameSize(*m_pending.mode->nativeMode(), stereoLayout));
+        const drmModeModeInfo &mode = *m_pending.mode->nativeMode();
+        if (isFrameSequential(stereoLayout)) {
+            const StereoEye eye = m_frameSequentialScheduler.nextEye();
+            commit->setFrameSequentialEye(this, eye);
+            sourceRect = frameSequentialSourceRect(mode, eye);
+            targetRect = Rect(QPoint(0, 0), m_pending.mode->size());
+        } else {
+            sourceRect = targetRect = Rect(QPoint(0, 0), stereoFrameSize(mode, stereoLayout));
+        }
     }
     if (layer->type() == OutputLayerType::Primary && isSpatialStereo(stereoLayout)
         && (sourceRect != Rect(QPoint(), m_pending.mode->size()) || sourceRect != targetRect || planeTransform != DrmPlane::Transformation::Rotate0)) {
@@ -517,6 +525,11 @@ bool DrmPipeline::presentAsync(OutputLayer *layer, std::optional<std::chrono::na
 
 void DrmPipeline::applyPendingChanges()
 {
+    const StereoLayout oldLayout = m_next.mode ? stereoLayoutForMode(m_next.mode->flags()) : StereoLayout::None;
+    const StereoLayout newLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
+    if (oldLayout != newLayout) {
+        m_frameSequentialScheduler.reset();
+    }
     m_next = m_pending;
     m_commitThread->setModeInfo(m_pending.mode->refreshRate(), m_pending.mode->vblankTime());
     m_output->renderLoop()->setPresentationSafetyMargin(m_commitThread->safetyMargin());
@@ -533,8 +546,17 @@ DrmGpu *DrmPipeline::gpu() const
     return m_connector->gpu();
 }
 
-void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp)
+void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence, std::optional<StereoEye> submittedEye)
 {
+    const StereoLayout stereoLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
+    if (sequence && submittedEye && isFrameSequential(stereoLayout)) {
+        m_frameSequentialScheduler.noteCompletion(*sequence, *submittedEye);
+        if (m_frameSequentialScheduler.wrongEyeSlots() > 0) {
+            qCDebug(KWIN_DRM) << "Frame-sequential output" << m_connector->connectorName()
+                              << "showed" << m_frameSequentialScheduler.wrongEyeSlots()
+                              << "wrong-eye slots after" << m_frameSequentialScheduler.missedRefreshes() << "missed refreshes";
+        }
+    }
     RenderLoopPrivate::get(m_output->renderLoop())->notifyVblank(timestamp);
     m_commitThread->pageFlipped(timestamp);
     // the commit thread adjusts the safety margin on every commit

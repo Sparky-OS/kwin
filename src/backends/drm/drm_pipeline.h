@@ -22,6 +22,7 @@
 #include "core/renderloop_p.h"
 #include "drm_blob.h"
 #include "drm_connector.h"
+#include "drm_frame_sequential.h"
 #include "drm_plane.h"
 
 namespace KWin
@@ -72,7 +73,7 @@ public:
     DrmConnector *connector() const;
     DrmGpu *gpu() const;
 
-    void pageFlipped(std::chrono::nanoseconds timestamp);
+    void pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence, std::optional<StereoEye> submittedEye);
     bool modesetPresentPending() const;
     void resetModesetPresentPending();
     DrmCommitThread *commitThread() const;
@@ -172,6 +173,7 @@ private:
     State m_next;
 
     std::unique_ptr<DrmCommitThread> m_commitThread;
+    FrameSequentialScheduler m_frameSequentialScheduler;
 };
 
 }

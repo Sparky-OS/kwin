@@ -17,6 +17,7 @@
 #include <unordered_set>
 
 #include "core/renderloop.h"
+#include "effect/globals.h"
 #include "drm_pointer.h"
 #include "drm_property.h"
 
@@ -40,7 +41,7 @@ public:
     virtual ~DrmCommit();
 
     DrmGpu *gpu() const;
-    virtual void pageFlipped(std::chrono::nanoseconds timestamp) = 0;
+    virtual void pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence) = 0;
     void setDefunct();
 
 protected:
@@ -65,6 +66,7 @@ public:
     }
     void addBlob(const DrmProperty &prop, const std::shared_ptr<DrmBlob> &blob);
     void addBuffer(DrmPlane *plane, const std::shared_ptr<DrmFramebuffer> &buffer, const std::shared_ptr<OutputFrame> &frame);
+    void setFrameSequentialEye(DrmPipeline *pipeline, StereoEye eye);
     void setVrr(DrmCrtc *crtc, bool vrr);
     void setPresentationMode(PresentationMode mode);
 
@@ -73,7 +75,7 @@ public:
     bool commit();
     bool commitModeset();
 
-    void pageFlipped(std::chrono::nanoseconds timestamp) override;
+    void pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence) override;
 
     bool areBuffersReadable() const;
     void setDeadline(std::chrono::steady_clock::time_point deadline);
@@ -84,6 +86,7 @@ public:
 
     void setAllowedVrrDelay(std::optional<std::chrono::nanoseconds> allowedDelay);
     std::optional<std::chrono::nanoseconds> allowedVrrDelay() const;
+    std::optional<StereoEye> frameSequentialEye(DrmPipeline *pipeline) const;
 
     std::optional<std::chrono::steady_clock::time_point> targetPageflipTime() const;
     bool isReadyFor(std::chrono::steady_clock::time_point pageflipTarget) const;
@@ -98,6 +101,7 @@ private:
     std::unordered_map<const DrmProperty *, std::shared_ptr<DrmBlob>> m_blobs;
     std::unordered_map<DrmPlane *, std::shared_ptr<DrmFramebuffer>> m_buffers;
     std::unordered_map<DrmPlane *, std::shared_ptr<OutputFrame>> m_frames;
+    std::unordered_map<DrmPipeline *, StereoEye> m_frameSequentialEyes;
     std::unordered_set<DrmPlane *> m_planes;
     std::optional<bool> m_vrr;
     std::unordered_map<uint32_t /* object */, std::unordered_map<uint32_t /* property */, uint64_t /* value */>> m_properties;
@@ -112,7 +116,7 @@ public:
 
     bool doModeset(DrmConnector *connector, DrmConnectorMode *mode);
     bool doPageflip(PresentationMode mode);
-    void pageFlipped(std::chrono::nanoseconds timestamp) override;
+    void pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence) override;
 
 private:
     DrmPipeline *const m_pipeline;
