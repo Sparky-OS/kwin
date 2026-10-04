@@ -44,4 +44,14 @@ void ItemRenderer::setStereoEye(StereoEye eye)
     m_stereoEye = eye;
 }
 
+bool ItemRenderer::stereoCapture() const
+{
+    return m_stereoCapture;
+}
+
+void ItemRenderer::setStereoCapture(bool enabled)
+{
+    m_stereoCapture = enabled;
+}
+
 } // namespace KWin

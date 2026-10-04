@@ -68,8 +68,12 @@ public:
     StereoEye stereoEye() const;
     void setStereoEye(StereoEye eye);
 
+    bool stereoCapture() const;
+    void setStereoCapture(bool enabled);
+
 private:
     StereoEye m_stereoEye = StereoEye::None;
+    bool m_stereoCapture = false;
 };
 
 } // namespace KWin

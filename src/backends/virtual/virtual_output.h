@@ -30,6 +30,7 @@ public:
     RenderLoop *renderLoop() const override;
     bool testPresentation(const std::shared_ptr<OutputFrame> &frame) override;
     bool present(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame) override;
+    bool hasStereoEyes() const override;
 
     void init(const QSize &pixelSize, qreal scale, const QList<OutputModeline> &modes);
 

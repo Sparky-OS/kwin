@@ -271,6 +271,11 @@ bool BackendOutput::isInternal() const
     return m_information.internal;
 }
 
+bool BackendOutput::hasStereoEyes() const
+{
+    return false;
+}
+
 BackendOutput::Capabilities BackendOutput::capabilities() const
 {
     return m_information.capabilities;

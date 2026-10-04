@@ -75,6 +75,7 @@ public:
      * (EglGbmLayerSurface).
      */
     StereoLayout activeStereoLayout() const;
+    bool hasStereoEyes() const override;
 
     void removePipeline();
     void maybeUpdateDpmsState();
