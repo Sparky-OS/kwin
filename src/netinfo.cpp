@@ -119,8 +119,10 @@ RootInfo *RootInfo::create()
 
     // Announce the stereo content declaration of _KDE_NET_WM_STEREO_CONTENT
     // to programs looking at the root window; the value is the version of
-    // the declaration KWin understands (1 layout, 2 also class and sub-class).
-    const uint32_t stereoContentSupported = 2;
+    // the declaration KWin understands (1 layout, 2 also class and sub-class,
+    // 3 also sizes a declaring program's X11 window: the program's own sizes
+    // are one view's, and KWin makes the X11 window hold both).
+    const uint32_t stereoContentSupported = 3;
     xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, kwinApp()->x11RootWindow(),
                         atoms->kde_net_wm_stereo_content_supported, XCB_ATOM_CARDINAL, 32, 1, &stereoContentSupported);
 
