@@ -385,6 +385,10 @@ void WaylandOutput::applyChanges(const OutputConfiguration &config)
     next.desiredMode = props->desiredMode.value_or(m_state.desiredMode);
     next.uuid = props->uuid.value_or(m_state.uuid);
     next.replicationSource = props->replicationSource.value_or(m_state.replicationSource);
+    next.stereoPartner = props->stereoPartner.value_or(m_state.stereoPartner);
+    next.stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
+    next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
+    next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
     next.dpmsMode = props->dpmsMode.value_or(m_state.dpmsMode);
     if (next.dpmsMode != m_state.dpmsMode) {
         if (next.dpmsMode == DpmsMode::On) {

@@ -445,6 +445,10 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
             .allowSdrSoftwareBrightness = output->allowSdrSoftwareBrightness(),
             .colorPowerTradeoff = output->colorPowerTradeoff(),
             .uuid = existingUuid,
+            .stereoPartner = output->stereoPartner(),
+            .stereoPairMode = output->stereoPairMode(),
+            .stereoPairRole = output->stereoPairRole(),
+            .stereoPairReflection = output->stereoPairReflection(),
             .detectedDdcCi = output->detectedDdcCi(),
             .allowDdcCi = output->allowDdcCi(),
             .maxBitsPerColor = output->maxBitsPerColor(),
@@ -563,6 +567,10 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .colorPowerTradeoff = state.colorPowerTradeoff,
             .uuid = state.uuid,
             .replicationSource = setupState.replicationSource,
+            .stereoPartner = state.stereoPartner,
+            .stereoPairMode = state.stereoPairMode,
+            .stereoPairRole = state.stereoPairRole,
+            .stereoPairReflection = state.stereoPairReflection,
             .detectedDdcCi = state.detectedDdcCi,
             .allowDdcCi = state.allowDdcCi,
             .maxBitsPerColor = state.maxBitsPerColor,
@@ -1188,6 +1196,87 @@ static QJsonObject saveMode(const OutputModeline &modeline)
     return object;
 }
 
+static std::optional<StereoPairMode> stereoPairModeFromString(const QString &str)
+{
+    if (str == "DualProjection") {
+        return StereoPairMode::DualProjection;
+    } else if (str == "MirrorRig") {
+        return StereoPairMode::MirrorRig;
+    } else if (str == "Ized3d") {
+        return StereoPairMode::Ized3d;
+    }
+    return std::nullopt;
+}
+
+static QString stereoPairModeToString(StereoPairMode mode)
+{
+    switch (mode) {
+    case StereoPairMode::None:
+        return {};
+    case StereoPairMode::DualProjection:
+        return QStringLiteral("DualProjection");
+    case StereoPairMode::MirrorRig:
+        return QStringLiteral("MirrorRig");
+    case StereoPairMode::Ized3d:
+        return QStringLiteral("Ized3d");
+    }
+    Q_UNREACHABLE();
+}
+
+static std::optional<StereoPairRole> stereoPairRoleFromString(const QString &str)
+{
+    if (str == "Left") {
+        return StereoPairRole::Left;
+    } else if (str == "Right") {
+        return StereoPairRole::Right;
+    } else if (str == "Back") {
+        return StereoPairRole::Back;
+    } else if (str == "Front") {
+        return StereoPairRole::Front;
+    }
+    return std::nullopt;
+}
+
+static QString stereoPairRoleToString(StereoPairRole role)
+{
+    switch (role) {
+    case StereoPairRole::Left:
+        return QStringLiteral("Left");
+    case StereoPairRole::Right:
+        return QStringLiteral("Right");
+    case StereoPairRole::Back:
+        return QStringLiteral("Back");
+    case StereoPairRole::Front:
+        return QStringLiteral("Front");
+    }
+    Q_UNREACHABLE();
+}
+
+static std::optional<StereoPairReflection> stereoPairReflectionFromString(const QString &str)
+{
+    if (str == "None") {
+        return StereoPairReflection::None;
+    } else if (str == "Horizontal") {
+        return StereoPairReflection::Horizontal;
+    } else if (str == "Vertical") {
+        return StereoPairReflection::Vertical;
+    }
+    return std::nullopt;
+}
+
+static QString stereoPairReflectionToString(StereoPairReflection reflection)
+{
+    switch (reflection) {
+    case StereoPairReflection::None:
+        return QStringLiteral("None");
+    case StereoPairReflection::Horizontal:
+        return QStringLiteral("Horizontal");
+    case StereoPairReflection::Vertical:
+        return QStringLiteral("Vertical");
+    }
+    Q_UNREACHABLE();
+}
+
 void OutputConfigurationStore::load()
 {
     const QString jsonPath = QStandardPaths::locate(QStandardPaths::ConfigLocation, QStringLiteral("kwinoutputconfig.json"));
@@ -1410,6 +1499,18 @@ void OutputConfigurationStore::load()
         }
         if (const auto it = data.find("uuid"); it != data.end() && !it->toString().isEmpty()) {
             state.uuid = it->toString();
+        }
+        if (const auto it = data.find("stereoPartner"); it != data.end() && !it->toString().isEmpty()) {
+            state.stereoPartner = it->toString();
+        }
+        if (const auto it = data.find("stereoPairMode"); it != data.end()) {
+            state.stereoPairMode = stereoPairModeFromString(it->toString());
+        }
+        if (const auto it = data.find("stereoPairRole"); it != data.end()) {
+            state.stereoPairRole = stereoPairRoleFromString(it->toString());
+        }
+        if (const auto it = data.find("stereoPairReflection"); it != data.end()) {
+            state.stereoPairReflection = stereoPairReflectionFromString(it->toString());
         }
         if (const auto it = data.find("detectedDdcCi"); it != data.end() && it->isBool()) {
             state.detectedDdcCi = it->toBool();
@@ -1736,6 +1837,18 @@ void OutputConfigurationStore::save()
         }
         if (output.uuid.has_value()) {
             o["uuid"] = *output.uuid;
+        }
+        if (output.stereoPartner && !output.stereoPartner->isEmpty()) {
+            o["stereoPartner"] = *output.stereoPartner;
+        }
+        if (output.stereoPairMode && *output.stereoPairMode != StereoPairMode::None) {
+            o["stereoPairMode"] = stereoPairModeToString(*output.stereoPairMode);
+        }
+        if (output.stereoPairRole) {
+            o["stereoPairRole"] = stereoPairRoleToString(*output.stereoPairRole);
+        }
+        if (output.stereoPairReflection) {
+            o["stereoPairReflection"] = stereoPairReflectionToString(*output.stereoPairReflection);
         }
         if (output.detectedDdcCi) {
             o["detectedDdcCi"] = *output.detectedDdcCi;

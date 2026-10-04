@@ -12,6 +12,7 @@
 #include "drm_crtc.h"
 #include "drm_gpu.h"
 #include "drm_pipeline.h"
+#include "drm_stereo_pair.h"
 
 #include "core/brightnessdevice.h"
 #include "core/colortransformation.h"
@@ -121,13 +122,37 @@ bool DrmOutput::shouldDisableNonPrimaryPlanes() const
 
 StereoLayout DrmOutput::activeStereoLayout() const
 {
+    if (isStereoPair()) {
+        return StereoLayout::SideBySideFull;
+    }
     const auto mode = m_pipeline ? m_pipeline->mode() : nullptr;
     return mode ? stereoLayoutForMode(mode->flags()) : StereoLayout::None;
 }
 
 bool DrmOutput::hasStereoEyes() const
 {
-    return activeStereoLayout() != StereoLayout::None;
+    return isStereoPair() || activeStereoLayout() != StereoLayout::None;
+}
+
+StereoEye DrmOutput::stereoPairEye() const
+{
+    return m_state.stereoPairRole == StereoPairRole::Right || m_state.stereoPairRole == StereoPairRole::Front ? StereoEye::Right : StereoEye::Left;
+}
+
+OutputTransform DrmOutput::stereoPairTransform() const
+{
+    return stereoPairOutputTransform(m_state.stereoPairReflection);
+}
+
+void DrmOutput::setSharedPrimaryBuffer(const std::shared_ptr<DrmFramebuffer> &buffer)
+{
+    for (DrmPipelineLayer *layer : m_pipeline->layers()) {
+        if (layer->type() == OutputLayerType::Primary) {
+            layer->setSharedBuffer(buffer);
+        } else {
+            layer->clearSharedBuffer();
+        }
+    }
 }
 
 bool DrmOutput::frameSequentialNeedsNewFrame() const
@@ -373,7 +398,7 @@ std::expected<void, OutputError> DrmOutput::present(const QList<OutputLayer *> &
         m_pipeline->maybeModeset(frame);
     } else {
         // the presentation mode of the pipeline is already set in testPresentation
-        ret = m_pipeline->present(layersToUpdate, frame);
+        ret = m_gpu->presentStereoPair(this, layersToUpdate, frame);
     }
     m_renderLoop->setPresentationMode(m_pipeline->presentationMode());
     if (!ret) {
@@ -610,6 +635,10 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     }
     m_nextState->uuid = props->uuid.value_or(m_state.uuid);
     m_nextState->replicationSource = props->replicationSource.value_or(m_state.replicationSource);
+    m_nextState->stereoPartner = props->stereoPartner.value_or(m_state.stereoPartner);
+    m_nextState->stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
+    m_nextState->stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
+    m_nextState->stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
     m_nextState->detectedDdcCi = props->detectedDdcCi.value_or(m_state.detectedDdcCi);
     m_nextState->allowDdcCi = props->allowDdcCi.value_or(m_state.allowDdcCi);
     if (m_nextState->allowSdrSoftwareBrightness != m_state.allowSdrSoftwareBrightness) {

@@ -95,6 +95,10 @@ void DrmVirtualOutput::applyChanges(const OutputConfiguration &config)
     next.scaleSetting = props->scaleSetting.value_or(m_state.scaleSetting);
     next.uuid = props->uuid.value_or(m_state.uuid);
     next.replicationSource = props->replicationSource.value_or(m_state.replicationSource);
+    next.stereoPartner = props->stereoPartner.value_or(m_state.stereoPartner);
+    next.stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
+    next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
+    next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
     if (props->customModes.has_value()) {

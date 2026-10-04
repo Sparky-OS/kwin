@@ -62,6 +62,13 @@ uintptr_t DrmCommit::registerPageflip()
     return *m_id;
 }
 
+void DrmCommit::rearmPageflip()
+{
+    // take() removed the commit on its first event; one with several CRTCs gets an event from each
+    std::lock_guard lock(s_commitsMutex);
+    s_commits.emplace(*m_id, this);
+}
+
 DrmCommit *DrmCommit::take(uintptr_t id)
 {
     std::lock_guard lock(s_commitsMutex);
@@ -102,6 +109,7 @@ std::expected<void, OutputError> DrmCommit::errnoToError()
 DrmAtomicCommit::DrmAtomicCommit(DrmGpu *gpu, const QList<DrmPipeline *> &pipelines)
     : DrmCommit(gpu)
     , m_pipelines(pipelines)
+    , m_pendingPageflips(pipelines.size())
 {
 }
 
@@ -229,6 +237,18 @@ std::expected<void, OutputError> DrmAtomicCommit::doCommit(uint32_t flags)
 void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence)
 {
     Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+    if (!m_modeset && m_pendingPageflips > 1) {
+        if (!m_firstPageflipTimestamp) {
+            m_firstPageflipTimestamp = timestamp;
+        }
+        --m_pendingPageflips;
+        if (m_pendingPageflips > 0) {
+            rearmPageflip();
+            return;
+        }
+        qCDebug(KWIN_DRM) << "Stereo pair pageflip gap"
+                          << std::chrono::duration_cast<std::chrono::microseconds>(timestamp - *m_firstPageflipTimestamp).count() << "us";
+    }
     for (const auto &[plane, buffer] : m_buffers) {
         plane->setCurrentBuffer(buffer);
     }

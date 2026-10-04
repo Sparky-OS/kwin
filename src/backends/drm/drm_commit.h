@@ -55,6 +55,7 @@ protected:
     DrmCommit(const DrmCommit &other);
 
     uintptr_t registerPageflip();
+    void rearmPageflip();
 
     DrmGpu *const m_gpu;
     bool m_defunct = false;
@@ -124,6 +125,8 @@ private:
     std::unordered_map<uint32_t /* object */, std::unordered_map<uint32_t /* property */, uint64_t /* value */>> m_properties;
     bool m_modeset = false;
     std::optional<uint32_t> m_crtc;
+    size_t m_pendingPageflips = 1;
+    std::optional<std::chrono::nanoseconds> m_firstPageflipTimestamp;
     PresentationMode m_mode = PresentationMode::VSync;
 };
 

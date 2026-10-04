@@ -296,6 +296,11 @@ public:
 
     ColorPowerTradeoff colorPowerTradeoff() const;
     QString replicationSource() const;
+    QString stereoPartner() const;
+    StereoPairMode stereoPairMode() const;
+    StereoPairRole stereoPairRole() const;
+    StereoPairReflection stereoPairReflection() const;
+    bool isStereoPair() const;
     uint32_t maxBitsPerColor() const;
     struct BpcRange
     {
@@ -440,6 +445,7 @@ Q_SIGNALS:
     void dimmingChanged();
     void uuidChanged();
     void replicationSourceChanged();
+    void stereoPairChanged();
     void allowDdcCiChanged();
     void maxBitsPerColorChanged();
     void edrPolicyChanged();
@@ -524,6 +530,10 @@ protected:
         BrightnessDevice *brightnessDevice = nullptr;
         QString uuid;
         QString replicationSource;
+        QString stereoPartner;
+        StereoPairMode stereoPairMode = StereoPairMode::None;
+        StereoPairRole stereoPairRole = StereoPairRole::Left;
+        StereoPairReflection stereoPairReflection = StereoPairReflection::None;
         bool detectedDdcCi = false;
         bool allowDdcCi = true;
         uint32_t maxBitsPerColor = 0;

@@ -107,6 +107,7 @@ public:
     static std::expected<void, OutputError> commitPipelines(const QList<DrmPipeline *> &pipelines, DrmGpu *gpu, CommitMode mode, const QList<DrmObject *> &unusedObjects = {});
 
 private:
+    friend class DrmGpu;
     bool isBufferForDirectScanout() const;
     uint32_t calculateUnderscan();
     std::shared_ptr<DrmBlob> createHdrMetadata(TransferFunction::Type transferFunction) const;

@@ -273,6 +273,10 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.desiredMode = props->desiredMode.value_or(m_state.desiredMode);
     next.uuid = props->uuid.value_or(m_state.uuid);
     next.replicationSource = props->replicationSource.value_or(m_state.replicationSource);
+    next.stereoPartner = props->stereoPartner.value_or(m_state.stereoPartner);
+    next.stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
+    next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
+    next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
 
@@ -393,6 +397,12 @@ void BackendOutput::setState(const State &state)
     }
     if (oldState.replicationSource != state.replicationSource) {
         Q_EMIT replicationSourceChanged();
+    }
+    if (oldState.stereoPartner != state.stereoPartner
+        || oldState.stereoPairMode != state.stereoPairMode
+        || oldState.stereoPairRole != state.stereoPairRole
+        || oldState.stereoPairReflection != state.stereoPairReflection) {
+        Q_EMIT stereoPairChanged();
     }
     // detectedDdcCi is ignored here, it should result in capabilitiesChanged() instead
     if (oldState.allowDdcCi != state.allowDdcCi) {
@@ -634,6 +644,31 @@ BackendOutput::ColorPowerTradeoff BackendOutput::colorPowerTradeoff() const
 QString BackendOutput::replicationSource() const
 {
     return m_state.replicationSource;
+}
+
+QString BackendOutput::stereoPartner() const
+{
+    return m_state.stereoPartner;
+}
+
+StereoPairMode BackendOutput::stereoPairMode() const
+{
+    return m_state.stereoPairMode;
+}
+
+StereoPairRole BackendOutput::stereoPairRole() const
+{
+    return m_state.stereoPairRole;
+}
+
+StereoPairReflection BackendOutput::stereoPairReflection() const
+{
+    return m_state.stereoPairReflection;
+}
+
+bool BackendOutput::isStereoPair() const
+{
+    return m_state.stereoPairMode != StereoPairMode::None && !m_state.stereoPartner.isEmpty();
 }
 
 bool BackendOutput::detectedDdcCi() const

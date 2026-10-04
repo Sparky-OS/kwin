@@ -640,6 +640,96 @@ void DrmGpu::addDefunctCommit(std::unique_ptr<DrmCommit> &&commit)
     m_defunctCommits.push_back(std::move(commit));
 }
 
+std::expected<void, OutputError> DrmGpu::presentStereoPair(DrmOutput *output, const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame)
+{
+    if (!output->isStereoPair()) {
+        return output->pipeline()->present(layersToUpdate, frame);
+    }
+    DrmOutput *partner = nullptr;
+    for (DrmOutput *candidate : std::as_const(m_drmOutputs)) {
+        if (candidate != output && candidate->uuid() == output->stereoPartner() && candidate->isEnabled()) {
+            partner = candidate;
+            break;
+        }
+    }
+    if (!partner || partner->stereoPartner() != output->uuid() || partner->stereoPairMode() != output->stereoPairMode()) {
+        return std::unexpected(OutputError{
+            .code = OutputErrorCode::InvalidApiUsage,
+            .message = QStringLiteral("The stereo pair's partner output is missing or not paired back"),
+        });
+    }
+    QString firstUuid = output->uuid();
+    QString secondUuid = partner->uuid();
+    if (firstUuid > secondUuid) {
+        std::swap(firstUuid, secondUuid);
+    }
+    const QString key = firstUuid + QLatin1Char('\n') + secondUuid;
+    auto pending = m_pendingStereoPairs.find(key);
+    if (pending == m_pendingStereoPairs.end()) {
+        m_pendingStereoPairs.insert(key, PendingStereoPair{
+                                              .output = output,
+                                              .layers = layersToUpdate,
+                                              .frame = frame,
+                                          });
+        return {};
+    }
+    if (pending->output == output) {
+        pending->layers = layersToUpdate;
+        pending->frame = frame;
+        return {};
+    }
+
+    PendingStereoPair first = *pending;
+    m_pendingStereoPairs.erase(pending);
+    DrmOutput *secondOutput = output;
+    if (first.output != partner) {
+        return std::unexpected(OutputError{
+            .code = OutputErrorCode::InvalidApiUsage,
+            .message = QStringLiteral("The pending half of the stereo pair belongs to another output"),
+        });
+    }
+
+    if (output->stereoPairMode() != StereoPairMode::Ized3d) {
+        DrmPipelineLayer *primary = nullptr;
+        for (DrmPipelineLayer *layer : first.output->pipeline()->layers()) {
+            if (layer->type() == OutputLayerType::Primary) {
+                primary = layer;
+                break;
+            }
+        }
+        if (primary && primary->currentBuffer()) {
+            secondOutput->setSharedPrimaryBuffer(primary->currentBuffer());
+        }
+    }
+
+    const QList<DrmPipeline *> pipelines{first.output->pipeline(), secondOutput->pipeline()};
+    auto commit = std::make_unique<DrmAtomicCommit>(this, pipelines);
+    commit->requestPageflipEvent(first.output->pipeline()->crtc()->id());
+    const QList<std::pair<DrmPipeline *, std::pair<QList<OutputLayer *>, std::shared_ptr<OutputFrame>>>> updates{
+        {first.output->pipeline(), {first.layers, first.frame}},
+        {secondOutput->pipeline(), {layersToUpdate, frame}},
+    };
+    for (const auto &[pipeline, update] : updates) {
+        if (auto ret = pipeline->prepareAtomicPresentation(commit.get(), update.second); !ret) {
+            return ret;
+        }
+        for (OutputLayer *layer : update.first) {
+            auto *pipelineLayer = static_cast<DrmPipelineLayer *>(layer);
+            if (auto ret = pipeline->prepareAtomicPlane(commit.get(), pipelineLayer->plane(), pipelineLayer, update.second); !ret) {
+                return ret;
+            }
+        }
+        if (pipeline->m_pending.needsModesetProperties) {
+            if (auto ret = pipeline->prepareAtomicModeset(commit.get()); !ret) {
+                return ret;
+            }
+        }
+        pipeline->m_next.needsModesetProperties = pipeline->m_pending.needsModesetProperties = false;
+    }
+    first.output->pipeline()->commitThread()->addCommit(std::move(commit));
+    return {};
+}
+
 void DrmGpu::removeOutput(DrmOutput *output)
 {
     qCDebug(KWIN_DRM) << "Removing output" << output;

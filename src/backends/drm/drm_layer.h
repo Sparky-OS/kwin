@@ -43,6 +43,9 @@ public:
 
     virtual std::shared_ptr<DrmFramebuffer> currentBuffer() const = 0;
 
+    void setSharedBuffer(const std::shared_ptr<DrmFramebuffer> &buffer);
+    void clearSharedBuffer();
+
     DrmPlane *plane() const;
 
 protected:
@@ -51,6 +54,7 @@ protected:
     DrmOutput *drmOutput() const;
 
     DrmPlane *m_plane = nullptr;
+    std::shared_ptr<DrmFramebuffer> m_sharedBuffer;
 };
 
 }

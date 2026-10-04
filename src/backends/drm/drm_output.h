@@ -28,6 +28,7 @@ namespace KWin
 
 class DrmConnector;
 class DrmGpu;
+class DrmFramebuffer;
 class DrmPipeline;
 class DumbSwapchain;
 class DrmLease;
@@ -80,6 +81,9 @@ public:
     StereoLayout activeStereoLayout() const;
     bool hasStereoEyes() const override;
     bool frameSequentialNeedsNewFrame() const override;
+    StereoEye stereoPairEye() const;
+    OutputTransform stereoPairTransform() const;
+    void setSharedPrimaryBuffer(const std::shared_ptr<DrmFramebuffer> &buffer);
 
     void removePipeline();
     void maybeUpdateDpmsState();
