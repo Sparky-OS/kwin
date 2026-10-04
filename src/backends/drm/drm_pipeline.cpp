@@ -588,9 +588,23 @@ void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<
     // the commit thread adjusts the safety margin on every commit
     m_output->renderLoop()->setPresentationSafetyMargin(safetyMargin);
     m_output->maybeUpdateDpmsState();
+    if (isFrameSequential(stereoLayout)) {
+        // The same framebuffer is committed for the other eye when there is
+        // no newly rendered pair. A new pair is rendered only on its first eye.
+        m_output->renderLoop()->scheduleRepaint();
+    }
     if (gpu()->needsModeset()) {
         gpu()->maybeModeset(nullptr, nullptr);
     }
+}
+
+bool DrmPipeline::frameSequentialNeedsNewFrame() const
+{
+    const StereoLayout layout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
+    if (!isFrameSequential(layout)) {
+        return true;
+    }
+    return m_frameSequentialScheduler.nextEye() == (layout == StereoLayout::SequentialRightFirst ? StereoEye::Right : StereoEye::Left);
 }
 
 void DrmPipeline::setOutput(DrmOutput *output)

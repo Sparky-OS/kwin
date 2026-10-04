@@ -61,6 +61,7 @@ public:
     DrmGpu *gpu() const;
 
     void pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence, std::optional<StereoEye> submittedEye);
+    bool frameSequentialNeedsNewFrame() const;
     bool modesetPresentPending() const;
     void resetModesetPresentPending();
     DrmCommitThread *commitThread() const;

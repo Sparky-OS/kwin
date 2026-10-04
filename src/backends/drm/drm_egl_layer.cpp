@@ -123,6 +123,11 @@ bool EglGbmLayer::earlyScanoutChecks()
     if (m_type != OutputLayerType::Primary && drmOutput()->shouldDisableNonPrimaryPlanes()) {
         return false;
     }
+    if (isFrameSequential(drmOutput()->activeStereoLayout())) {
+        // Direct scanout cannot hold a stable pair while the primary plane
+        // alternates its source rectangle.
+        return false;
+    }
     if (gpu()->needsModeset()) {
         // don't do direct scanout with modeset, it might lead to locking
         // the hardware to some buffer format we can't switch away from

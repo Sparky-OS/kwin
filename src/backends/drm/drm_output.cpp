@@ -130,6 +130,11 @@ bool DrmOutput::hasStereoEyes() const
     return activeStereoLayout() != StereoLayout::None;
 }
 
+bool DrmOutput::frameSequentialNeedsNewFrame() const
+{
+    return m_pipeline->frameSequentialNeedsNewFrame();
+}
+
 std::expected<void, OutputError> DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay)
 {
     if (!m_pipeline) {

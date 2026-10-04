@@ -953,8 +953,12 @@ void Compositor::composite(RenderLoop *renderLoop)
     }
 
     const auto renderLayers = [&]() -> std::expected<void, OutputError> {
+        const bool holdStereoPair = !output->frameSequentialNeedsNewFrame();
         for (auto &layer : layers) {
             if (!layer.view->layer()->needsRepaint()) {
+                continue;
+            }
+            if (holdStereoPair && layer.view->layer()->hasStereoEyes()) {
                 continue;
             }
             toUpdate.insert(layer.view->layer());
