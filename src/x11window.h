@@ -361,6 +361,7 @@ private:
     void handleXwaylandScaleChanged();
     void handleStereoContentChanged();
     void handleCommitted();
+    void configureStereoChild(xcb_configure_request_event_t *event);
 
     void setAllowCommits(bool allow);
 
@@ -445,6 +446,7 @@ private:
     std::vector<xcb_window_t> m_stereoChildren;
     std::unordered_set<xcb_window_t> m_declaredStereoChildren;
     std::unordered_set<xcb_window_t> m_redirectedStereoChildren;
+    std::unordered_map<xcb_window_t, QSize> m_stereoChildProgramSizes;
     std::unordered_map<xcb_window_t, SurfaceInterface *> m_stereoChildSurfaces;
     std::unordered_map<xcb_window_t, quint64> m_stereoChildSurfaceSerials;
 };

@@ -265,6 +265,10 @@ bool X11Window::windowEvent(xcb_generic_event_t *e)
                 }
             }
         }
+        if (eventType == XCB_CONFIGURE_REQUEST) {
+            configureStereoChild(reinterpret_cast<xcb_configure_request_event_t *>(e));
+            return true;
+        }
         if (eventType == XCB_CONFIGURE_NOTIFY || eventType == XCB_DESTROY_NOTIFY || eventType == XCB_UNMAP_NOTIFY) {
             updateStereoChildren();
         }

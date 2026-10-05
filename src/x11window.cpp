@@ -2046,6 +2046,27 @@ bool X11Window::hasStereoChildSurfaceSerial(quint64 serial) const
     });
 }
 
+static void sendStereoChildConfigureNotify(xcb_window_t window, int x, int y, const QSize &size)
+{
+    union {
+        xcb_configure_notify_event_t event;
+        char buffer[32];
+    } u{};
+    xcb_configure_notify_event_t &event = u.event;
+    event.response_type = XCB_CONFIGURE_NOTIFY;
+    event.event = window;
+    event.window = window;
+    event.x = x;
+    event.y = y;
+    event.width = size.width();
+    event.height = size.height();
+    event.border_width = 0;
+    event.above_sibling = XCB_WINDOW_NONE;
+    event.override_redirect = 0;
+    xcb_send_event(kwinApp()->x11Connection(), true, window,
+                   XCB_EVENT_MASK_STRUCTURE_NOTIFY, reinterpret_cast<const char *>(&u));
+}
+
 void X11Window::updateStereoChildren()
 {
     Xcb::Property property(false, window(), atoms->kde_net_wm_stereo_content_children,
@@ -2055,7 +2076,6 @@ void X11Window::updateStereoChildren()
     if (values && property.data()->bytes_after == 0) {
         stereoChildren.insert(values->begin(), values->end());
     }
-
     std::vector<X11StereoChild> children;
     auto treeCookie = xcb_query_tree(kwinApp()->x11Connection(), window());
     UniqueCPtr<xcb_query_tree_reply_t> tree(xcb_query_tree_reply(kwinApp()->x11Connection(), treeCookie, nullptr));
@@ -2092,8 +2112,26 @@ void X11Window::updateStereoChildren()
             if (!surface) {
                 surface = m_stereoChildSurfaces[child];
             }
-            children.push_back({child, surface, QRect(geometry->x, geometry->y,
-                                                       geometry->width, geometry->height),
+            QRect childGeometry(geometry->x, geometry->y, geometry->width, geometry->height);
+            if (stereoChildren.contains(child)) {
+                QSize &programSize = m_stereoChildProgramSizes[child];
+                if (programSize.isEmpty()) {
+                    programSize = childGeometry.size();
+                } else if (childGeometry.size() != QSize(programSize.width() * 2, programSize.height())) {
+                    programSize = childGeometry.size();
+                }
+                const QSize renderSize(programSize.width() * 2, programSize.height());
+                if (childGeometry.size() != renderSize) {
+                    const uint32_t values[] = {uint32_t(renderSize.width())};
+                    xcb_configure_window(kwinApp()->x11Connection(), child,
+                                         XCB_CONFIG_WINDOW_WIDTH, values);
+                    sendStereoChildConfigureNotify(child, childGeometry.x(), childGeometry.y(), programSize);
+                }
+                childGeometry.setSize(programSize);
+            } else {
+                m_stereoChildProgramSizes.erase(child);
+            }
+            children.push_back({child, surface, childGeometry,
                                 stereoChildren.contains(child)});
         }
     }
@@ -2104,6 +2142,7 @@ void X11Window::updateStereoChildren()
             }) == children.end()) {
             m_stereoChildSurfaces.erase(oldChild);
             m_stereoChildSurfaceSerials.erase(oldChild);
+            m_stereoChildProgramSizes.erase(oldChild);
             if (m_redirectedStereoChildren.erase(oldChild)) {
                 auto cookie = xcb_get_geometry(kwinApp()->x11Connection(), oldChild);
                 UniqueCPtr<xcb_get_geometry_reply_t> geometry(
@@ -2123,6 +2162,39 @@ void X11Window::updateStereoChildren()
 
     if (auto *item = qobject_cast<WindowItemX11 *>(windowItem())) {
         item->updateStereoChildren(children);
+    }
+}
+
+void X11Window::configureStereoChild(xcb_configure_request_event_t *event)
+{
+    const auto it = m_stereoChildProgramSizes.find(event->window);
+    if (it == m_stereoChildProgramSizes.end()) {
+        return;
+    }
+
+    QSize programSize = it->second;
+    uint16_t valueMask = event->value_mask & (XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT);
+    uint32_t values[4] = {};
+    int value = 0;
+    if (valueMask & XCB_CONFIG_WINDOW_X) {
+        values[value++] = event->x;
+    }
+    if (valueMask & XCB_CONFIG_WINDOW_Y) {
+        values[value++] = event->y;
+    }
+    if (valueMask & XCB_CONFIG_WINDOW_WIDTH) {
+        programSize.setWidth(event->width);
+        values[value++] = uint32_t(event->width) * 2;
+    }
+    if (valueMask & XCB_CONFIG_WINDOW_HEIGHT) {
+        programSize.setHeight(event->height);
+        values[value++] = event->height;
+    }
+    it->second = programSize;
+    if (valueMask) {
+        xcb_configure_window(kwinApp()->x11Connection(), event->window, valueMask, values);
+        sendStereoChildConfigureNotify(event->window, event->x, event->y, programSize);
+        xcb_flush(kwinApp()->x11Connection());
     }
 }
 
