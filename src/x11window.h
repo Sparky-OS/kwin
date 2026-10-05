@@ -56,7 +56,9 @@ public:
 
     xcb_window_t window() const;
     bool isStereoChild(xcb_window_t window) const;
+    bool hasStereoChildSurfaceSerial(quint64 serial) const;
     void associateStereoChild(xcb_window_t window, SurfaceInterface *surface);
+    void associateStereoChildSurface(quint64 serial, SurfaceInterface *surface);
     void updateStereoChildren();
 
     int desktopId() const;
@@ -444,6 +446,7 @@ private:
     std::unordered_set<xcb_window_t> m_declaredStereoChildren;
     std::unordered_set<xcb_window_t> m_redirectedStereoChildren;
     std::unordered_map<xcb_window_t, SurfaceInterface *> m_stereoChildSurfaces;
+    std::unordered_map<xcb_window_t, quint64> m_stereoChildSurfaceSerials;
 };
 
 /**

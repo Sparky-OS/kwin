@@ -259,8 +259,10 @@ bool X11Window::windowEvent(xcb_generic_event_t *e)
                 const uint64_t serial = (uint64_t(clientMessage->data.data32[1]) << 32) | clientMessage->data.data32[0];
                 if (XwaylandSurfaceV1Interface *surface = waylandServer()->xwaylandShell()->findSurface(serial)) {
                     associateStereoChild(eventWindow, surface->surface());
+                    return true;
+                } else {
+                    m_stereoChildSurfaceSerials[eventWindow] = serial;
                 }
-                return true;
             }
         }
         if (eventType == XCB_CONFIGURE_NOTIFY || eventType == XCB_DESTROY_NOTIFY || eventType == XCB_UNMAP_NOTIFY) {

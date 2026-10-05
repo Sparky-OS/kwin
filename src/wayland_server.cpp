@@ -384,6 +384,13 @@ bool WaylandServer::init()
             unmanaged->updateStereoChildren();
             return;
         }
+        X11Window *stereoParent = workspace()->findClient([serial](const X11Window *window) {
+            return window->hasStereoChildSurfaceSerial(serial);
+        });
+        if (stereoParent) {
+            stereoParent->associateStereoChildSurface(serial, surface->surface());
+            return;
+        }
     });
 #endif
 

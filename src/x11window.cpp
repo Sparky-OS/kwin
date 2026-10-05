@@ -2039,6 +2039,13 @@ bool X11Window::isStereoChild(xcb_window_t window) const
     return std::ranges::find(m_stereoChildren, window) != m_stereoChildren.end();
 }
 
+bool X11Window::hasStereoChildSurfaceSerial(quint64 serial) const
+{
+    return std::ranges::any_of(m_stereoChildSurfaceSerials, [serial](const auto &entry) {
+        return entry.second == serial;
+    });
+}
+
 void X11Window::updateStereoChildren()
 {
     Xcb::Property property(false, window(), atoms->kde_net_wm_stereo_content_children,
@@ -2096,6 +2103,7 @@ void X11Window::updateStereoChildren()
                 return child.window == oldChild;
             }) == children.end()) {
             m_stereoChildSurfaces.erase(oldChild);
+            m_stereoChildSurfaceSerials.erase(oldChild);
             if (m_redirectedStereoChildren.erase(oldChild)) {
                 auto cookie = xcb_get_geometry(kwinApp()->x11Connection(), oldChild);
                 UniqueCPtr<xcb_get_geometry_reply_t> geometry(
@@ -2121,6 +2129,20 @@ void X11Window::updateStereoChildren()
 void X11Window::associateStereoChild(xcb_window_t window, SurfaceInterface *surface)
 {
     m_stereoChildSurfaces[window] = surface;
+    m_stereoChildSurfaceSerials.erase(window);
+    updateStereoChildren();
+}
+
+void X11Window::associateStereoChildSurface(quint64 serial, SurfaceInterface *surface)
+{
+    const auto it = std::ranges::find_if(m_stereoChildSurfaceSerials, [serial](const auto &entry) {
+        return entry.second == serial;
+    });
+    if (it == m_stereoChildSurfaceSerials.end()) {
+        return;
+    }
+    m_stereoChildSurfaces[it->first] = surface;
+    m_stereoChildSurfaceSerials.erase(it);
     updateStereoChildren();
 }
 
