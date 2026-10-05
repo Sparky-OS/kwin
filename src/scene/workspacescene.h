@@ -114,6 +114,7 @@ protected:
     QList<WindowItem *> stacking_order;
 
 private:
+    void repaintStereoDepth();
     int stereoParallax(const Window *window) const;
     void createDndIconItem();
     void destroyDndIconItem();

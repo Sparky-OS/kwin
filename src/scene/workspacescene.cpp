@@ -85,6 +85,8 @@
 #include <QAction>
 #include <QtMath>
 
+#include <algorithm>
+
 namespace KWin
 {
 
@@ -103,15 +105,15 @@ WorkspaceScene::WorkspaceScene()
     });
 
     // the levels of the stereo depth follow what is active, stacked and shown
-    connect(options, &Options::stereoDepthChanged, this, &WorkspaceScene::addRepaintFull);
-    connect(workspace(), &Workspace::windowActivated, this, &WorkspaceScene::addRepaintFull);
-    connect(workspace(), &Workspace::stackingOrderChanged, this, &WorkspaceScene::addRepaintFull);
-    connect(workspace(), &Workspace::windowRemoved, this, &WorkspaceScene::addRepaintFull);
-    connect(workspace(), &Workspace::currentDesktopChanged, this, &WorkspaceScene::addRepaintFull);
+    connect(options, &Options::stereoDepthChanged, this, &WorkspaceScene::repaintStereoDepth);
+    connect(workspace(), &Workspace::windowActivated, this, &WorkspaceScene::repaintStereoDepth);
+    connect(workspace(), &Workspace::stackingOrderChanged, this, &WorkspaceScene::repaintStereoDepth);
+    connect(workspace(), &Workspace::windowRemoved, this, &WorkspaceScene::repaintStereoDepth);
+    connect(workspace(), &Workspace::currentDesktopChanged, this, &WorkspaceScene::repaintStereoDepth);
     connect(workspace(), &Workspace::windowAdded, this, [this](Window *window) {
-        connect(window, &Window::minimizedChanged, this, &WorkspaceScene::addRepaintFull);
-        connect(window, &Window::transientChanged, this, &WorkspaceScene::addRepaintFull);
-        connect(window, &Window::fullScreenChanged, this, &WorkspaceScene::addRepaintFull);
+        connect(window, &Window::minimizedChanged, this, &WorkspaceScene::repaintStereoDepth);
+        connect(window, &Window::transientChanged, this, &WorkspaceScene::repaintStereoDepth);
+        connect(window, &Window::fullScreenChanged, this, &WorkspaceScene::repaintStereoDepth);
     });
 
     connect(waylandServer()->seat(), &SeatInterface::dragStarted, this, &WorkspaceScene::createDndIconItem);
@@ -851,6 +853,19 @@ bool WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
 bool WorkspaceScene::finalPaintWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data)
 {
     return effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+}
+
+void WorkspaceScene::repaintStereoDepth()
+{
+    if (!StereoDepth::isEnabled()) {
+        return;
+    }
+    const auto outputs = workspace()->outputs();
+    if (std::ranges::any_of(outputs, [](LogicalOutput *output) {
+            return output->hasStereoEyes();
+        })) {
+        addRepaintFull();
+    }
 }
 
 int WorkspaceScene::stereoParallax(const Window *window) const
