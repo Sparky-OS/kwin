@@ -4746,6 +4746,17 @@ StereoContent Window::stereoContent() const
     return m_stereoContent;
 }
 
+bool Window::holdsStereoContent() const
+{
+    bool stereo = m_stereoContent != StereoContentNone;
+    if (m_surface) {
+        m_surface->traverseTree([&stereo](SurfaceInterface *surface) {
+            stereo = stereo || surface->stereoContent() != StereoContentNone;
+        });
+    }
+    return stereo;
+}
+
 void Window::updateStereoContent()
 {
     // the program's declaration is the content, unless a window rule replaces it
