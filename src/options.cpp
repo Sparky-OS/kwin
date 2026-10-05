@@ -597,6 +597,32 @@ void Options::setAllowTearing(bool allow)
     }
 }
 
+qreal Options::stereoSunkLimit() const
+{
+    return m_stereoSunkLimit;
+}
+
+void Options::setStereoSunkLimit(qreal limit)
+{
+    if (limit != m_stereoSunkLimit) {
+        m_stereoSunkLimit = limit;
+        Q_EMIT stereoDepthChanged();
+    }
+}
+
+qreal Options::stereoPoppedLimit() const
+{
+    return m_stereoPoppedLimit;
+}
+
+void Options::setStereoPoppedLimit(qreal limit)
+{
+    if (limit != m_stereoPoppedLimit) {
+        m_stereoPoppedLimit = limit;
+        Q_EMIT stereoDepthChanged();
+    }
+}
+
 bool Options::interactiveWindowMoveEnabled() const
 {
     return m_interactiveWindowMoveEnabled;
@@ -756,6 +782,8 @@ void Options::syncFromKcfgc()
     setElectricBorderCornerRatio(m_settings->electricBorderCornerRatio());
     setElectricBorderAllScreenCorner(m_settings->electricBorderAllScreenCorner());
     setAllowTearing(m_settings->allowTearing());
+    setStereoSunkLimit(m_settings->sunkLimit());
+    setStereoPoppedLimit(m_settings->poppedLimit());
     setInteractiveWindowMoveEnabled(m_settings->interactiveWindowMoveEnabled());
     setOverlayVirtualKeyboardOnWindows(m_settings->overlayVirtualKeyboardOnWindows());
     setDoubleClickBorderToMaximize(m_settings->doubleClickBorderToMaximize());
