@@ -1439,7 +1439,7 @@ public:
     /**
      * Whether stereo content is in the window: its own picture, or a surface inside it.
      */
-    bool holdsStereoContent() const;
+    virtual bool holdsStereoContent() const;
 
     /**
      * How the window's picture holds two views, one for each eye, as the program

@@ -2039,6 +2039,11 @@ bool X11Window::isStereoChild(xcb_window_t window) const
     return std::ranges::find(m_stereoChildren, window) != m_stereoChildren.end();
 }
 
+bool X11Window::holdsStereoContent() const
+{
+    return Window::holdsStereoContent() || !m_declaredStereoChildren.empty();
+}
+
 bool X11Window::hasStereoChildSurfaceSerial(quint64 serial) const
 {
     return std::ranges::any_of(m_stereoChildSurfaceSerials, [serial](const auto &entry) {
@@ -2076,6 +2081,7 @@ void X11Window::updateStereoChildren()
     if (values && property.data()->bytes_after == 0) {
         stereoChildren.insert(values->begin(), values->end());
     }
+
     std::vector<X11StereoChild> children;
     auto treeCookie = xcb_query_tree(kwinApp()->x11Connection(), window());
     UniqueCPtr<xcb_query_tree_reply_t> tree(xcb_query_tree_reply(kwinApp()->x11Connection(), treeCookie, nullptr));
@@ -2126,6 +2132,7 @@ void X11Window::updateStereoChildren()
                     xcb_configure_window(kwinApp()->x11Connection(), child,
                                          XCB_CONFIG_WINDOW_WIDTH, values);
                     sendStereoChildConfigureNotify(child, childGeometry.x(), childGeometry.y(), programSize);
+                    xcb_flush(kwinApp()->x11Connection());
                 }
                 childGeometry.setSize(programSize);
             } else {

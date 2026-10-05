@@ -60,6 +60,7 @@ public:
     void associateStereoChild(xcb_window_t window, SurfaceInterface *surface);
     void associateStereoChildSurface(quint64 serial, SurfaceInterface *surface);
     void updateStereoChildren();
+    bool holdsStereoContent() const override;
 
     int desktopId() const;
     QByteArray sessionId() const;
