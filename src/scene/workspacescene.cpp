@@ -846,7 +846,22 @@ bool WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
     }
 
     WindowPaintData data;
-    return effects->paintWindow(renderTarget, viewport, item->effectWindow(), mask, deviceRegion, data);
+    EffectWindow *effectWindow = item->effectWindow();
+    const QVariant forceBlur = effectWindow->data(WindowForceBlurRole);
+    const auto &renderer = m_renderers[painted_delegate ? painted_delegate->renderDevice() : Compositor::self()->primaryDevice()];
+    const StereoEye eye = renderer->stereoEye();
+    const int shift = eye == StereoEye::None ? 0 : StereoDepth::eyeShift(stereoParallax(item->window()), eye);
+    if (shift) {
+        // the window at its level: its copy in this eye, the other eye's the other way. The effects
+        // get it with the window's paint data, and blur follows a window that is moved by its level.
+        data.translate(shift / viewport.scale());
+        effectWindow->setData(WindowForceBlurRole, true);
+    }
+    const bool painted = effects->paintWindow(renderTarget, viewport, effectWindow, mask, deviceRegion, data);
+    if (shift) {
+        effectWindow->setData(WindowForceBlurRole, forceBlur);
+    }
+    return painted;
 }
 
 // the function that'll be eventually called by paintWindow() above
@@ -879,13 +894,6 @@ int WorkspaceScene::stereoParallax(const Window *window) const
 // will be eventually called from drawWindow()
 bool WorkspaceScene::finalDrawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data)
 {
-    if (const StereoEye eye = m_renderer->stereoEye(); eye != StereoEye::None) {
-        // the window at its level: its copy in this eye, the other eye's the other way
-        if (const int shift = StereoDepth::eyeShift(stereoParallax(w->window()), eye)) {
-            data.translate(shift / viewport.scale());
-        }
-    }
-
     // TODO: Reconsider how the CrossFadeEffect captures the initial window contents to remove
     // null pointer delegate checks
 
