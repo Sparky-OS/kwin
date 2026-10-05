@@ -8,6 +8,8 @@
 
 #include "effect/globals.h"
 
+#include <QPointF>
+
 namespace KWin
 {
 
@@ -39,6 +41,12 @@ public:
      * @a viewWidth pixels wide, positive when the window is nearer than the screen.
      */
     static int parallax(const Window *window, int viewWidth);
+
+    /**
+     * The parallax of the pointer at @a pos in the 2D geometry: that of the window under its hot
+     * spot, or of the window being moved or resized, and none over nothing.
+     */
+    static int pointerParallax(const QPointF &pos, int viewWidth);
 
     /**
      * How far @a eye's copy moves for @a parallax, to the right for the left eye when the window

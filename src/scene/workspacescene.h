@@ -12,6 +12,8 @@
 #include "core/renderviewport.h"
 #include "scene/scene.h"
 
+#include <QHash>
+
 namespace KWin
 {
 
@@ -116,6 +118,7 @@ protected:
     QList<WindowItem *> stacking_order;
 
 private:
+    void paintOverlay(const RenderTarget &renderTarget, const RenderViewport &viewport, const Region &deviceRegion);
     void repaintStereoDepth();
     bool stereoDepthPainted(const Window *window) const;
     int stereoParallax(const Window *window) const;
@@ -125,6 +128,7 @@ private:
     void updateCursor();
 
     const Window *m_depthWindow = nullptr;
+    QHash<LogicalOutput *, int> m_pointerParallax;
     PaintContext m_paintContext;
     std::unique_ptr<Item> m_containerItem;
     std::unique_ptr<Item> m_overlayItem;
