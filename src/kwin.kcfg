@@ -272,6 +272,16 @@
             <default>true</default>
         </entry>
     </group>
+    <group name="StereoDepth">
+        <entry name="SunkLimit" type="Double">
+            <default>10</default>
+            <min>0</min>
+        </entry>
+        <entry name="PoppedLimit" type="Double">
+            <default>4</default>
+            <min>0</min>
+        </entry>
+    </group>
     <group name="TabBox">
         <entry name="DelayTime" type="Int">
             <default>90</default>
