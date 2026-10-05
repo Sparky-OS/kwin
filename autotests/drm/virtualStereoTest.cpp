@@ -31,8 +31,8 @@ private Q_SLOTS:
         QTest::addColumn<int>("count");
         QTest::newRow("off") << false << false << 4;
         QTest::newRow("anaglyph") << true << false << 10;
-        QTest::newRow("other") << false << true << 22;
-        QTest::newRow("both") << true << true << 28;
+        QTest::newRow("other") << false << true << 16;
+        QTest::newRow("both") << true << true << 22;
     }
 
     void modes()
