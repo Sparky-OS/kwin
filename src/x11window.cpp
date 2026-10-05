@@ -2034,22 +2034,6 @@ xcb_window_t X11Window::window() const
     return m_client;
 }
 
-bool X11Window::hasChild(xcb_window_t window) const
-{
-    auto cookie = xcb_query_tree(kwinApp()->x11Connection(), m_client);
-    UniqueCPtr<xcb_query_tree_reply_t> tree(xcb_query_tree_reply(kwinApp()->x11Connection(), cookie, nullptr));
-    if (!tree) {
-        return false;
-    }
-    const xcb_window_t *children = xcb_query_tree_children(tree.get());
-    for (int i = 0; i < xcb_query_tree_children_length(tree.get()); i++) {
-        if (children[i] == window) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool X11Window::isStereoChild(xcb_window_t window) const
 {
     return std::ranges::find(m_stereoChildren, window) != m_stereoChildren.end();
@@ -2082,9 +2066,15 @@ void X11Window::updateStereoChildren()
             const uint32_t eventMask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
             xcb_change_window_attributes(kwinApp()->x11Connection(), child,
                                           XCB_CW_EVENT_MASK, &eventMask);
-            if (stereoChildren.contains(child)) {
+            if (stereoChildren.contains(child) && !m_declaredStereoChildren.contains(child)) {
                 xcb_composite_redirect_window(kwinApp()->x11Connection(), child,
                                                XCB_COMPOSITE_REDIRECT_MANUAL);
+                m_redirectedStereoChildren.insert(child);
+                xcb_unmap_window(kwinApp()->x11Connection(), child);
+                auto attributesCookie = xcb_get_window_attributes(kwinApp()->x11Connection(), child);
+                UniqueCPtr<xcb_get_window_attributes_reply_t> attributes(
+                    xcb_get_window_attributes_reply(kwinApp()->x11Connection(), attributesCookie, nullptr));
+                xcb_map_window(kwinApp()->x11Connection(), child);
             }
             SurfaceInterface *surface = nullptr;
             if (XwaylandShellV1Interface *shell = waylandServer()->xwaylandShell()) {
@@ -2105,12 +2095,20 @@ void X11Window::updateStereoChildren()
         if (std::ranges::find_if(children, [oldChild](const X11StereoChild &child) {
                 return child.window == oldChild;
             }) == children.end()) {
-            xcb_composite_unredirect_window(kwinApp()->x11Connection(), oldChild,
-                                             XCB_COMPOSITE_REDIRECT_AUTOMATIC);
             m_stereoChildSurfaces.erase(oldChild);
+            if (m_redirectedStereoChildren.erase(oldChild)) {
+                auto cookie = xcb_get_geometry(kwinApp()->x11Connection(), oldChild);
+                UniqueCPtr<xcb_get_geometry_reply_t> geometry(
+                    xcb_get_geometry_reply(kwinApp()->x11Connection(), cookie, nullptr));
+                if (geometry) {
+                    xcb_composite_unredirect_window(kwinApp()->x11Connection(), oldChild,
+                                                     XCB_COMPOSITE_REDIRECT_MANUAL);
+                }
+            }
         }
     }
     m_stereoChildren.clear();
+    m_declaredStereoChildren = stereoChildren;
     for (const X11StereoChild &child : children) {
         m_stereoChildren.push_back(child.window);
     }

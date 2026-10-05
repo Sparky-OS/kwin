@@ -29,6 +29,7 @@
 #include <xcb/sync.h>
 
 #include <unordered_map>
+#include <unordered_set>
 
 // TODO: Cleanup the order of things in this .h file
 
@@ -54,7 +55,6 @@ public:
     void associate(XwaylandSurfaceV1Interface *shellSurface);
 
     xcb_window_t window() const;
-    bool hasChild(xcb_window_t window) const;
     bool isStereoChild(xcb_window_t window) const;
     void associateStereoChild(xcb_window_t window, SurfaceInterface *surface);
     void updateStereoChildren();
@@ -441,6 +441,8 @@ private:
     quint64 m_surfaceSerial = 0;
     int m_inflightUnmaps = 0;
     std::vector<xcb_window_t> m_stereoChildren;
+    std::unordered_set<xcb_window_t> m_declaredStereoChildren;
+    std::unordered_set<xcb_window_t> m_redirectedStereoChildren;
     std::unordered_map<xcb_window_t, SurfaceInterface *> m_stereoChildSurfaces;
 };
 

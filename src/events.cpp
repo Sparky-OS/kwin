@@ -146,7 +146,7 @@ void Workspace::workspaceEvent(xcb_generic_event_t *e)
             const uint64_t serial = (uint64_t(clientMessage->data.data32[1]) << 32) | clientMessage->data.data32[0];
             if (XwaylandSurfaceV1Interface *surface = waylandServer()->xwaylandShell()->findSurface(serial)) {
                 if (X11Window *window = workspace()->findClient([eventWindow](const X11Window *candidate) {
-                        return candidate->hasChild(eventWindow);
+                        return candidate->isStereoChild(eventWindow);
                     })) {
                     window->associateStereoChild(eventWindow, surface->surface());
                     return;

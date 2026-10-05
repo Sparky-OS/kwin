@@ -368,32 +368,20 @@ bool WaylandServer::init()
     connect(m_xwaylandShell, &XwaylandShellV1Interface::surfaceAssociated, this, [](XwaylandSurfaceV1Interface *surface) {
         const uint64_t serial = surface->serial().value_or(0);
         X11Window *window = workspace()->findClient([serial](const X11Window *window) {
-            return window->surfaceSerial() == serial || window->isStereoChild(serial) || window->hasChild(serial);
+            return window->surfaceSerial() == serial;
         });
         if (window) {
-            if (window->surfaceSerial() == serial) {
-                window->associate(surface);
-            } else {
-                window->associateStereoChild(serial, surface->surface());
-            }
-            if (window->surfaceSerial() == serial) {
-                window->updateStereoChildren();
-            }
+            window->associate(surface);
+            window->updateStereoChildren();
             return;
         }
 
         X11Window *unmanaged = workspace()->findUnmanaged([serial](const X11Window *window) {
-            return window->surfaceSerial() == serial || window->isStereoChild(serial) || window->hasChild(serial);
+            return window->surfaceSerial() == serial;
         });
         if (unmanaged) {
-            if (unmanaged->surfaceSerial() == serial) {
-                unmanaged->associate(surface);
-            } else {
-                unmanaged->associateStereoChild(serial, surface->surface());
-            }
-            if (unmanaged->surfaceSerial() == serial) {
-                unmanaged->updateStereoChildren();
-            }
+            unmanaged->associate(surface);
+            unmanaged->updateStereoChildren();
             return;
         }
     });
