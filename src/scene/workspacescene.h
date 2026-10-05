@@ -115,11 +115,14 @@ protected:
 
 private:
     void repaintStereoDepth();
+    bool stereoDepthPainted(const Window *window) const;
     int stereoParallax(const Window *window) const;
+    bool drawStereoShadow(const RenderTarget &renderTarget, const RenderViewport &viewport, WindowItem *caster, int mask, const Region &deviceRegion, const WindowPaintData &data);
     void createDndIconItem();
     void destroyDndIconItem();
     void updateCursor();
 
+    const Window *m_depthWindow = nullptr;
     PaintContext m_paintContext;
     std::unique_ptr<Item> m_containerItem;
     std::unique_ptr<Item> m_overlayItem;

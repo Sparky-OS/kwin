@@ -71,6 +71,7 @@
 #include "scene/dndiconitem.h"
 #include "scene/itemrenderer.h"
 #include "scene/rootitem.h"
+#include "scene/shadowitem.h"
 #include "scene/stereodepth.h"
 #include "scene/surfaceitem.h"
 #include "scene/windowitem.h"
@@ -658,8 +659,8 @@ void WorkspaceScene::preparePaintSimpleScreen()
 
         effects->prePaintWindow(painted_delegate, windowItem->effectWindow(), data);
 
-        if (stereoParallax(window) != 0) {
-            // each eye shows the window at its own place
+        if (stereoDepthPainted(window)) {
+            // each eye shows the window at its own place, and its shadow at the places of what it falls on
             data.mask |= PAINT_WINDOW_TRANSFORMED;
         }
 
@@ -852,11 +853,16 @@ bool WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
     const StereoEye eye = renderer->stereoEye();
     const int parallax = eye == StereoEye::None ? 0 : stereoParallax(item->window());
     const int shift = StereoDepth::eyeShift(parallax, eye);
+    const bool depthPainted = eye != StereoEye::None && stereoDepthPainted(item->window());
+    if (depthPainted) {
+        m_depthWindow = item->window();
+        // blur follows a window that is moved by its level
+        effectWindow->setData(WindowForceBlurRole, true);
+    }
     if (shift) {
         // the window at its level: its copy in this eye, the other eye's the other way. The effects
-        // get it with the window's paint data, and blur follows a window that is moved by its level.
+        // get it with the window's paint data.
         data.translate(shift / viewport.scale());
-        effectWindow->setData(WindowForceBlurRole, true);
     }
     if (shift && item->window()->isDesktop()) {
         // a background behind the screen reaches past the edges of the output in both eyes: wider
@@ -867,7 +873,8 @@ bool WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
         data.translate(-extra / 2 / viewport.scale());
     }
     const bool painted = effects->paintWindow(renderTarget, viewport, effectWindow, mask, deviceRegion, data);
-    if (shift) {
+    if (depthPainted) {
+        m_depthWindow = nullptr;
         effectWindow->setData(WindowForceBlurRole, forceBlur);
     }
     return painted;
@@ -892,6 +899,11 @@ void WorkspaceScene::repaintStereoDepth()
     }
 }
 
+bool WorkspaceScene::stereoDepthPainted(const Window *window) const
+{
+    return stereoParallax(window) != 0 || (painted_screen && painted_screen->hasStereoEyes() && StereoDepth::isEnabled() && window->shadow());
+}
+
 int WorkspaceScene::stereoParallax(const Window *window) const
 {
     if (!painted_screen || !painted_screen->hasStereoEyes() || !StereoDepth::isEnabled()) {
@@ -900,15 +912,58 @@ int WorkspaceScene::stereoParallax(const Window *window) const
     return StereoDepth::parallax(window, painted_delegate->deviceRect().width());
 }
 
+// A shadow lies on what it falls on: drawn for each receiver, in the receiver's visible part, at the
+// receiver's shift, so over something at the screen's level it has no parallax and over something
+// sunk it has that thing's. The caster itself stays where its own level put it.
+bool WorkspaceScene::drawStereoShadow(const RenderTarget &renderTarget, const RenderViewport &viewport, WindowItem *caster, int mask, const Region &deviceRegion, const WindowPaintData &data)
+{
+    auto &renderer = m_renderers[painted_delegate ? painted_delegate->renderDevice() : Compositor::self()->primaryDevice()];
+    const StereoEye eye = renderer->stereoEye();
+    ShadowItem *shadow = caster->shadowItem();
+    const int casterShift = StereoDepth::eyeShift(stereoParallax(caster->window()), eye);
+    const auto drawOn = [&](const Region &part, int shift) {
+        WindowPaintData shadowData(data);
+        shadowData.translate((shift - casterShift) / viewport.scale());
+        return renderer->renderItem(renderTarget, viewport, caster, mask, part, shadowData, [this, caster, shadow](Item *item) {
+            return (item != caster && item != shadow) || (painted_delegate && !painted_delegate->shouldRenderItem(item));
+        }, [this](Item *item) {
+            return painted_delegate && painted_delegate->shouldRenderHole(item);
+        });
+    };
+
+    // from the top down, each window beneath the caster takes what is left of its place
+    Region open = deviceRegion;
+    for (int i = stacking_order.indexOf(caster) - 1; i >= 0 && !open.isEmpty(); --i) {
+        const Window *receiver = stacking_order[i]->window();
+        const int shift = StereoDepth::eyeShift(stereoParallax(receiver), eye);
+        const Region place = receiver->isDesktop() ? Region(painted_delegate->deviceRect())
+                                                   : Region(viewport.mapToDeviceCoordinatesAligned(receiver->frameGeometry())).translated(shift, 0);
+        if (open.intersects(place)) {
+            if (!drawOn(open.intersected(place), shift)) {
+                return false;
+            }
+            open = open.subtracted(place);
+        }
+    }
+    // what is left falls on nothing: the screen's level
+    return open.isEmpty() || drawOn(open, 0);
+}
+
 // will be eventually called from drawWindow()
 bool WorkspaceScene::finalDrawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data)
 {
+    WindowItem *windowItem = w->windowItem();
+    ShadowItem *shadow = windowItem->shadowItem();
+    const bool ownShadow = shadow && w->window() == m_depthWindow && shadow->isVisible();
+    if (ownShadow && !drawStereoShadow(renderTarget, viewport, windowItem, mask, deviceRegion, data)) {
+        return false;
+    }
     // TODO: Reconsider how the CrossFadeEffect captures the initial window contents to remove
     // null pointer delegate checks
 
     auto &renderer = m_renderers[painted_delegate ? painted_delegate->renderDevice() : Compositor::self()->primaryDevice()];
-    return renderer->renderItem(renderTarget, viewport, w->windowItem(), mask, deviceRegion, data, [this](Item *item) {
-        return painted_delegate && !painted_delegate->shouldRenderItem(item);
+    return renderer->renderItem(renderTarget, viewport, windowItem, mask, deviceRegion, data, [this, shadow, ownShadow](Item *item) {
+        return (ownShadow && item == shadow) || (painted_delegate && !painted_delegate->shouldRenderItem(item));
     }, [this](Item *item) {
         return painted_delegate && painted_delegate->shouldRenderHole(item);
     });
