@@ -148,6 +148,23 @@ int StereoDepth::parallax(const Window *window, int viewWidth)
     return std::lround(level * limit * viewWidth / s_referenceWidth);
 }
 
+int StereoDepth::pointerParallax(const QPointF &pos, int viewWidth)
+{
+    const Window *window = workspace()->moveResizeWindow();
+    if (!window) {
+        const QList<Window *> &stack = workspace()->stackingOrder();
+        for (auto it = stack.crbegin(); it != stack.crend(); ++it) {
+            const Window *candidate = *it;
+            if (candidate->isShown() && candidate->isOnCurrentDesktop() && candidate->isOnCurrentActivity()
+                && candidate->frameGeometry().contains(pos) && candidate->hitTest(pos)) {
+                window = candidate;
+                break;
+            }
+        }
+    }
+    return window ? parallax(window, viewWidth) : 0;
+}
+
 int StereoDepth::eyeShift(int parallax, StereoEye eye)
 {
     switch (eye) {

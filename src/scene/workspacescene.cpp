@@ -694,7 +694,15 @@ Region WorkspaceScene::collectDamage()
 
         if (painted_screen && painted_screen->hasStereoEyes() && StereoDepth::isEnabled()) {
             // what is damaged is drawn at its level in each eye, a little to either side
-            const int shift = StereoDepth::maxEyeShift(painted_delegate->deviceRect().width());
+            const int width = painted_delegate->deviceRect().width();
+            const int shift = StereoDepth::maxEyeShift(width);
+            // the pointer draws at the level of what is under it, which can change while it stays still
+            int &pointerParallax = m_pointerParallax[painted_screen];
+            const int parallax = StereoDepth::pointerParallax(Cursors::self()->currentCursor()->pos(), width);
+            if (parallax != pointerParallax) {
+                pointerParallax = parallax;
+                m_paintContext.deviceDamage |= mapToDevice(painted_delegate, m_cursorItem.get(), m_cursorItem->boundingRect());
+            }
             m_paintContext.deviceDamage = m_paintContext.deviceDamage.grownBy(QMargins(shift, 0, shift, 0));
         }
         return m_paintContext.deviceDamage & painted_delegate->deviceRect();
@@ -742,8 +750,26 @@ void WorkspaceScene::paintGenericScreen(const RenderTarget &renderTarget, const 
         paintWindow(renderTarget, viewport, paintData.item, paintData.mask, paintData.deviceRegion);
     }
 
-    const Rect bounds = viewport.mapToDeviceCoordinates(m_overlayItem->mapToScene(m_overlayItem->boundingRect())).toRect();
-    m_renderer->renderItem(renderTarget, viewport, m_overlayItem.get(), PAINT_SCREEN_TRANSFORMED, bounds, WindowPaintData{}, [this](Item *item) {
+    paintOverlay(renderTarget, viewport, Region::infinite());
+}
+
+// The pointer, and the drag-and-drop icon that follows it, at the level of what is under the pointer
+void WorkspaceScene::paintOverlay(const RenderTarget &renderTarget, const RenderViewport &viewport, const Region &deviceRegion)
+{
+    WindowPaintData data;
+    Rect bounds = viewport.mapToDeviceCoordinates(m_overlayItem->mapToScene(m_overlayItem->boundingRect())).toRect();
+    const StereoEye eye = m_renderer->stereoEye();
+    if (eye != StereoEye::None && painted_screen && painted_screen->hasStereoEyes() && StereoDepth::isEnabled()) {
+        const int width = painted_delegate->deviceRect().width();
+        const int shift = StereoDepth::eyeShift(StereoDepth::pointerParallax(Cursors::self()->currentCursor()->pos(), width), eye);
+        data.translate(shift / viewport.scale());
+        bounds.adjust(-StereoDepth::maxEyeShift(width), 0, StereoDepth::maxEyeShift(width), 0);
+    }
+    const Region deviceRepaint = deviceRegion & bounds;
+    if (deviceRepaint.isEmpty()) {
+        return;
+    }
+    m_renderer->renderItem(renderTarget, viewport, m_overlayItem.get(), PAINT_SCREEN_TRANSFORMED, deviceRepaint, data, [this](Item *item) {
         return !painted_delegate->shouldRenderItem(item);
     }, [this](Item *item) {
         return painted_delegate->shouldRenderHole(item);
@@ -779,15 +805,7 @@ void WorkspaceScene::paintSimpleScreen(const RenderTarget &renderTarget, const R
         paintWindow(renderTarget, viewport, paintData.item, paintData.mask, paintData.deviceRegion);
     }
 
-    const Rect bounds = viewport.mapToDeviceCoordinates(m_overlayItem->mapToScene(m_overlayItem->boundingRect())).toRect();
-    const Region deviceRepaint = deviceRegion & bounds;
-    if (!deviceRepaint.isEmpty()) {
-        m_renderer->renderItem(renderTarget, viewport, m_overlayItem.get(), PAINT_SCREEN_TRANSFORMED, deviceRepaint, WindowPaintData{}, [this](Item *item) {
-            return !painted_delegate->shouldRenderItem(item);
-        }, [this](Item *item) {
-            return painted_delegate->shouldRenderHole(item);
-        });
-    }
+    paintOverlay(renderTarget, viewport, deviceRegion);
 }
 
 void WorkspaceScene::createStackingOrder()
