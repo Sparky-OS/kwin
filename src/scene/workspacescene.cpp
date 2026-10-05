@@ -65,11 +65,13 @@
 #include "effect/effecthandler.h"
 #include "opengl/eglbackend.h"
 #include "opengl/eglcontext.h"
+#include "options.h"
 #include "scene/backgroundeffectitem.h"
 #include "scene/decorationitem.h"
 #include "scene/dndiconitem.h"
 #include "scene/itemrenderer.h"
 #include "scene/rootitem.h"
+#include "scene/stereodepth.h"
 #include "scene/surfaceitem.h"
 #include "scene/windowitem.h"
 #include "utils/envvar.h"
@@ -95,6 +97,18 @@ WorkspaceScene::WorkspaceScene()
     setGeometry(workspace()->geometry());
     connect(workspace(), &Workspace::geometryChanged, this, [this]() {
         setGeometry(workspace()->geometry());
+    });
+
+    // the levels of the stereo depth follow what is active, stacked and shown
+    connect(options, &Options::stereoDepthChanged, this, &WorkspaceScene::addRepaintFull);
+    connect(workspace(), &Workspace::windowActivated, this, &WorkspaceScene::addRepaintFull);
+    connect(workspace(), &Workspace::stackingOrderChanged, this, &WorkspaceScene::addRepaintFull);
+    connect(workspace(), &Workspace::windowRemoved, this, &WorkspaceScene::addRepaintFull);
+    connect(workspace(), &Workspace::currentDesktopChanged, this, &WorkspaceScene::addRepaintFull);
+    connect(workspace(), &Workspace::windowAdded, this, [this](Window *window) {
+        connect(window, &Window::minimizedChanged, this, &WorkspaceScene::addRepaintFull);
+        connect(window, &Window::transientChanged, this, &WorkspaceScene::addRepaintFull);
+        connect(window, &Window::fullScreenChanged, this, &WorkspaceScene::addRepaintFull);
     });
 
     connect(waylandServer()->seat(), &SeatInterface::dragStarted, this, &WorkspaceScene::createDndIconItem);
@@ -627,6 +641,11 @@ void WorkspaceScene::preparePaintSimpleScreen()
 
         effects->prePaintWindow(painted_delegate, windowItem->effectWindow(), data);
 
+        if (stereoParallax(window) != 0) {
+            // each eye shows the window at its own place
+            data.mask |= PAINT_WINDOW_TRANSFORMED;
+        }
+
         Region opaque;
         if (window->opacity() == 1.0 && !(data.mask & PAINT_WINDOW_TRANSLUCENT)) {
             addOpaqueRegionRecursive(painted_delegate, windowItem, std::nullopt, opaque);
@@ -670,6 +689,11 @@ Region WorkspaceScene::collectDamage()
             }
         }
 
+        if (painted_screen && painted_screen->hasStereoEyes() && StereoDepth::isEnabled()) {
+            // what is damaged is drawn at its level in each eye, a little to either side
+            const int shift = StereoDepth::maxEyeShift(painted_delegate->deviceRect().width());
+            m_paintContext.deviceDamage = m_paintContext.deviceDamage.grownBy(QMargins(shift, 0, shift, 0));
+        }
         return m_paintContext.deviceDamage & painted_delegate->deviceRect();
     }
 }
@@ -802,9 +826,24 @@ void WorkspaceScene::finalPaintWindow(const RenderTarget &renderTarget, const Re
     effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
+int WorkspaceScene::stereoParallax(const Window *window) const
+{
+    if (!painted_screen || !painted_screen->hasStereoEyes() || !StereoDepth::isEnabled()) {
+        return 0;
+    }
+    return StereoDepth::parallax(window, painted_delegate->deviceRect().width());
+}
+
 // will be eventually called from drawWindow()
 void WorkspaceScene::finalDrawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data)
 {
+    if (const StereoEye eye = m_renderer->stereoEye(); eye != StereoEye::None) {
+        // the window at its level: its copy in this eye, the other eye's the other way
+        if (const int shift = StereoDepth::eyeShift(stereoParallax(w->window()), eye)) {
+            data.translate(shift / viewport.scale());
+        }
+    }
+
     // TODO: Reconsider how the CrossFadeEffect captures the initial window contents to remove
     // null pointer delegate checks in "should render item" and "should render hole" checks.
     m_renderer->renderItem(renderTarget, viewport, w->windowItem(), mask, deviceRegion, data, [this](Item *item) {
