@@ -35,8 +35,8 @@ inline StereoEye operator!(StereoEye eye)
 class FrameSequentialScheduler
 {
 public:
-    explicit FrameSequentialScheduler(StereoLayout layout = StereoLayout::SequentialLeftFirst)
-        : m_leftFirst(layout != StereoLayout::SequentialRightFirst)
+    explicit FrameSequentialScheduler(StereoLayout = StereoLayout::SequentialLeftFirst, bool eyeSwap = false)
+        : m_leftFirst(!eyeSwap)
     {
     }
 
@@ -59,6 +59,16 @@ public:
     StereoEye firstEye() const
     {
         return m_leftFirst ? StereoEye::Left : StereoEye::Right;
+    }
+
+    void setEyeSwap(bool eyeSwap)
+    {
+        const bool leftFirst = !eyeSwap;
+        if (m_leftFirst == leftFirst) {
+            return;
+        }
+        m_leftFirst = leftFirst;
+        reset();
     }
 
     /**

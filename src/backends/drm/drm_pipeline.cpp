@@ -271,6 +271,7 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
     } else if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         const drmModeModeInfo &mode = *m_pending.mode->nativeMode();
         if (isFrameSequential(stereoLayout)) {
+            m_frameSequentialScheduler.setEyeSwap(m_output && m_output->stereoEyeSwap());
             const StereoEye eye = m_frameSequentialScheduler.nextEye();
             commit->setFrameSequentialEye(this, eye);
             sourceRect = frameSequentialSourceRect(mode, eye);
@@ -538,7 +539,7 @@ void DrmPipeline::applyPendingChanges()
     const StereoLayout oldLayout = m_next.mode ? stereoLayoutForMode(m_next.mode->flags()) : StereoLayout::None;
     const StereoLayout newLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
     if (oldLayout != newLayout) {
-        m_frameSequentialScheduler = FrameSequentialScheduler(newLayout);
+        m_frameSequentialScheduler = FrameSequentialScheduler(newLayout, m_output && m_output->stereoEyeSwap());
     }
     m_next = m_pending;
     m_commitThread->setModeInfo(m_pending.mode->refreshRate(), m_pending.mode->vblankTime());
@@ -594,7 +595,7 @@ bool DrmPipeline::frameSequentialNeedsNewFrame() const
     if (!isFrameSequential(layout)) {
         return true;
     }
-    return m_frameSequentialScheduler.nextEye() == (layout == StereoLayout::SequentialRightFirst ? StereoEye::Right : StereoEye::Left);
+    return m_frameSequentialScheduler.nextEye() == m_frameSequentialScheduler.firstEye();
 }
 
 void DrmPipeline::setOutput(DrmOutput *output)
@@ -700,7 +701,7 @@ void DrmPipeline::setMode(const std::shared_ptr<DrmConnectorMode> &mode)
     const StereoLayout oldLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
     const StereoLayout newLayout = mode ? stereoLayoutForMode(mode->flags()) : StereoLayout::None;
     if (oldLayout != newLayout) {
-        m_frameSequentialScheduler = FrameSequentialScheduler(newLayout);
+        m_frameSequentialScheduler = FrameSequentialScheduler(newLayout, m_output && m_output->stereoEyeSwap());
     }
     m_pending.mode = mode;
 }

@@ -17,7 +17,7 @@ static constexpr uint32_t s_version = 1;
 
 static constexpr StereoContent toStereoContent(uint32_t content)
 {
-    return content <= StereoContentTopAndBottomFullRightFirst ? StereoContent(content) : StereoContentNone;
+    return content == StereoContentSideBySideFull ? StereoContentSideBySideFull : StereoContentNone;
 }
 
 StereoContentManagerV1::StereoContentManagerV1(Display *display, QObject *parent)

@@ -355,6 +355,7 @@ public:
 
     bool anaglyph() const;
     bool otherStereoFormats() const;
+    bool stereoEyeSwap() const;
     uint32_t abmLevel() const;
 
 Q_SIGNALS:
@@ -429,6 +430,7 @@ Q_SIGNALS:
     void hdrIccProfilePathChanged();
     void hdrColorProfileSourceChanged();
     void stereoFormatsChanged();
+    void stereoEyeSwapChanged();
     void abmLevelChanged();
 
 protected:
@@ -523,6 +525,7 @@ protected:
         uint32_t abmLevel = 0;
         bool anaglyph = false;
         bool otherStereoFormats = false;
+        bool stereoEyeSwap = false;
     };
 
     void setInformation(const Information &information);

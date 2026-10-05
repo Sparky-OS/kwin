@@ -3880,22 +3880,22 @@ void X11WindowTest::testStereoContentDeclaration()
     QCOMPARE(supportReply->value_len, 1u);
     QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 2u);
 
-    const uint32_t value = StereoContentSideBySideHalf;
+    const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
         xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
                             XCB_ATOM_CARDINAL, 32, 1, &value);
     });
     QVERIFY(window);
-    QCOMPARE(window->stereoContent(), StereoContentSideBySideHalf);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
 
     // changing the property updates the content
     QSignalSpy stereoContentChangedSpy(window, &Window::stereoContentChanged);
-    const uint32_t full = StereoContentTopAndBottomFullRightFirst;
+    const uint32_t full = StereoContentSideBySideFull;
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
                         XCB_ATOM_CARDINAL, 32, 1, &full);
     xcb_flush(c.get());
     QVERIFY(stereoContentChangedSpy.wait());
-    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomFullRightFirst);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
 
     // an unknown value is no stereo content
     const uint32_t invalid = 42;
@@ -3906,12 +3906,12 @@ void X11WindowTest::testStereoContentDeclaration()
     QCOMPARE(window->stereoContent(), StereoContentNone);
 
     // removing the property undeclares the content
-    const uint32_t again = StereoContentSideBySideHalfRightFirst;
+    const uint32_t again = StereoContentSideBySideFull;
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
                         XCB_ATOM_CARDINAL, 32, 1, &again);
     xcb_flush(c.get());
     QVERIFY(stereoContentChangedSpy.wait());
-    QCOMPARE(window->stereoContent(), StereoContentSideBySideHalfRightFirst);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
     xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content);
     xcb_flush(c.get());
     QVERIFY(stereoContentChangedSpy.wait());
@@ -4008,7 +4008,7 @@ void X11WindowTest::testStereoContentDeclarationMalformed()
     ok(StereoContentNone);
     const uint32_t two[2] = {7, 3};
     set(XCB_ATOM_CARDINAL, 32, 2, two); // long: first value used
-    ok(StereoContentTopAndBottomFull);
+    ok(StereoContentNone);
     const uint32_t big = 0xFFFFFFFFu;
     set(XCB_ATOM_CARDINAL, 32, 1, &big);
     ok(StereoContentNone);
@@ -4021,7 +4021,7 @@ void X11WindowTest::testStereoContentDeclarationRulePrecedence()
     KSharedConfig::Ptr config = KSharedConfig::openConfig(QString(), KConfig::SimpleConfig);
     config->group(QStringLiteral("General")).writeEntry("rules", QStringList({QStringLiteral("stereo-rule")}));
     auto group = config->group(QStringLiteral("stereo-rule"));
-    group.writeEntry("stereo3d", "tab-half");
+    group.writeEntry("stereo3d", "sbs-full");
     group.writeEntry("stereo3drule", 2);
     group.writeEntry("wmclass", "stereorule");
     group.writeEntry("wmclasscomplete", false);
@@ -4039,16 +4039,16 @@ void X11WindowTest::testStereoContentDeclarationRulePrecedence()
     });
     QVERIFY(window);
     QCOMPARE(window->declaredStereoContent(), StereoContentSideBySideFull);
-    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomHalf); // rule wins
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull); // rule wins
 
     // the declaration changes under the rule: still the rule
-    const uint32_t other = StereoContentSideBySideHalf;
+    const uint32_t other = StereoContentSideBySideFull;
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content, XCB_ATOM_CARDINAL, 32, 1, &other);
     xcb_flush(c.get());
     xcb_get_input_focus_reply(c.get(), xcb_get_input_focus(c.get()), nullptr);
     QTest::qWait(100);
-    QCOMPARE(window->declaredStereoContent(), StereoContentSideBySideHalf);
-    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomHalf);
+    QCOMPARE(window->declaredStereoContent(), StereoContentSideBySideFull);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
 
     workspace()->rulebook()->setConfig(KSharedConfig::openConfig(QString(), KConfig::SimpleConfig));
     workspace()->slotReconfigure();

@@ -84,6 +84,7 @@ protected:
     void kde_output_configuration_v2_set_hdr_color_profile_source(Resource *resource, ::wl_resource *outputdevice, uint32_t color_profile_source) override;
     void kde_output_configuration_v2_set_stereo_formats(Resource *resource, wl_resource *outputdevice, uint32_t anaglyph, uint32_t otherStereoFormats) override;
     void kde_output_configuration_v2_set_stereo_pair(Resource *resource, wl_resource *outputdevice, wl_resource *partner, uint32_t mode, uint32_t role, uint32_t reflection) override;
+    void kde_output_configuration_v2_set_stereo_eye_swap(Resource *resource, wl_resource *outputdevice, uint32_t enabled) override;
     void kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level) override;
 
     void sendFailure(Resource *resource, const QString &reason);
@@ -606,6 +607,20 @@ void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_pair
     change->stereoPairMode = static_cast<StereoPairMode>(mode);
     change->stereoPairRole = static_cast<StereoPairRole>(role);
     change->stereoPairReflection = static_cast<StereoPairReflection>(reflection);
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_eye_swap(Resource *resource, wl_resource *outputdevice, uint32_t enabled)
+{
+    if (invalid) {
+        return;
+    }
+    if (enabled > 1) {
+        failureReason = i18n("Invalid stereo eye order value");
+        return;
+    }
+    if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
+        config.changeSet(output->handle())->stereoEyeSwap = bool(enabled);
+    }
 }
 
 void OutputConfigurationV2Interface::kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level)

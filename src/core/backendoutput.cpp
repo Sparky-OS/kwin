@@ -358,6 +358,7 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.rgbRange = props->rgbRange.value_or(m_state.rgbRange);
     next.anaglyph = props->anaglyph.value_or(m_state.anaglyph);
     next.otherStereoFormats = props->otherStereoFormats.value_or(m_state.otherStereoFormats);
+    next.stereoEyeSwap = props->stereoEyeSwap.value_or(m_state.stereoEyeSwap);
     next.autoRotatePolicy = props->autoRotationPolicy.value_or(m_state.autoRotatePolicy);
     next.iccProfilePath = props->iccProfilePath.value_or(m_state.iccProfilePath);
     if (props->iccProfilePath) {
@@ -525,6 +526,9 @@ void BackendOutput::setState(const State &state)
     }
     if (oldState.anaglyph != state.anaglyph || oldState.otherStereoFormats != state.otherStereoFormats) {
         Q_EMIT stereoFormatsChanged();
+    }
+    if (oldState.stereoEyeSwap != state.stereoEyeSwap) {
+        Q_EMIT stereoEyeSwapChanged();
     }
     if (oldState.abmLevel != state.abmLevel) {
         Q_EMIT abmLevelChanged();
@@ -887,6 +891,11 @@ bool BackendOutput::anaglyph() const
 bool BackendOutput::otherStereoFormats() const
 {
     return m_state.otherStereoFormats;
+}
+
+bool BackendOutput::stereoEyeSwap() const
+{
+    return m_state.stereoEyeSwap;
 }
 
 uint32_t BackendOutput::abmLevel() const

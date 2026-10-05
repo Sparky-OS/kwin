@@ -16,8 +16,7 @@
         If the capture contains a declared stereo window or an output in a 3D mode,
         the raw result is full-resolution side by side: it is twice as wide as one
         view, with the left eye in the left half and the right eye in the right half.
-        Both eyes have the same scale. JPS writers swap the halves to follow the JPS
-        right-eye-first convention.
+        Both eyes have the same scale.
     -->
     <interface name="org.kde.KWin.ScreenShot2">
         <!--

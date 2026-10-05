@@ -21,11 +21,6 @@ private Q_SLOTS:
         QCOMPARE(leftFirst.eyeForSequence(105), StereoEye::Right);
         QCOMPARE(leftFirst.eyeForSequence(106), StereoEye::Left);
 
-        FrameSequentialScheduler rightFirst(StereoLayout::SequentialRightFirst);
-        rightFirst.reset(100);
-        QCOMPARE(rightFirst.eyeForSequence(100), StereoEye::Right);
-        QCOMPARE(rightFirst.eyeForSequence(101), StereoEye::Left);
-
         // unsigned wrap: 0xFFFFFFFE is two refreshes before 0
         leftFirst.reset(0xFFFFFFFE);
         QCOMPARE(leftFirst.eyeForSequence(0xFFFFFFFE), StereoEye::Left);
@@ -161,10 +156,6 @@ private Q_SLOTS:
         QCOMPARE(scheduler.nextEye(), StereoEye::Left);
         QCOMPARE(scheduler.firstEye(), StereoEye::Left);
 
-        FrameSequentialScheduler rightFirst(StereoLayout::SequentialRightFirst);
-        rightFirst.reset(100);
-        QCOMPARE(rightFirst.firstEye(), StereoEye::Right);
-        QCOMPARE(rightFirst.nextEye(), StereoEye::Right);
     }
 };
 

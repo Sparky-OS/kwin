@@ -36,18 +36,15 @@ enum class StereoLayout {
     AnaglyphCrt,
     AnaglyphModern,
     RowsLeftFirst,
-    RowsRightFirst,
     ColumnsLeftFirst,
-    ColumnsRightFirst,
     CheckerboardLeftFirst,
-    CheckerboardRightFirst,
     SequentialLeftFirst,
-    SequentialRightFirst,
 };
 
 inline bool isSpatialStereo(StereoLayout layout)
 {
-    return layout >= StereoLayout::RowsLeftFirst && layout <= StereoLayout::CheckerboardRightFirst;
+    return layout == StereoLayout::RowsLeftFirst || layout == StereoLayout::ColumnsLeftFirst
+        || layout == StereoLayout::CheckerboardLeftFirst;
 }
 
 inline bool isAnaglyph(StereoLayout layout)
@@ -58,7 +55,7 @@ inline bool isAnaglyph(StereoLayout layout)
 // each refresh shows one eye, alternately; the eye is tied to the vblank sequence, see drm_frame_sequential.h
 inline bool isFrameSequential(StereoLayout layout)
 {
-    return layout == StereoLayout::SequentialLeftFirst || layout == StereoLayout::SequentialRightFirst;
+    return layout == StereoLayout::SequentialLeftFirst;
 }
 
 /**
@@ -93,29 +90,16 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
     if (flags & OutputModeline::Flag::Stereo3DRowsLeftFirst) {
         return StereoLayout::RowsLeftFirst;
     }
-    if (flags & OutputModeline::Flag::Stereo3DRowsRightFirst) {
-        return StereoLayout::RowsRightFirst;
-    }
     if (flags & OutputModeline::Flag::Stereo3DColumnsLeftFirst) {
         return StereoLayout::ColumnsLeftFirst;
     }
-    if (flags & OutputModeline::Flag::Stereo3DColumnsRightFirst) {
-        return StereoLayout::ColumnsRightFirst;
-    }
     if (flags & OutputModeline::Flag::Stereo3DCheckerboardLeftFirst) {
         return StereoLayout::CheckerboardLeftFirst;
-    }
-    if (flags & OutputModeline::Flag::Stereo3DCheckerboardRightFirst) {
-        return StereoLayout::CheckerboardRightFirst;
     }
 
     if (flags & OutputModeline::Flag::Stereo3DSequentialLeftFirst) {
         return StereoLayout::SequentialLeftFirst;
     }
-    if (flags & OutputModeline::Flag::Stereo3DSequentialRightFirst) {
-        return StereoLayout::SequentialRightFirst;
-    }
-
     if (flags & OutputModeline::Flag::Stereo3DSideBySideHalf) {
         return StereoLayout::SideBySideHalf;
     }
@@ -141,7 +125,7 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
 inline bool isFullFrameStereo(StereoLayout layout)
 {
     return layout == StereoLayout::FramePacking || layout == StereoLayout::SideBySideFull
-        || layout == StereoLayout::SequentialLeftFirst || layout == StereoLayout::SequentialRightFirst;
+        || layout == StereoLayout::SequentialLeftFirst;
 }
 
 inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
@@ -151,7 +135,6 @@ inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
         return QSize(mode.hdisplay, mode.vtotal + mode.vdisplay);
     case StereoLayout::SideBySideFull:
     case StereoLayout::SequentialLeftFirst:
-    case StereoLayout::SequentialRightFirst:
         return QSize(2 * mode.hdisplay, mode.vdisplay);
     default:
         return QSize(mode.hdisplay, mode.vdisplay);

@@ -71,9 +71,9 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::doBeginFrame()
     const StereoLayout stereoLayout = drmOutput()->activeStereoLayout();
     if (m_type == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         const drmModeModeInfo *mode = pipeline()->mode()->nativeMode();
-        m_surface.setStereoLayout(stereoLayout, QSize(mode->hdisplay, mode->vdisplay), stereoRightEyeOffset(*mode, stereoLayout));
+        m_surface.setStereoLayout(stereoLayout, QSize(mode->hdisplay, mode->vdisplay), stereoRightEyeOffset(*mode, stereoLayout), drmOutput()->stereoEyeSwap());
     } else {
-        m_surface.setStereoLayout(stereoLayout);
+        m_surface.setStereoLayout(stereoLayout, QSize(), QPoint(), drmOutput()->stereoEyeSwap());
     }
     m_surface.setStereoPair(drmOutput()->isStereoPair() ? drmOutput()->stereoPairMode() : StereoPairMode::None,
                             drmOutput()->stereoPairRole());

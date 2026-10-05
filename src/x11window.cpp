@@ -3122,16 +3122,10 @@ void X11Window::handleXwaylandScaleChanged()
 // takes pointer input in it, at one view's size, so the pointer lands in the left view.
 QSizeF X11Window::stereoClientScale() const
 {
-    switch (stereoContent()) {
-    case StereoContentSideBySideFull:
-    case StereoContentSideBySideFullRightFirst:
+    if (stereoContent() == StereoContentSideBySideFull) {
         return QSizeF(2, 1);
-    case StereoContentTopAndBottomFull:
-    case StereoContentTopAndBottomFullRightFirst:
-        return QSizeF(1, 2);
-    default:
-        return QSizeF(1, 1);
     }
+    return QSizeF(1, 1);
 }
 
 // The units of a program's own sizes against its place on screen: one view for a program
@@ -4218,11 +4212,9 @@ Xcb::Property X11Window::fetchStereoContent() const
 void X11Window::readStereoContent(Xcb::Property &property)
 {
     // _KDE_NET_WM_STEREO_CONTENT: CARDINAL/32, one value of the StereoContent
-    // enum (0 none, 1 sbs half, 2 sbs half right first, 3 sbs full,
-    // 4 sbs full right first, 5 tab half, 6 tab half right first, 7 tab full,
-    // 8 tab full right first); absent, malformed or out of range means none.
+    // enum (0 none, 3 sbs full); absent, malformed or out of range means none.
     const uint32_t value = property.value<uint32_t>().value_or(StereoContentNone);
-    setDeclaredStereoContent(value <= StereoContentTopAndBottomFullRightFirst ? StereoContent(value) : StereoContentNone);
+    setDeclaredStereoContent(value == StereoContentSideBySideFull ? StereoContentSideBySideFull : StereoContentNone);
 }
 
 void X11Window::getStereoContent()

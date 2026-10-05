@@ -65,8 +65,8 @@ public:
      * In 3D the shadow buffer holds the desktop once, and endRendering() draws it into
      * both eyes of the scanout buffer; needs the shadow buffer (DrmOutput::needsShadowBuffer).
      */
-    void setStereoLayout(StereoLayout layout, const QSize &eyeSize = QSize(), const QPoint &rightEyeOffset = QPoint());
     void setStereoPair(StereoPairMode mode, StereoPairRole role);
+    void setStereoLayout(StereoLayout layout, const QSize &eyeSize = QSize(), const QPoint &rightEyeOffset = QPoint(), bool eyeSwap = false);
     /**
      * With stereo content the scene is rendered once per eye: the shadow buffer from
      * startRendering() holds the left eye, this one the right eye. Call it between
@@ -158,6 +158,7 @@ private:
     QPoint m_rightEyeOffset;
     StereoPairMode m_stereoPairMode = StereoPairMode::None;
     StereoPairRole m_stereoPairRole = StereoPairRole::Left;
+    bool m_eyeSwap = false;
     const BufferTarget m_requestedBufferTarget;
 };
 

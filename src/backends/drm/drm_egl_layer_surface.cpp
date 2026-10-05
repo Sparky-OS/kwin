@@ -292,8 +292,10 @@ bool EglGbmLayerSurface::drawAnaglyph(const QSize &fboSize, const Region &repain
     shader->setColorspaceUniforms(m_surface->blendingColor, m_surface->layerBlendingColor, RenderingIntent::AbsoluteColorimetricNoAdaptation);
     // the right eye's own picture when the scene was rendered once per eye, else the one desktop
     const std::shared_ptr<GLTexture> rightEye = m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : nullptr;
+    const std::shared_ptr<GLTexture> leftTexture = m_eyeSwap && rightEye ? rightEye : m_surface->currentShadowSlot->texture();
+    const std::shared_ptr<GLTexture> rightTexture = m_eyeSwap && rightEye ? m_surface->currentShadowSlot->texture() : rightEye;
     shader->setUniform("leftEye", 0);
-    shader->setUniform("rightEye", rightEye ? 1 : 0);
+    shader->setUniform("rightEye", rightTexture ? 1 : 0);
     shader->setUniform("leftMatrix", duboisMatrix(m_stereoLayout, true));
     shader->setUniform("rightMatrix", duboisMatrix(m_stereoLayout, false));
     QMatrix4x4 mat;
@@ -301,17 +303,17 @@ bool EglGbmLayerSurface::drawAnaglyph(const QSize &fboSize, const Region &repain
     mat.ortho(QRectF(QPointF(), fboSize));
     shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
     if (const auto vbo = uploadGeometry(repaint, m_surface->gbmSwapchain->size())) {
-        if (rightEye) {
+        if (rightTexture) {
             glActiveTexture(GL_TEXTURE1);
-            rightEye->bind();
+            rightTexture->bind();
             glActiveTexture(GL_TEXTURE0);
         }
-        m_surface->currentShadowSlot->texture()->bind();
+        leftTexture->bind();
         vbo->render(GL_TRIANGLES);
-        m_surface->currentShadowSlot->texture()->unbind();
-        if (rightEye) {
+        leftTexture->unbind();
+        if (rightTexture) {
             glActiveTexture(GL_TEXTURE1);
-            rightEye->unbind();
+            rightTexture->unbind();
             glActiveTexture(GL_TEXTURE0);
         }
     }
@@ -338,8 +340,8 @@ bool EglGbmLayerSurface::drawStereoPattern(const QSize &fboSize, const Region &r
     shader->setUniform("leftEye", 0);
     shader->setUniform("rightEye", rightEye ? 1 : 0);
     const int layout = int(m_stereoLayout) - int(StereoLayout::RowsLeftFirst);
-    shader->setUniform("pattern", layout / 2);
-    shader->setUniform("rightFirst", layout % 2);
+    shader->setUniform("pattern", layout);
+    shader->setUniform("eyeSwap", m_eyeSwap);
     shader->setUniform("outputHeight", fboSize.height());
     QMatrix4x4 mat;
     mat.scale(1, -1);
@@ -424,14 +426,15 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayerSurface::startRightEye()
     };
 }
 
-void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSize, const QPoint &rightEyeOffset)
+void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSize, const QPoint &rightEyeOffset, bool eyeSwap)
 {
-    if ((layout != m_stereoLayout || eyeSize != m_eyeSize || rightEyeOffset != m_rightEyeOffset) && m_surface) {
+    if ((layout != m_stereoLayout || eyeSize != m_eyeSize || rightEyeOffset != m_rightEyeOffset || eyeSwap != m_eyeSwap) && m_surface) {
         m_surface->damageJournal.clear();
     }
     m_stereoLayout = layout;
     m_eyeSize = eyeSize;
     m_rightEyeOffset = rightEyeOffset;
+    m_eyeSwap = eyeSwap;
 }
 
 void EglGbmLayerSurface::setStereoPair(StereoPairMode mode, StereoPairRole role)
@@ -500,7 +503,6 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             switch (m_stereoLayout) {
             case StereoLayout::SideBySideHalf:
             case StereoLayout::SequentialLeftFirst:
-            case StereoLayout::SequentialRightFirst:
             case StereoLayout::SideBySideFull:
                 deviceEyes = {Rect(0, 0, w / 2, h), Rect(w / 2, 0, w - w / 2, h)};
                 break;
@@ -516,8 +518,8 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             const std::array<RectF, 2> fboEyes{RectF(mapping.map(deviceEyes[0], rotatedSize)), RectF(mapping.map(deviceEyes[1], rotatedSize))};
             // each eye from its own shadow buffer when the scene was rendered once per eye
             const std::array<std::shared_ptr<GLTexture>, 2> eyeTextures{
-                m_surface->currentShadowSlot->texture(),
-                m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : m_surface->currentShadowSlot->texture(),
+                m_eyeSwap && m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : m_surface->currentShadowSlot->texture(),
+                m_eyeSwap ? m_surface->currentShadowSlot->texture() : (m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : m_surface->currentShadowSlot->texture()),
             };
             for (size_t eye = 0; eye < fboEyes.size(); ++eye) {
                 if (const auto vbo = uploadStereoGeometry(std::span(&fboEyes[eye], 1))) {

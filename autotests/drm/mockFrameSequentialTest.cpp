@@ -92,7 +92,6 @@ void MockFrameSequentialTest::testScanout_data()
     QTest::addColumn<OutputModeline::Flag>("layout");
     QTest::addColumn<StereoEye>("firstEye");
     QTest::addRow("left first") << OutputModeline::Flag::Stereo3DSequentialLeftFirst << StereoEye::Left;
-    QTest::addRow("right first") << OutputModeline::Flag::Stereo3DSequentialRightFirst << StereoEye::Right;
 }
 
 void MockFrameSequentialTest::testScanout()

@@ -128,15 +128,11 @@ public:
         Stereo3DAnaglyphModern = 0x200,
         Stereo3DAnaglyphCrt = 0x400,
         Stereo3DRowsLeftFirst = 0x800,
-        Stereo3DRowsRightFirst = 0x1000,
         Stereo3DColumnsLeftFirst = 0x2000,
-        Stereo3DColumnsRightFirst = 0x4000,
         Stereo3DCheckerboardLeftFirst = 0x8000,
-        Stereo3DCheckerboardRightFirst = 0x10000,
         VirtualStereo = 0x20000,
         // one eye per refresh of the base timing, alternating; twins of 2D modes at 100 Hz or more
         Stereo3DSequentialLeftFirst = 0x40000,
-        Stereo3DSequentialRightFirst = 0x80000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -147,13 +143,9 @@ public:
         | Flag::Stereo3DAnaglyphModern
         | Flag::Stereo3DAnaglyphCrt
         | Flag::Stereo3DRowsLeftFirst
-        | Flag::Stereo3DRowsRightFirst
         | Flag::Stereo3DColumnsLeftFirst
-        | Flag::Stereo3DColumnsRightFirst
         | Flag::Stereo3DCheckerboardLeftFirst
-        | Flag::Stereo3DCheckerboardRightFirst
-        | Flag::Stereo3DSequentialLeftFirst
-        | Flag::Stereo3DSequentialRightFirst;
+        | Flag::Stereo3DSequentialLeftFirst;
 
     OutputModeline();
     OutputModeline(const QSize &size, uint32_t refreshRate, Flags flags = {});

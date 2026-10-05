@@ -221,6 +221,7 @@ public:
     void sendHdrColorProfileSource(Resource *resource);
     void sendStereoFormats(Resource *resource);
     void sendStereoPair(Resource *resource);
+    void sendStereoEyeSwap(Resource *resource);
     void sendAbmLevel(Resource *resource);
 
     OutputDeviceV2Interface *q;
@@ -274,6 +275,7 @@ public:
     color_profile_source m_hdrColorProfile = color_profile_source::color_profile_source_EDID;
     bool m_anaglyph = false;
     bool m_otherStereoFormats = false;
+    bool m_stereoEyeSwap = false;
     uint32_t m_abmLevel = 0;
 
 protected:
@@ -367,6 +369,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     updateAbmLevel();
     updateStereoFormats();
     updateStereoPair();
+    updateStereoEyeSwap();
 
     connect(handle, &BackendOutput::positionChanged,
             this, &OutputDeviceV2Interface::updateGlobalPosition);
@@ -412,6 +415,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     connect(handle, &BackendOutput::hdrColorProfileSourceChanged, this, &OutputDeviceV2Interface::updateHdrColorProfileSource);
     connect(handle, &BackendOutput::stereoFormatsChanged, this, &OutputDeviceV2Interface::updateStereoFormats);
     connect(handle, &BackendOutput::stereoPairChanged, this, &OutputDeviceV2Interface::updateStereoPair);
+    connect(handle, &BackendOutput::stereoEyeSwapChanged, this, &OutputDeviceV2Interface::updateStereoEyeSwap);
     connect(handle, &BackendOutput::abmLevelChanged, this, &OutputDeviceV2Interface::updateAbmLevel);
 
     // Delay the done event to batch property updates.
@@ -511,6 +515,7 @@ void OutputDeviceV2InterfacePrivate::kde_output_device_v2_bind_resource(Resource
     sendAbmLevel(resource);
     sendStereoFormats(resource);
     sendStereoPair(resource);
+    sendStereoEyeSwap(resource);
     if (!m_uuid.isEmpty()) {
         sendDone(resource);
     }
@@ -1317,6 +1322,13 @@ void OutputDeviceV2Interface::updateStereoPair()
     scheduleDone();
 }
 
+void OutputDeviceV2InterfacePrivate::sendStereoEyeSwap(Resource *resource)
+{
+    if (resource->version() >= KDE_OUTPUT_DEVICE_V2_STEREO_EYE_SWAP_SINCE_VERSION) {
+        send_stereo_eye_swap(resource->handle, m_stereoEyeSwap);
+    }
+}
+
 void OutputDeviceV2Interface::updateStereoFormats()
 {
     if (d->m_anaglyph != d->m_handle->anaglyph() || d->m_otherStereoFormats != d->m_handle->otherStereoFormats()) {
@@ -1325,6 +1337,18 @@ void OutputDeviceV2Interface::updateStereoFormats()
         const auto resources = d->resourceMap();
         for (const auto &resource : resources) {
             d->sendStereoFormats(resource);
+        }
+        scheduleDone();
+    }
+}
+
+void OutputDeviceV2Interface::updateStereoEyeSwap()
+{
+    if (d->m_stereoEyeSwap != d->m_handle->stereoEyeSwap()) {
+        d->m_stereoEyeSwap = d->m_handle->stereoEyeSwap();
+        const auto resources = d->resourceMap();
+        for (const auto &resource : resources) {
+            d->sendStereoEyeSwap(resource);
         }
         scheduleDone();
     }
@@ -1444,29 +1468,17 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
         if (m_flags & OutputModeline::Flag::Stereo3DRowsLeftFirst) {
             flags |= 0x100;
         }
-        if (m_flags & OutputModeline::Flag::Stereo3DRowsRightFirst) {
-            flags |= 0x200;
-        }
         if (m_flags & OutputModeline::Flag::Stereo3DColumnsLeftFirst) {
             flags |= 0x400;
         }
-        if (m_flags & OutputModeline::Flag::Stereo3DColumnsRightFirst) {
-            flags |= 0x800;
-        }
         if (m_flags & OutputModeline::Flag::Stereo3DCheckerboardLeftFirst) {
             flags |= 0x1000;
-        }
-        if (m_flags & OutputModeline::Flag::Stereo3DCheckerboardRightFirst) {
-            flags |= 0x2000;
         }
         if (m_flags & OutputModeline::Flag::VirtualStereo) {
             flags |= 0x4000;
         }
         if (m_flags & OutputModeline::Flag::Stereo3DSequentialLeftFirst) {
             flags |= 0x40000;
-        }
-        if (m_flags & OutputModeline::Flag::Stereo3DSequentialRightFirst) {
-            flags |= 0x80000;
         }
         send_flags(resource->handle, flags);
     }

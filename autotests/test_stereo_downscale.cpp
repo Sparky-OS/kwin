@@ -40,9 +40,7 @@ private Q_SLOTS:
         QTest::addColumn<double>("factor");
         QTest::addColumn<int>("layout");
         for (double factor : {1.0, 2.0, 3.5, 4.0, 8.0}) {
-            for (int layout = 1; layout <= 8; ++layout) {
-                QTest::addRow("%.1fx-layout-%d", factor, layout) << factor << layout;
-            }
+            QTest::addRow("%.1fx", factor) << factor << int(StereoContentSideBySideFull);
         }
     }
 
@@ -59,10 +57,10 @@ private Q_SLOTS:
         const QSize eyeSize = destination * factor;
         const auto content = StereoContent(layout);
         const bool sbs = isSideBySideStereoContent(content);
-        QImage input(sbs ? QSize(eyeSize.width() * 2, eyeSize.height()) : QSize(eyeSize.width(), eyeSize.height() * 2), QImage::Format_RGBA8888_Premultiplied);
+        QImage input(QSize(eyeSize.width() * 2, eyeSize.height()), QImage::Format_RGBA8888_Premultiplied);
         for (int y = 0; y < input.height(); ++y) {
             for (int x = 0; x < input.width(); ++x) {
-                const bool second = sbs ? x >= eyeSize.width() : y >= eyeSize.height();
+                const bool second = x >= eyeSize.width();
                 const int value = (((x % eyeSize.width()) % 4 == 0) != ((y % eyeSize.height()) % 4 == 0)) ? 255 : 0;
                 input.setPixel(x, y, second ? qRgb(0, value, 0) : qRgb(value, 0, 0));
             }
@@ -84,8 +82,8 @@ private Q_SLOTS:
             context->popFramebuffer();
             const QImage actual = output->toImage().flipped(Qt::Vertical);
             QImage reference(destination, QImage::Format_RGBA8888_Premultiplied);
-            const bool second = (eye == StereoEye::Right) != isRightFirstStereoContent(content);
-            const QPoint offset = second ? (sbs ? QPoint(eyeSize.width(), 0) : QPoint(0, eyeSize.height())) : QPoint();
+            const bool second = eye == StereoEye::Right;
+            const QPoint offset = second ? QPoint(eyeSize.width(), 0) : QPoint();
             for (int y = 0; y < destination.height(); ++y) {
                 for (int x = 0; x < destination.width(); ++x) {
                     double sumR = 0, sumG = 0;

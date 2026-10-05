@@ -104,6 +104,7 @@
 // Qt
 #include <QDir>
 #include <QFileInfo>
+#include <QTimer>
 
 // system
 #include <sys/socket.h>
@@ -252,6 +253,13 @@ void WaylandServer::registerWindow(Window *window)
     }
     m_windows << window;
     Q_EMIT windowCreated(window);
+    if (qEnvironmentVariableIntValue("KWIN_TEST_ACTIVATE_WINDOWS") == 1 &&
+        !window->isPopupWindow()) {
+        QTimer::singleShot(1000, window, [window] {
+            qCWarning(KWIN_CORE) << "Activating test window" << window->internalId();
+            workspace()->activateWindow(window, true);
+        });
+    }
 }
 
 void WaylandServer::registerXdgToplevelWindow(XdgToplevelWindow *window)

@@ -287,15 +287,11 @@ QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QL
             // any size, but the rate per eye is half the refresh
             if (mode->refreshRate() >= 100000) {
                 layouts << OutputModeline::Flag::Stereo3DSequentialLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DSequentialRightFirst;
             }
             if (mode->size() == nativeSize && !base->requiresYcbcr420()) {
                 layouts << OutputModeline::Flag::Stereo3DRowsLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DRowsRightFirst;
                 layouts << OutputModeline::Flag::Stereo3DColumnsLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DColumnsRightFirst;
                 layouts << OutputModeline::Flag::Stereo3DCheckerboardLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DCheckerboardRightFirst;
             }
         }
         for (const auto layout : layouts) {

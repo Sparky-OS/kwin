@@ -51,10 +51,10 @@ private Q_SLOTS:
         QCOMPARE(window->declaredStereoContentSubclass(), 3);
         QCOMPARE(window->surface()->contentType(), ContentType::Game);
 
-        QCOMPARE(stereo_declare_wayland(*surface, STEREO_TAB_HALF_RIGHT_FIRST, STEREO_CLASS_SCIENTIFIC, STEREO_SCIENTIFIC_VR), 0);
+        QCOMPARE(stereo_declare_wayland(*surface, STEREO_SBS_FULL, STEREO_CLASS_SCIENTIFIC, STEREO_SCIENTIFIC_VR), 0);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
-        QCOMPARE(window->stereoContent(), StereoContentTopAndBottomHalfRightFirst);
+        QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
         QCOMPARE(window->declaredStereoContentClass(), 4);
         QCOMPARE(window->declaredStereoContentSubclass(), 1);
         QCOMPARE(window->surface()->contentType(), ContentType::None);
@@ -109,8 +109,8 @@ private Q_SLOTS:
         QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
         QCOMPARE(window->declaredStereoContentClass(), 3);
         QCOMPARE(window->declaredStereoContentSubclass(), 2);
-        QCOMPARE(stereo_declare_x11(display.get(), id, STEREO_TAB_FULL_RIGHT_FIRST, STEREO_CLASS_VIDEO, STEREO_VIDEO_LEGACY), 0);
-        QTRY_COMPARE(window->stereoContent(), StereoContentTopAndBottomFullRightFirst);
+        QCOMPARE(stereo_declare_x11(display.get(), id, STEREO_SBS_FULL, STEREO_CLASS_VIDEO, STEREO_VIDEO_LEGACY), 0);
+        QTRY_COMPARE(window->stereoContent(), StereoContentSideBySideFull);
         QTRY_COMPARE(window->declaredStereoContentClass(), 2);
         QCOMPARE(window->declaredStereoContentSubclass(), 1);
         Atom type;

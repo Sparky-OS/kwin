@@ -17,12 +17,12 @@ private Q_SLOTS:
     void pixels_data()
     {
         QTest::addColumn<int>("pattern");
-        QTest::addColumn<int>("rightFirst");
+        QTest::addColumn<int>("eyeSwap");
         QTest::addColumn<int>("position");
         for (int pattern = 0; pattern < 3; ++pattern) {
-            for (int rightFirst = 0; rightFirst < 2; ++rightFirst) {
+            for (int eyeSwap = 0; eyeSwap < 2; ++eyeSwap) {
                 for (int position : {2, 3}) {
-                    QTest::addRow("pattern-%d-order-%d-position-%d", pattern, rightFirst, position) << pattern << rightFirst << position;
+                    QTest::addRow("pattern-%d-swap-%d-position-%d", pattern, eyeSwap, position) << pattern << eyeSwap << position;
                 }
             }
         }
@@ -31,7 +31,7 @@ private Q_SLOTS:
     void pixels()
     {
         QFETCH(int, pattern);
-        QFETCH(int, rightFirst);
+        QFETCH(int, eyeSwap);
         QFETCH(int, position);
         const auto display = EglDisplay::create(eglGetDisplay(EGL_DEFAULT_DISPLAY), nullptr);
         QVERIFY(display);
@@ -60,7 +60,7 @@ private Q_SLOTS:
         shader->setUniform("leftEye", 0);
         shader->setUniform("rightEye", 1);
         shader->setUniform("pattern", pattern);
-        shader->setUniform("rightFirst", rightFirst);
+        shader->setUniform("eyeSwap", eyeSwap);
         shader->setUniform("outputHeight", size.height());
         const auto target = GLTexture::allocate(GL_RGBA8, size);
         QVERIFY(target);
@@ -80,7 +80,7 @@ private Q_SLOTS:
         QCOMPARE(actual.size(), size);
         for (int y = 0; y < size.height(); ++y) {
             for (int x = 0; x < size.width(); ++x) {
-                const bool selectRight = ((pattern == 0 ? y : pattern == 1 ? x : x + y) % 2) != rightFirst;
+                const bool selectRight = ((pattern == 0 ? y : pattern == 1 ? x : x + y) % 2) != eyeSwap;
                 const QRgb expected = !window.contains(x, y) ? qRgb(0, 0, 0) : selectRight ? qRgb(0, 255, 0) : qRgb(255, 0, 0);
                 QCOMPARE(actual.pixel(x, y), expected);
             }
