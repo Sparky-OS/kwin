@@ -644,6 +644,13 @@ public:
     }
 
     bool allowTearing() const;
+
+    /**
+     * How far behind and in front of the screen the desktop's own elements go on a stereo
+     * output, as the parallax between the eyes in pixels at 1920 wide. Zero switches that side off.
+     */
+    qreal stereoSunkLimit() const;
+    qreal stereoPoppedLimit() const;
     bool interactiveWindowMoveEnabled() const;
     bool overlayVirtualKeyboardOnWindows() const;
 
@@ -706,6 +713,8 @@ public:
     void setKillPingTimeout(int killPingTimeout);
     void setCompositingMode(int compositingMode);
     void setAllowTearing(bool allow);
+    void setStereoSunkLimit(qreal limit);
+    void setStereoPoppedLimit(qreal limit);
     void setInteractiveWindowMoveEnabled(bool set);
     void setOverlayVirtualKeyboardOnWindows(bool overlay);
 
@@ -886,6 +895,7 @@ Q_SIGNALS:
     void animationSpeedChanged();
     void configChanged();
     void allowTearingChanged();
+    void stereoDepthChanged();
     void interactiveWindowMoveEnabledChanged();
     void pictureInPictureHomeCornerChanged();
     void pictureInPictureMarginChanged();
@@ -955,6 +965,8 @@ private:
     bool condensed_title;
 
     bool m_allowTearing = true;
+    qreal m_stereoSunkLimit = 10;
+    qreal m_stereoPoppedLimit = 4;
     bool m_interactiveWindowMoveEnabled = true;
     bool m_overlayVirtualKeyboardOnWindows = false;
     bool m_doubleClickBorderToMaximize = true;
