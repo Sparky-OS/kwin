@@ -531,7 +531,7 @@ static bool showsStereoContent(RenderView *view)
     const QList<Item *> windowItems = kwinApp()->scene()->containerItem()->childItems();
     return std::ranges::any_of(windowItems, [view](Item *item) {
         const auto windowItem = static_cast<WindowItem *>(item);
-        return windowItem->isVisible() && windowItem->window()->stereoContent() != StereoContentNone
+        return windowItem->isVisible() && windowItem->window()->holdsStereoContent()
             && windowItem->mapToScene(windowItem->boundingRect()).intersects(view->viewport());
     });
 }

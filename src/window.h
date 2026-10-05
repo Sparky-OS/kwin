@@ -1609,6 +1609,11 @@ public:
     void updateStereoContent();
 
     /**
+     * Whether stereo content is in the window: its own picture, or a surface inside it.
+     */
+    bool holdsStereoContent() const;
+
+    /**
      * How the window's picture holds two views, one for each eye, as the program
      * declared it (an X11 property, or a Wayland protocol). The stereo content
      * window rule is applied over it. @see updateStereoContent

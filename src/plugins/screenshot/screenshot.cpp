@@ -60,7 +60,7 @@ static bool showsStereoContent(const RectF &area)
     return std::ranges::any_of(kwinApp()->scene()->containerItem()->childItems(), [&area](Item *item) {
         const auto windowItem = qobject_cast<WindowItem *>(item);
         return windowItem && windowItem->isVisible()
-            && windowItem->window()->stereoContent() != StereoContentNone
+            && windowItem->window()->holdsStereoContent()
             && windowItem->mapToScene(windowItem->boundingRect()).intersects(area);
     });
 }
@@ -79,7 +79,7 @@ bool screenShotIsStereo(const Rect &area)
 
 bool screenShotIsStereo(Window *window)
 {
-    return window->stereoContent() != StereoContentNone;
+    return window->holdsStereoContent();
 }
 
 class StereoCaptureScope
