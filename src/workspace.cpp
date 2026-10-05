@@ -2155,7 +2155,7 @@ X11Window *Workspace::findUnmanaged(xcb_window_t w) const
 X11Window *Workspace::findClient(xcb_window_t w) const
 {
     return findClient([w](const X11Window *c) {
-        return c->window() == w;
+        return c->window() == w || c->isStereoChild(w);
     });
 }
 #endif

@@ -366,19 +366,34 @@ bool WaylandServer::init()
 #if KWIN_BUILD_X11
     m_xwaylandShell = new XwaylandShellV1Interface(m_display, m_display);
     connect(m_xwaylandShell, &XwaylandShellV1Interface::surfaceAssociated, this, [](XwaylandSurfaceV1Interface *surface) {
-        X11Window *window = workspace()->findClient([&surface](const X11Window *window) {
-            return window->surfaceSerial() == surface->serial();
+        const uint64_t serial = surface->serial().value_or(0);
+        X11Window *window = workspace()->findClient([serial](const X11Window *window) {
+            return window->surfaceSerial() == serial || window->isStereoChild(serial) || window->hasChild(serial);
         });
         if (window) {
-            window->associate(surface);
+            if (window->surfaceSerial() == serial) {
+                window->associate(surface);
+            } else {
+                window->associateStereoChild(serial, surface->surface());
+            }
+            if (window->surfaceSerial() == serial) {
+                window->updateStereoChildren();
+            }
             return;
         }
 
-        X11Window *unmanaged = workspace()->findUnmanaged([&surface](const X11Window *window) {
-            return window->surfaceSerial() == surface->serial();
+        X11Window *unmanaged = workspace()->findUnmanaged([serial](const X11Window *window) {
+            return window->surfaceSerial() == serial || window->isStereoChild(serial) || window->hasChild(serial);
         });
         if (unmanaged) {
-            unmanaged->associate(surface);
+            if (unmanaged->surfaceSerial() == serial) {
+                unmanaged->associate(surface);
+            } else {
+                unmanaged->associateStereoChild(serial, surface->surface());
+            }
+            if (unmanaged->surfaceSerial() == serial) {
+                unmanaged->updateStereoChildren();
+            }
             return;
         }
     });

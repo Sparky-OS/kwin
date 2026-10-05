@@ -13,6 +13,7 @@
 #include "scene/surfaceitem_wayland.h"
 #include "virtualdesktops.h"
 #include "wayland_server.h"
+#include "wayland/surface.h"
 #include "window.h"
 #include "workspace.h"
 #if KWIN_BUILD_X11
@@ -20,6 +21,8 @@
 #endif
 
 #include <KDecoration3/Decoration>
+
+#include <unordered_set>
 
 namespace KWin
 {
@@ -329,6 +332,42 @@ WindowItemX11::WindowItemX11(X11Window *window, Item *parent)
 
     // Xwayland windows and Wayland surfaces are associated asynchronously.
     connect(window, &Window::surfaceChanged, this, &WindowItemX11::initialize);
+}
+
+void WindowItemX11::updateStereoChildren(const std::vector<X11StereoChild> &children)
+{
+    std::unordered_set<uint32_t> active;
+    for (const X11StereoChild &child : children) {
+        if (!child.surface) {
+            continue;
+        }
+        active.insert(child.window);
+        m_stereoChildGeometries[child.window] = child.geometry;
+        auto it = m_stereoChildren.find(child.window);
+        if (it == m_stereoChildren.end()) {
+            auto item = std::make_unique<SurfaceItemWayland>(child.surface, surfaceItem());
+            connect(child.surface, &SurfaceInterface::sizeChanged, this, [this, childWindow = child.window] {
+                auto item = m_stereoChildren.find(childWindow);
+                if (item != m_stereoChildren.end()) {
+                    item->second->setDestinationSize(m_stereoChildGeometries[childWindow].size());
+                }
+            });
+            it = m_stereoChildren.emplace(child.window, std::move(item)).first;
+            addSurfaceItemDamageConnects(it->second.get());
+        }
+        it->second->setStereoContent(child.stereo ? StereoContentSideBySideFull : StereoContentNone);
+        it->second->setPosition(child.geometry.topLeft());
+        it->second->setDestinationSize(child.geometry.size());
+    }
+
+    for (auto it = m_stereoChildren.begin(); it != m_stereoChildren.end();) {
+        if (!active.contains(it->first)) {
+            m_stereoChildGeometries.erase(it->first);
+            it = m_stereoChildren.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void WindowItemX11::initialize()

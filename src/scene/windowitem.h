@@ -10,6 +10,12 @@
 
 #include "scene/item.h"
 
+#include <QRect>
+
+#include <cstdint>
+#include <unordered_map>
+#include <vector>
+
 namespace KDecoration3
 {
 
@@ -27,7 +33,17 @@ class InternalWindow;
 class Shadow;
 class ShadowItem;
 class SurfaceItem;
+class SurfaceItemWayland;
+class SurfaceInterface;
 class X11Window;
+
+struct X11StereoChild
+{
+    uint32_t window;
+    SurfaceInterface *surface;
+    QRect geometry;
+    bool stereo;
+};
 
 /**
  * The WindowItem class represents a window in the scene.
@@ -65,6 +81,7 @@ public:
 protected:
     explicit WindowItem(Window *window, Item *parent = nullptr);
     void updateSurfaceItem(std::unique_ptr<SurfaceItem> &&surfaceItem);
+    void addSurfaceItemDamageConnects(Item *item);
 
     const std::unique_ptr<Item> m_windowContainer;
 
@@ -77,7 +94,6 @@ private Q_SLOTS:
     void updateGeometry();
     void updateOpacity();
     void updateStackingOrder();
-    void addSurfaceItemDamageConnects(Item *item);
 
 private:
     bool computeVisibility() const;
@@ -111,8 +127,14 @@ class KWIN_EXPORT WindowItemX11 : public WindowItem
 public:
     explicit WindowItemX11(X11Window *window, Item *parent = nullptr);
 
+    void updateStereoChildren(const std::vector<X11StereoChild> &children);
+
 private Q_SLOTS:
     void initialize();
+
+private:
+    std::unordered_map<uint32_t, std::unique_ptr<SurfaceItemWayland>> m_stereoChildren;
+    std::unordered_map<uint32_t, QRect> m_stereoChildGeometries;
 };
 #endif
 

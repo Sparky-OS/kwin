@@ -25,6 +25,7 @@
 #include "netinfo.h"
 #include "placement.h"
 #include "scene/windowitem.h"
+#include "scene/surfaceitem_wayland.h"
 #include "shadow.h"
 #include "utils/envvar.h"
 #include "virtualdesktops.h"
@@ -43,11 +44,13 @@
 #include <QScopeGuard>
 // xcb
 #include <xcb/xcb_icccm.h>
+#include <xcb/composite.h>
 // system
 #include <unistd.h>
 // c++
 #include <cmath>
 #include <csignal>
+#include <unordered_set>
 
 namespace KWin
 {
@@ -2029,6 +2032,98 @@ WindowType X11Window::windowType() const
 xcb_window_t X11Window::window() const
 {
     return m_client;
+}
+
+bool X11Window::hasChild(xcb_window_t window) const
+{
+    auto cookie = xcb_query_tree(kwinApp()->x11Connection(), m_client);
+    UniqueCPtr<xcb_query_tree_reply_t> tree(xcb_query_tree_reply(kwinApp()->x11Connection(), cookie, nullptr));
+    if (!tree) {
+        return false;
+    }
+    const xcb_window_t *children = xcb_query_tree_children(tree.get());
+    for (int i = 0; i < xcb_query_tree_children_length(tree.get()); i++) {
+        if (children[i] == window) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool X11Window::isStereoChild(xcb_window_t window) const
+{
+    return std::ranges::find(m_stereoChildren, window) != m_stereoChildren.end();
+}
+
+void X11Window::updateStereoChildren()
+{
+    Xcb::Property property(false, window(), atoms->kde_net_wm_stereo_content_children,
+                           XCB_ATOM_WINDOW, 0, 10000);
+    const auto values = property.array<xcb_window_t>();
+    std::unordered_set<xcb_window_t> stereoChildren;
+    if (values && property.data()->bytes_after == 0) {
+        stereoChildren.insert(values->begin(), values->end());
+    }
+
+    std::vector<X11StereoChild> children;
+    auto treeCookie = xcb_query_tree(kwinApp()->x11Connection(), window());
+    UniqueCPtr<xcb_query_tree_reply_t> tree(xcb_query_tree_reply(kwinApp()->x11Connection(), treeCookie, nullptr));
+    if (tree) {
+        const int count = xcb_query_tree_children_length(tree.get());
+        const xcb_window_t *windowList = xcb_query_tree_children(tree.get());
+        children.reserve(count);
+        for (int i = 0; i < count; i++) {
+            const xcb_window_t child = windowList[i];
+            auto cookie = xcb_get_geometry(kwinApp()->x11Connection(), child);
+            UniqueCPtr<xcb_get_geometry_reply_t> geometry(xcb_get_geometry_reply(kwinApp()->x11Connection(), cookie, nullptr));
+            if (!geometry) {
+                continue;
+            }
+            const uint32_t eventMask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
+            xcb_change_window_attributes(kwinApp()->x11Connection(), child,
+                                          XCB_CW_EVENT_MASK, &eventMask);
+            if (stereoChildren.contains(child)) {
+                xcb_composite_redirect_window(kwinApp()->x11Connection(), child,
+                                               XCB_COMPOSITE_REDIRECT_MANUAL);
+            }
+            SurfaceInterface *surface = nullptr;
+            if (XwaylandShellV1Interface *shell = waylandServer()->xwaylandShell()) {
+                if (XwaylandSurfaceV1Interface *shellSurface = shell->findSurface(child)) {
+                    surface = shellSurface->surface();
+                }
+            }
+            if (!surface) {
+                surface = m_stereoChildSurfaces[child];
+            }
+            children.push_back({child, surface, QRect(geometry->x, geometry->y,
+                                                       geometry->width, geometry->height),
+                                stereoChildren.contains(child)});
+        }
+    }
+
+    for (const xcb_window_t oldChild : m_stereoChildren) {
+        if (std::ranges::find_if(children, [oldChild](const X11StereoChild &child) {
+                return child.window == oldChild;
+            }) == children.end()) {
+            xcb_composite_unredirect_window(kwinApp()->x11Connection(), oldChild,
+                                             XCB_COMPOSITE_REDIRECT_AUTOMATIC);
+            m_stereoChildSurfaces.erase(oldChild);
+        }
+    }
+    m_stereoChildren.clear();
+    for (const X11StereoChild &child : children) {
+        m_stereoChildren.push_back(child.window);
+    }
+
+    if (auto *item = qobject_cast<WindowItemX11 *>(windowItem())) {
+        item->updateStereoChildren(children);
+    }
+}
+
+void X11Window::associateStereoChild(xcb_window_t window, SurfaceInterface *surface)
+{
+    m_stereoChildSurfaces[window] = surface;
+    updateStereoChildren();
 }
 
 QPointF X11Window::framePosToClientPos(const QPointF &point) const
@@ -4065,6 +4160,7 @@ void X11Window::associate(XwaylandSurfaceV1Interface *shellSurface)
     }
 
     connect(surface(), &SurfaceInterface::committed, this, &X11Window::handleCommitted);
+    updateStereoChildren();
 }
 
 void X11Window::checkOutput()

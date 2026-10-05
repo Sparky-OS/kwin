@@ -28,6 +28,8 @@
 #include <xcb/res.h>
 #include <xcb/sync.h>
 
+#include <unordered_map>
+
 // TODO: Cleanup the order of things in this .h file
 
 class QTimer;
@@ -38,6 +40,7 @@ namespace KWin
 {
 
 class KillPrompt;
+class SurfaceInterface;
 class XwaylandSurfaceV1Interface;
 
 class KWIN_EXPORT X11Window : public Window
@@ -51,6 +54,10 @@ public:
     void associate(XwaylandSurfaceV1Interface *shellSurface);
 
     xcb_window_t window() const;
+    bool hasChild(xcb_window_t window) const;
+    bool isStereoChild(xcb_window_t window) const;
+    void associateStereoChild(xcb_window_t window, SurfaceInterface *surface);
+    void updateStereoChildren();
 
     int desktopId() const;
     QByteArray sessionId() const;
@@ -433,6 +440,8 @@ private:
     bool m_frameCallbackHeartbeat = false;
     quint64 m_surfaceSerial = 0;
     int m_inflightUnmaps = 0;
+    std::vector<xcb_window_t> m_stereoChildren;
+    std::unordered_map<xcb_window_t, SurfaceInterface *> m_stereoChildSurfaces;
 };
 
 /**

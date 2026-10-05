@@ -140,6 +140,21 @@ void Workspace::workspaceEvent(xcb_generic_event_t *e)
         }
     }
 
+    if ((e->response_type & ~0x80) == XCB_CLIENT_MESSAGE) {
+        const auto clientMessage = reinterpret_cast<xcb_client_message_event_t *>(e);
+        if (clientMessage->type == atoms->wl_surface_serial) {
+            const uint64_t serial = (uint64_t(clientMessage->data.data32[1]) << 32) | clientMessage->data.data32[0];
+            if (XwaylandSurfaceV1Interface *surface = waylandServer()->xwaylandShell()->findSurface(serial)) {
+                if (X11Window *window = workspace()->findClient([eventWindow](const X11Window *candidate) {
+                        return candidate->hasChild(eventWindow);
+                    })) {
+                    window->associateStereoChild(eventWindow, surface->surface());
+                    return;
+                }
+            }
+        }
+    }
+
     const uint8_t eventType = e->response_type & ~0x80;
     switch (eventType) {
     case XCB_CREATE_NOTIFY: {
@@ -235,6 +250,25 @@ void Workspace::workspaceEvent(xcb_generic_event_t *e)
  */
 bool X11Window::windowEvent(xcb_generic_event_t *e)
 {
+    const xcb_window_t eventWindow = findEventWindow(e);
+    if (isStereoChild(eventWindow)) {
+        const uint8_t eventType = e->response_type & ~0x80;
+        if (eventType == XCB_CLIENT_MESSAGE) {
+            const auto clientMessage = reinterpret_cast<xcb_client_message_event_t *>(e);
+            if (clientMessage->type == atoms->wl_surface_serial) {
+                const uint64_t serial = (uint64_t(clientMessage->data.data32[1]) << 32) | clientMessage->data.data32[0];
+                if (XwaylandSurfaceV1Interface *surface = waylandServer()->xwaylandShell()->findSurface(serial)) {
+                    associateStereoChild(eventWindow, surface->surface());
+                }
+                return true;
+            }
+        }
+        if (eventType == XCB_CONFIGURE_NOTIFY || eventType == XCB_DESTROY_NOTIFY || eventType == XCB_UNMAP_NOTIFY) {
+            updateStereoChildren();
+        }
+        return false;
+    }
+
     if (isUnmanaged()) {
         NET::Properties dirtyProperties;
         NET::Properties2 dirtyProperties2;
@@ -524,6 +558,8 @@ void X11Window::propertyNotifyEvent(xcb_property_notify_event_t *e)
             getSkipCloseAnimation();
         } else if (e->atom == atoms->kde_net_wm_stereo_content) {
             getStereoContent();
+        } else if (e->atom == atoms->kde_net_wm_stereo_content_children) {
+            updateStereoChildren();
         } else if (e->atom == atoms->kde_net_wm_stereo_content_class) {
             getStereoContentClass();
         } else if (e->atom == atoms->xwayland_xrandr_emulation) {
