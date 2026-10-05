@@ -850,12 +850,21 @@ bool WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
     const QVariant forceBlur = effectWindow->data(WindowForceBlurRole);
     const auto &renderer = m_renderers[painted_delegate ? painted_delegate->renderDevice() : Compositor::self()->primaryDevice()];
     const StereoEye eye = renderer->stereoEye();
-    const int shift = eye == StereoEye::None ? 0 : StereoDepth::eyeShift(stereoParallax(item->window()), eye);
+    const int parallax = eye == StereoEye::None ? 0 : stereoParallax(item->window());
+    const int shift = StereoDepth::eyeShift(parallax, eye);
     if (shift) {
         // the window at its level: its copy in this eye, the other eye's the other way. The effects
         // get it with the window's paint data, and blur follows a window that is moved by its level.
         data.translate(shift / viewport.scale());
         effectWindow->setData(WindowForceBlurRole, true);
+    }
+    if (shift && item->window()->isDesktop()) {
+        // a background behind the screen reaches past the edges of the output in both eyes: wider
+        // by what each eye's copy moves, around the middle, which keeps the level's parallax
+        const int extra = 2 * ((std::abs(parallax) + 1) / 2);
+        const qreal width = item->window()->frameGeometry().width() * viewport.scale();
+        data.setXScale((width + extra) / width);
+        data.translate(-extra / 2 / viewport.scale());
     }
     const bool painted = effects->paintWindow(renderTarget, viewport, effectWindow, mask, deviceRegion, data);
     if (shift) {
