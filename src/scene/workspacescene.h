@@ -19,6 +19,7 @@ class DragAndDropIconItem;
 class EffectWindow;
 class EglContext;
 class Item;
+class Window;
 class WindowItem;
 class WindowPaintData;
 class CursorItem;
@@ -115,6 +116,7 @@ protected:
     QList<WindowItem *> stacking_order;
 
 private:
+    int stereoParallax(const Window *window) const;
     void createDndIconItem();
     void destroyDndIconItem();
     void updateCursor();
