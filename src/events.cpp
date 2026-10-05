@@ -265,7 +265,7 @@ bool X11Window::windowEvent(xcb_generic_event_t *e)
                 }
             }
         }
-        if (eventType == XCB_CONFIGURE_REQUEST) {
+        if (eventType == XCB_CONFIGURE_REQUEST && m_stereoChildProgramSizes.contains(eventWindow)) {
             configureStereoChild(reinterpret_cast<xcb_configure_request_event_t *>(e));
             return true;
         }

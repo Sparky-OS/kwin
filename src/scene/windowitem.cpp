@@ -356,6 +356,7 @@ void WindowItemX11::updateStereoChildren(const std::vector<X11StereoChild> &chil
             addSurfaceItemDamageConnects(it->second.get());
         }
         it->second->setStereoContent(child.stereo ? StereoContentSideBySideFull : StereoContentNone);
+        it->second->setZ(child.stereo ? 0 : 1);
         it->second->setPosition(child.geometry.topLeft());
         it->second->setDestinationSize(child.geometry.size());
     }

@@ -2081,6 +2081,7 @@ void X11Window::updateStereoChildren()
     if (values && property.data()->bytes_after == 0) {
         stereoChildren.insert(values->begin(), values->end());
     }
+    const bool redirectChildren = !stereoChildren.empty();
 
     std::vector<X11StereoChild> children;
     auto treeCookie = xcb_query_tree(kwinApp()->x11Connection(), window());
@@ -2099,7 +2100,8 @@ void X11Window::updateStereoChildren()
             const uint32_t eventMask = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
             xcb_change_window_attributes(kwinApp()->x11Connection(), child,
                                           XCB_CW_EVENT_MASK, &eventMask);
-            if (stereoChildren.contains(child) && !m_declaredStereoChildren.contains(child)) {
+            const bool stereo = stereoChildren.contains(child);
+            if (redirectChildren && !m_redirectedStereoChildren.contains(child)) {
                 xcb_composite_redirect_window(kwinApp()->x11Connection(), child,
                                                XCB_COMPOSITE_REDIRECT_MANUAL);
                 m_redirectedStereoChildren.insert(child);
@@ -2108,6 +2110,11 @@ void X11Window::updateStereoChildren()
                 UniqueCPtr<xcb_get_window_attributes_reply_t> attributes(
                     xcb_get_window_attributes_reply(kwinApp()->x11Connection(), attributesCookie, nullptr));
                 xcb_map_window(kwinApp()->x11Connection(), child);
+            } else if (!redirectChildren && m_redirectedStereoChildren.erase(child)) {
+                xcb_composite_unredirect_window(kwinApp()->x11Connection(), child,
+                                                 XCB_COMPOSITE_REDIRECT_MANUAL);
+                m_stereoChildSurfaces.erase(child);
+                m_stereoChildSurfaceSerials.erase(child);
             }
             SurfaceInterface *surface = nullptr;
             if (XwaylandShellV1Interface *shell = waylandServer()->xwaylandShell()) {
@@ -2119,7 +2126,7 @@ void X11Window::updateStereoChildren()
                 surface = m_stereoChildSurfaces[child];
             }
             QRect childGeometry(geometry->x, geometry->y, geometry->width, geometry->height);
-            if (stereoChildren.contains(child)) {
+            if (stereo) {
                 QSize &programSize = m_stereoChildProgramSizes[child];
                 if (programSize.isEmpty()) {
                     programSize = childGeometry.size();
@@ -2138,8 +2145,9 @@ void X11Window::updateStereoChildren()
             } else {
                 m_stereoChildProgramSizes.erase(child);
             }
-            children.push_back({child, surface, childGeometry,
-                                stereoChildren.contains(child)});
+            if (redirectChildren) {
+                children.push_back({child, surface, childGeometry, stereo});
+            }
         }
     }
 
