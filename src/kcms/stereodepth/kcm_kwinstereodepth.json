@@ -1,0 +1,18 @@
+{
+    "Categories": "Qt;KDE;",
+    "KPlugin": {
+        "BugReportUrl": "https://bugs.kde.org/enter_bug.cgi?product=kwin&component=kcm_kwinstereodepth",
+        "Description": "How deep the desktop is on a display in a 3D mode",
+        "FormFactors": [
+            "desktop"
+        ],
+        "Icon": "preferences-desktop-display",
+        "Name": "3D Depth"
+    },
+    "X-KDE-Keywords": "3d,stereo,stereoscopic,depth,pop,sunk,parallax",
+    "X-KDE-OnlyShowOnQtPlatforms": [
+        "wayland"
+    ],
+    "X-KDE-System-Settings-Parent-Category": "display",
+    "X-KDE-Weight": 110
+}
