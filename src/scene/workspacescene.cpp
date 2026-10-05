@@ -819,7 +819,20 @@ void WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
     }
 
     WindowPaintData data;
-    effects->paintWindow(renderTarget, viewport, item->effectWindow(), mask, deviceRegion, data);
+    EffectWindow *effectWindow = item->effectWindow();
+    const QVariant forceBlur = effectWindow->data(WindowForceBlurRole);
+    const StereoEye eye = m_renderer->stereoEye();
+    const int shift = eye == StereoEye::None ? 0 : StereoDepth::eyeShift(stereoParallax(item->window()), eye);
+    if (shift) {
+        // the window at its level: its copy in this eye, the other eye's the other way. The effects
+        // get it with the window's paint data, and blur follows a window that is moved by its level.
+        data.translate(shift / viewport.scale());
+        effectWindow->setData(WindowForceBlurRole, true);
+    }
+    effects->paintWindow(renderTarget, viewport, effectWindow, mask, deviceRegion, data);
+    if (shift) {
+        effectWindow->setData(WindowForceBlurRole, forceBlur);
+    }
 }
 
 // the function that'll be eventually called by paintWindow() above
@@ -852,13 +865,6 @@ int WorkspaceScene::stereoParallax(const Window *window) const
 // will be eventually called from drawWindow()
 void WorkspaceScene::finalDrawWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data)
 {
-    if (const StereoEye eye = m_renderer->stereoEye(); eye != StereoEye::None) {
-        // the window at its level: its copy in this eye, the other eye's the other way
-        if (const int shift = StereoDepth::eyeShift(stereoParallax(w->window()), eye)) {
-            data.translate(shift / viewport.scale());
-        }
-    }
-
     // TODO: Reconsider how the CrossFadeEffect captures the initial window contents to remove
     // null pointer delegate checks in "should render item" and "should render hole" checks.
     m_renderer->renderItem(renderTarget, viewport, w->windowItem(), mask, deviceRegion, data, [this](Item *item) {
