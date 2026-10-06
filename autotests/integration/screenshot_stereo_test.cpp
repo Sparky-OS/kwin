@@ -85,6 +85,7 @@ static void checkStereoResult(const QImage &image, const QColor &left, const QCo
 
 static void saveEvidence(const QString &name, const QImage &image)
 {
+    QVERIFY(QDir::current().mkpath(QStringLiteral("evidence")));
     QVERIFY2(image.save(QDir::current().filePath(QStringLiteral("evidence/%1.png").arg(name))), qPrintable(name));
 }
 
