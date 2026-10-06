@@ -68,6 +68,8 @@ private Q_SLOTS:
             }
         }
         ItemRendererOpenGL renderer(display.get());
+        // the surface has no window on an output with eyes, take the view of each eye as a capture does
+        renderer.setStereoCapture(true);
         ImageSurface surface(renderer, input, destination, content);
         QVERIFY(surface.texture());
         auto output = GLTexture::allocate(GL_RGBA8, destination);
