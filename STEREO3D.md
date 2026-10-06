@@ -4,6 +4,14 @@ This branch adds stereo 3D output to KWin.
 This page is the design behind it, written for the review in [plasma/kwin#324](https://invent.kde.org/plasma/kwin/-/work_items/324).
 It is not part of the merge requests.
 
+## The standard in three lines
+
+- **Stereo KWin speaks full side by side, at any resolution.**
+- **Programs** decode or generate stereo in any standard, and deliver to KWin full side by side, at any resolution.
+- **Outputs** convert from KWin's full side by side to whatever each screen needs.
+
+That is what makes stereo work across GPUs, across monitors (2D ones included) and across every 3D output format.
+
 ## One format inside
 
 **KWin talks full side by side:** both eyes at full size, left eye first, at any resolution.
