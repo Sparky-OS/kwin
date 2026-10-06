@@ -9,6 +9,7 @@ target_sources(kcm_kwin_scripts PRIVATE
 )
 
 target_link_libraries(kcm_kwin_scripts PRIVATE
+    Qt::Qml
     Qt::DBus
 
     KF6::I18n

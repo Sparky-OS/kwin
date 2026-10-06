@@ -15,6 +15,7 @@ kconfig_add_kcfg_files(kcm_kwinstereodepth_PART_SRCS kwinstereodepthsettings.kcf
 kcmutils_add_qml_kcm(kcm_kwinstereodepth SOURCES kcmkwinstereodepth.cpp ${kcm_kwinstereodepth_PART_SRCS})
 
 target_link_libraries(kcm_kwinstereodepth PRIVATE
+    Qt::Qml
     KF6::I18n
     KF6::KCMUtils
     KF6::KCMUtilsQuick
