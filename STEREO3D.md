@@ -29,10 +29,11 @@ Every earlier attempt put the format question on each program: quad-buffer neede
 Each program had to know the display, and almost none did.
 With one format, a program learns stereo once: it renders two eyes, declares them, and never learns what a television or a headset is.
 
-**Full side by side, at any resolution, is that one format for three reasons.**
+**Full side by side, at any resolution, is that one format for four reasons.**
 - **Programs already produce it.** Games and VR engines render two viewports side by side, most 3D files carry side by side, and Mesa packs quad-buffer into it at swap. The fewest programs have to change.
 - **It loses nothing.** Each eye keeps its full resolution, so no packing chosen today limits a better display tomorrow. Half formats exist only at the edges, where a display asks for them.
 - **It survives the path.** One ordinary buffer passes through X11, Xwayland, screenshots, screencasts and remote desktop unchanged.
+- **The eyes stay in sync.** Both eyes travel in one buffer, committed once, with one presentation time, so they always show the same instant and can never drift apart. That is what lets every output be built from it: frame packing, interleaving, anaglyph and frame sequential all take their two views from the same frame. Two buffers per frame would need their own synchronisation, at every step and in every program.
 
 **The cost, stated plainly.**
 A fullscreen video already in the display's own mode is unpacked by the player and packed again by the compositor.
