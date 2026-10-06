@@ -86,6 +86,26 @@ Two toggles per output, both off by default, so the mode list stays as it is unt
 
 Each row of the table "Displays decide the format" in [awesome-stereoscopy](https://github.com/danielcamposramos/awesome-stereoscopy#displays-decide-the-format) is one filter.
 
+## 2D screens beside stereo ones
+
+With mixed screens, stereo is the king and a 2D screen is a place to see or to control.
+Each 2D screen shows one of two things, chosen per output:
+- **Anaglyph:** the full anaglyph (the whole screen colour-coded, a virtual 3D monitor fed the same full side by side as a 3D television), or the anaglyph only on 3D content (the 2D layer in normal colour, the colour only where stereo content is).
+- **Straight 2D:** no stereo output of any kind; only the left eye is shown.
+
+In straight 2D the second eye is never rendered: KWin draws one view, the left one, and nothing else.
+
+## The Desktop Cube: a 3D application, the seed of the VR home
+
+The cube is not part of the desktop's depth; it is a 3D application, treated like a game.
+- **Its scene has its own depth**, its own eye separation and screen-plane distance, like a game's stereo settings.
+- **It delivers what every program delivers:** full side by side, at any resolution, two Qt Quick 3D views of one scene, one camera per eye.
+- **Its faces are the real desktops, each a stereo surface,** linked to the standard desktop renderer, not copied. The windows on a face sit on the desktop's three planes (sunk, screen and popped, with the pop the user's setting), so each face is a relief of three known layers, and the cube's two cameras see the windows standing off the faces from any angle, with no extra perspective handling.
+- **When the cube closes on one desktop, it is the desktop:** the front face lands on the screen plane, identical to the flat desktop.
+- **It is the seed of the VR home:** the same scene, with a headset's cameras in place of the cube's, is the floating 3D desktop on a headset output.
+
+**In 2D, too.** On a straight 2D screen the cube renders only its left view, like everything else, but during the cube's animation nothing stops that view from being the real 3D scene: live desktops on the faces of a turning cube, the windows in relief, depth shown by perspective and motion alone. Desktop interfaces have seen little new in years; the same cube that is real depth on a 3D screen is something new on a 2D one, before anyone puts on glasses.
+
 ## What it was built against
 
 **VR gear, shipped and shipping.**
