@@ -137,6 +137,29 @@ static QSize determineScreenPhysicalSizeMm(const di_edid *edid)
     return QSize(screenSize->width_cm, screenSize->height_cm) * 10;
 }
 
+// libdisplay-info 0.4 wraps the VIC in a struct and renames the video format lookup
+#if HAVE_LIBDISPLAY_INFO_CTA_VIC
+static uint8_t vicCode(const di_cta_svd &svd)
+{
+    return svd.vic.code;
+}
+
+static const di_cta_vic_video_format *videoFormatFromVic(uint8_t vic)
+{
+    return di_cta_vic_video_format_from_vic(di_cta_vic{.code = vic});
+}
+#else
+static uint8_t vicCode(const di_cta_svd &svd)
+{
+    return svd.vic;
+}
+
+static const di_cta_video_format *videoFormatFromVic(uint8_t vic)
+{
+    return di_cta_video_format_from_vic(vic);
+}
+#endif
+
 Edid::Edid()
 {
 }
@@ -269,12 +292,12 @@ Edid::Edid(QByteArrayView data)
         for (auto block = di_edid_cta_get_data_blocks(cta); *block; ++block) {
             if (const auto video = di_cta_data_block_get_video(*block)) {
                 for (auto svd = video->svds; *svd; ++svd) {
-                    fullChromaVics.append((*svd)->vic);
+                    fullChromaVics.append(vicCode(**svd));
                 }
             }
             if (const auto video = di_cta_data_block_get_ycbcr420_video(*block)) {
                 for (auto svd = video->svds; *svd; ++svd) {
-                    only420Vics.append((*svd)->vic);
+                    only420Vics.append(vicCode(**svd));
                 }
             }
         }
@@ -283,7 +306,7 @@ Edid::Edid(QByteArrayView data)
         if (fullChromaVics.contains(vic)) {
             continue;
         }
-        if (const auto format = di_cta_video_format_from_vic(vic)) {
+        if (const auto format = videoFormatFromVic(vic)) {
             const int64_t htotal = format->h_active + format->h_front + format->h_sync + format->h_back;
             const int64_t vtotal = format->v_active + format->v_front + format->v_sync + format->v_back;
             const uint32_t rate = format->pixel_clock_hz * 1000 * (format->interlaced ? 2 : 1) / (htotal * vtotal);
