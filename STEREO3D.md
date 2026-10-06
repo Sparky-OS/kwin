@@ -86,6 +86,17 @@ Two toggles per output, both off by default, so the mode list stays as it is unt
 
 Each row of the table "Displays decide the format" in [awesome-stereoscopy](https://github.com/danielcamposramos/awesome-stereoscopy#displays-decide-the-format) is one filter.
 
+## Depth on the desktop
+
+**Three places, declared: sunk, screen and popped.** All subtle, a few pixels, with the limits the user's own settings (System Settings, "3D Depth": how far popped comes out and sunk goes back, in pixels at 1920 wide, scaled to each screen). The active window sits at the screen; its menus, tooltips and notifications pop; the wallpaper and the windows behind sink.
+
+**Everything in between is KWin's job, by stacking order.** Several stacked background windows fan out from sunk up through the screen towards popped, always behind the active window, in the same order as in 2D. A window caught in the middle of a pile, its edges out of the stack, then reads as a sheet floating within it, the way a pile of papers looks in real life. No program declares this; it falls out of the order.
+
+**Pop is real, not faked: a little scale and a little depth, together.** One value per element gives both cues, by one formula: bigger and nearer when popped, smaller and further when sunk.
+- **Everything follows its element's plane:** its text scales and moves with it, and so does its click area, so a popped element has no dead margin and a sunk one no click area beyond its picture. The plane's geometry is an instance inside the window itself, the one geometry that both drawing and input read, so the click area follows by construction.
+- **Text shares its element's depth.** What tires the eyes is 2D text lying over a picture at another depth, not depth as such.
+- **In 2D, the pop is the same scale plus a move up and to the left;** in stereo the move is the eyes' disparity instead. A straight 2D screen shows the left view, and the left eye's own shift would move a popped element the wrong way, so there the up-left move replaces the eye shift.
+
 ## 2D screens beside stereo ones
 
 With mixed screens, stereo is the king and a 2D screen is a place to see or to control.
