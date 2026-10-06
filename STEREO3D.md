@@ -92,6 +92,8 @@ Each row of the table "Displays decide the format" in [awesome-stereoscopy](http
 
 **Everything in between is KWin's job, by stacking order.** Several stacked background windows fan out from sunk up through the screen towards popped, always behind the active window, in the same order as in 2D. A window caught in the middle of a pile, its edges out of the stack, then reads as a sheet floating within it, the way a pile of papers looks in real life. No program declares this; it falls out of the order.
 
+**In the background, windows become 2D.** Only the active window has depth inside it (its popped menus and elements). A window that falls back into the pile flattens: everything in it comes to one plane, and the window is a flat sheet at its place in the stack, which is exactly what makes the pile read as a pile of papers.
+
 **Pop is real, not faked: a little scale and a little depth, together.** One value per element gives both cues, by one formula: bigger and nearer when popped, smaller and further when sunk.
 - **Everything follows its element's plane:** its text scales and moves with it, and so does its click area, so a popped element has no dead margin and a sunk one no click area beyond its picture. The plane's geometry is an instance inside the window itself, the one geometry that both drawing and input read, so the click area follows by construction.
 - **Text shares its element's depth.** What tires the eyes is 2D text lying over a picture at another depth, not depth as such.
