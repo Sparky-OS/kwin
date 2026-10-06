@@ -9,14 +9,15 @@
 #include "drm_backend.h"
 #include "drm_buffer.h"
 #include "drm_crtc.h"
+#include "drm_egl_backend.h"
 #include "drm_egl_layer.h"
 #include "drm_gpu.h"
 #include "drm_layer.h"
 #include "drm_output.h"
 #include "drm_pipeline.h"
 #include "drm_plane.h"
-#include "qpainter/qpainterbackend.h"
 
+#include <QScopeGuard>
 #include <QTest>
 
 #include <fcntl.h>
@@ -55,13 +56,12 @@ public:
     {
     }
 
-protected:
-    std::optional<OutputLayerBeginFrameInfo> doBeginFrame() override
+    std::optional<OutputLayerBeginFrameInfo> beginFrame(OutputFrame *) override
     {
         return std::nullopt;
     }
 
-    bool doEndFrame(const Region &, const Region &, OutputFrame *) override
+    bool endFrame(const Region &, const Region &, OutputFrame *) override
     {
         return true;
     }
@@ -129,9 +129,13 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
 
     const auto session = Session::create(Session::Type::Noop);
     const auto backend = std::make_unique<DrmBackend>(session.get());
-    const auto renderBackend = backend->createQPainterBackend();
-    Q_UNUSED(renderBackend);
+    // the GPU is destroyed after what holds its buffers, which are declared after it, then the manager goes
+    const auto resetManager = qScopeGuard([] {
+        GpuManager::s_self.reset();
+    });
     auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
+    const auto renderBackend = backend->createOpenGLBackend(gpu->renderDevice());
+    Q_UNUSED(renderBackend);
     const auto drmConnectorA = std::make_shared<DrmConnector>(gpu.get(), connectorA->id);
     const auto drmConnectorB = std::make_shared<DrmConnector>(gpu.get(), connectorB->id);
     QVERIFY(drmConnectorA->init());
@@ -194,7 +198,7 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
 
     mockGpu->atomicCommits.clear();
     const auto commitResult = DrmPipeline::commitPipelines({pipelineA.get(), pipelineB.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset);
-    QCOMPARE(commitResult, DrmPipeline::Error::None);
+    QVERIFY(commitResult);
     QVERIFY(!mockGpu->atomicCommits.isEmpty());
     const auto &properties = mockGpu->atomicCommits.constLast();
     const auto sourceX = [&](uint32_t planeId) {
@@ -226,8 +230,6 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
     QCOMPARE(rotationProperty(planeA->id()), uint64_t(1));
     QCOMPARE(rotationProperty(planeB->id()), secondReflection == StereoPairReflection::Horizontal ? uint64_t(36) : uint64_t(1));
 
-    gpu.reset();
-    GpuManager::s_self.reset();
 }
 
 int main(int argc, char **argv)

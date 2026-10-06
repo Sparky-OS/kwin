@@ -8,13 +8,14 @@
 #include "drm_backend.h"
 #include "drm_buffer.h"
 #include "drm_crtc.h"
+#include "drm_egl_backend.h"
 #include "drm_gpu.h"
 #include "drm_layer.h"
 #include "drm_output.h"
 #include "drm_pipeline.h"
 #include "drm_plane.h"
-#include "qpainter/qpainterbackend.h"
 
+#include <QScopeGuard>
 #include <QTest>
 
 #include <fcntl.h>
@@ -63,13 +64,12 @@ public:
     {
     }
 
-protected:
-    std::optional<OutputLayerBeginFrameInfo> doBeginFrame() override
+    std::optional<OutputLayerBeginFrameInfo> beginFrame(OutputFrame *) override
     {
         return std::nullopt;
     }
 
-    bool doEndFrame(const Region &, const Region &, OutputFrame *) override
+    bool endFrame(const Region &, const Region &, OutputFrame *) override
     {
         return true;
     }
@@ -110,9 +110,13 @@ void MockFrameSequentialTest::testScanout()
 
     const auto session = Session::create(Session::Type::Noop);
     const auto backend = std::make_unique<DrmBackend>(session.get());
-    const auto renderBackend = backend->createQPainterBackend();
-    Q_UNUSED(renderBackend);
+    // the GPU is destroyed after what holds its buffers, which are declared after it, then the manager goes
+    const auto resetManager = qScopeGuard([] {
+        GpuManager::s_self.reset();
+    });
     auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
+    const auto renderBackend = backend->createOpenGLBackend(gpu->renderDevice());
+    Q_UNUSED(renderBackend);
     const auto connector = std::make_shared<DrmConnector>(gpu.get(), mockConnector->id);
     QVERIFY(connector->init());
     const auto baseMode = connector->modes().front();
@@ -134,7 +138,7 @@ void MockFrameSequentialTest::testScanout()
     layer->setTargetRect(Rect(QPoint(0, 0), QSize(1920, 1080)));
     layer->setSourceRect(Rect(QPoint(0, 0), QSize(1920, 1080)));
     pipeline->setLayers({layer.get()});
-    QCOMPARE(DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset), DrmPipeline::Error::None);
+    QVERIFY(DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset));
     mockGpu->atomicCommits.clear();
 
     const auto primaryPlane = pipeline->crtc()->primaryPlane();
@@ -179,7 +183,7 @@ void MockFrameSequentialTest::testScanout()
     const uint64_t expectedWidth = uint64_t(1920) << 16;
     const uint64_t expectedRightX = uint64_t(1920) << 16;
     auto presentAndReadSource = [&](StereoEye eye) -> std::optional<uint64_t> {
-        if (DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset) != DrmPipeline::Error::None
+        if (!DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset)
             || mockGpu->atomicCommits.size() != 1) {
             return std::nullopt;
         }
@@ -219,8 +223,6 @@ void MockFrameSequentialTest::testScanout()
     pipeline->pageFlipped(std::chrono::nanoseconds(4), 104, firstEye);
     QCOMPARE(pipeline->frameSequentialNeedsNewFrame(), false);
 
-    gpu.reset();
-    GpuManager::s_self.reset();
 }
 
 QTEST_GUILESS_MAIN(MockFrameSequentialTest)
