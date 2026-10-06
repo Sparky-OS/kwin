@@ -15,6 +15,7 @@
 #include "drm_plane.h"
 #include "qpainter/qpainterbackend.h"
 
+#include <QScopeGuard>
 #include <QTest>
 
 #include <fcntl.h>
@@ -112,6 +113,10 @@ void MockFrameSequentialTest::testScanout()
     const auto backend = std::make_unique<DrmBackend>(session.get());
     const auto renderBackend = backend->createQPainterBackend();
     Q_UNUSED(renderBackend);
+    // the GPU is destroyed after what holds its buffers, which are declared after it, then the manager goes
+    const auto resetManager = qScopeGuard([] {
+        GpuManager::s_self.reset();
+    });
     auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
     const auto connector = std::make_shared<DrmConnector>(gpu.get(), mockConnector->id);
     QVERIFY(connector->init());
@@ -219,8 +224,6 @@ void MockFrameSequentialTest::testScanout()
     pipeline->pageFlipped(std::chrono::nanoseconds(4), 104, firstEye);
     QCOMPARE(pipeline->frameSequentialNeedsNewFrame(), false);
 
-    gpu.reset();
-    GpuManager::s_self.reset();
 }
 
 QTEST_GUILESS_MAIN(MockFrameSequentialTest)
