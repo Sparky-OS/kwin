@@ -18,11 +18,11 @@ ecm_add_qtwayland_server_protocol_kde(WaylandProtocols_xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/idle.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-external-brightness-v1.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-lockscreen-overlay-v1.xml
-        ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-device-v2.xml
-        ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-management-v2.xml
+        ${KWIN_STEREO_PROTOCOLS_DIR}/kde-output-device-v2.xml
+        ${KWIN_STEREO_PROTOCOLS_DIR}/kde-output-management-v2.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-order-v1.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-screen-edge-v1.xml
-        ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-stereo-content-v1.xml
+        ${KWIN_STEREO_PROTOCOLS_DIR}/kde-stereo-content-v1.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/keystate.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/org-kde-plasma-virtual-desktop.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/plasma-shell.xml
