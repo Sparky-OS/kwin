@@ -12,6 +12,13 @@ It is not part of the merge requests.
 
 That is what makes stereo work across GPUs, across monitors (2D ones included) and across every 3D output format.
 
+**It is how sound already works on Linux.**
+A program hands the sound server plain PCM, at whatever rate it likes.
+The server resamples, mixes and sends it to a headphone jack, HDMI, Bluetooth or a USB DAC, and the program never learns which.
+Nobody calls that a limitation: it is why every Linux program plays sound on every device.
+Full side by side is the stereo picture's PCM: one plain format in the middle, freedom on both sides of it.
+A new kind of 3D screen needs one new output filter, and every stereo program already written works on it the day the filter lands.
+
 ## One format inside
 
 **KWin talks full side by side:** both eyes at full size, left eye first, at any resolution.
