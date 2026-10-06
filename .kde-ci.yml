@@ -26,14 +26,14 @@ Dependencies:
     'frameworks/kcolorscheme': '@latest-kf6'
     'libraries/libqaccessibilityclient': '@latest-kf6'
     'libraries/plasma-wayland-protocols': '@latest-kf6'
-    'plasma/plasma-activities': '@same'
-    'plasma/kdecoration': '@same'
-    'plasma/kglobalacceld': '@same'
-    'plasma/knighttime': '@same'
-    'plasma/kpipewire': '@same'
-    'plasma/kscreenlocker': '@same'
-    'plasma/kwayland': '@same'
-    'plasma/milou': '@same'
+    'plasma/plasma-activities': 'Plasma/6.7'
+    'plasma/kdecoration': 'Plasma/6.7'
+    'plasma/kglobalacceld': 'Plasma/6.7'
+    'plasma/knighttime': 'Plasma/6.7'
+    'plasma/kpipewire': 'Plasma/6.7'
+    'plasma/kscreenlocker': 'Plasma/6.7'
+    'plasma/kwayland': 'Plasma/6.7'
+    'plasma/milou': 'Plasma/6.7'
     'third-party/wayland': '@latest'
     'third-party/wayland-protocols': '@latest'
 
@@ -41,10 +41,10 @@ RuntimeDependencies:
  - 'on': ['@all']
    'require':
     'frameworks/kirigami': '@latest-kf6'
-    'plasma/aurorae': '@same'
-    'plasma/breeze': '@same'
-    'plasma/libplasma': '@same'
-    'plasma/plasma-workspace': '@same' # kscreenlocker needs it
+    'plasma/aurorae': 'Plasma/6.7'
+    'plasma/breeze': 'Plasma/6.7'
+    'plasma/libplasma': 'Plasma/6.7'
+    'plasma/plasma-workspace': 'Plasma/6.7' # kscreenlocker needs it
 
 Options:
  ctest-arguments: '--repeat until-pass:3'
