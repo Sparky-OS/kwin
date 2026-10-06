@@ -234,6 +234,20 @@ set_package_properties(PlasmaWaylandProtocols PROPERTIES
     URL "https://invent.kde.org/libraries/plasma-wayland-protocols/"
 )
 
+# The stereo 3D additions to kde-output-device-v2 and kde-output-management-v2 and kde-stereo-content-v1 are
+# in PlasmaWaylandProtocols once its stereo 3D change is released; until then use the copies in src/wayland/protocols/stereo
+set(KWIN_STEREO_PROTOCOLS_DIR ${PLASMA_WAYLAND_PROTOCOLS_DIR})
+set(KWIN_STEREO_PROTOCOLS_IN_TREE FALSE)
+if(EXISTS ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-stereo-content-v1.xml)
+    file(READ ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-device-v2.xml _kwin_output_device_xml)
+endif()
+if(NOT _kwin_output_device_xml MATCHES "virtual_stereo")
+    set(KWIN_STEREO_PROTOCOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/wayland/protocols/stereo)
+    set(KWIN_STEREO_PROTOCOLS_IN_TREE TRUE)
+endif()
+unset(_kwin_output_device_xml)
+add_feature_info(StereoProtocolsInTree KWIN_STEREO_PROTOCOLS_IN_TREE "Stereo 3D protocols from src/wayland/protocols/stereo (PlasmaWaylandProtocols has no stereo 3D additions)")
+
 find_package(XKB 0.7.0)
 set_package_properties(XKB PROPERTIES
     TYPE REQUIRED
