@@ -90,7 +90,7 @@ Each row of the table "Displays decide the format" in [awesome-stereoscopy](http
 
 With mixed screens, stereo is the king and a 2D screen is a place to see or to control.
 Each 2D screen shows one of two things, chosen per output:
-- **Anaglyph:** the full anaglyph (the whole screen colour-coded, a virtual 3D monitor fed the same full side by side as a 3D television), or the anaglyph only on 3D content (the 2D layer in normal colour, the colour only where stereo content is).
+- **Anaglyph:** the full anaglyph (the whole screen colour-coded, a virtual 3D monitor fed the same full side by side as a 3D television), or the anaglyph only on 3D content (the 2D layer in normal colour, anaglyph only where stereo content is).
 - **Straight 2D:** no stereo output of any kind; only the left eye is shown.
 
 In straight 2D the second eye is never rendered: KWin draws one view, the left one, and nothing else.
