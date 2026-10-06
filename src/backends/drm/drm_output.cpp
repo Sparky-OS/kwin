@@ -847,9 +847,18 @@ void DrmOutput::tryKmsColorOffloading(State &next)
         next.layerBlendingColor = encoding;
         m_pipeline->setCrtcColorPipeline(ColorPipeline{});
         m_pipeline->applyPendingChanges();
+        // When the conversion from blending to encoding only clamps, the scanout buffer's format
+        // does that anyway. Without a shadow buffer, a client buffer that matches the output can
+        // be scanned out directly while everything else is still composited in the deepest format
+        const bool onlyClamps = next.blendingColor->transferFunction() == encoding->transferFunction()
+            && std::ranges::all_of(colorPipeline.ops, [](const ColorOp &op) {
+                   return std::holds_alternative<ColorTransferFunction>(op.operation)
+                       || std::holds_alternative<InverseColorTransferFunction>(op.operation)
+                       || std::holds_alternative<ColorClamp>(op.operation);
+               });
         m_needsShadowBuffer = usesICC
             || next.colorDescription->transferFunction().type != blendingSpace
-            || !colorPipeline.isIdentity();
+            || (!colorPipeline.isIdentity() && !onlyClamps);
         return;
     }
     if (usesICC) {
