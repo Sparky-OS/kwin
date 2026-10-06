@@ -12,6 +12,7 @@ set(kcm_kwin_effects_PART_SRCS
 kcmutils_add_qml_kcm(kcm_kwin_effects SOURCES ${kcm_kwin_effects_PART_SRCS})
 
 target_link_libraries(kcm_kwin_effects PRIVATE
+    Qt::Qml
     Qt::DBus
     Qt::Quick
 
