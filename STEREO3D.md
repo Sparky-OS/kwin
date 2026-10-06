@@ -14,10 +14,30 @@ It is HDMI 1.4's 3D structure 3 ("side by side full"), and the layout SteamVR wr
 - **Games:** a VR engine already renders its two eyes side by side.
 - **Video players:** they unpack whatever the file carries (half side by side, top and bottom, frame packing, MVC, either eye first) and hand over full side by side.
 - **Photo viewers:** MPO and JPS become the same pair.
-- **The declaration** is an X11 window property or a Wayland protocol, plus a window rule for programs that cannot declare. It also accepts the half packings, for programs that cannot convert.
+- **The declaration** is an X11 window property or a Wayland protocol, plus a window rule for programs that cannot declare. It carries one value: full side by side, left first.
 
 **KWin never needs to know a source format.**
 Each specification stays where it belongs: HDMI in the drivers, the H.264 SEI and Matroska's StereoMode in the players, the display in KWin.
+
+## Why one format, and why full side by side
+
+**Every format the inside accepts multiplies the work of everyone who wants stereo.**
+With several formats in, the cost is every input format times every output format times every program that wants stereo.
+Input formats and output modes are short lists, owned by the compositor's authors.
+The programs are an open list, owned by everyone else, and that is the term that never ends.
+Every earlier attempt put the format question on each program: quad-buffer needed a workstation card, 3D Vision needed one vendor's driver, and every player grew its own menu of packings.
+Each program had to know the display, and almost none did.
+With one format, a program learns stereo once: it renders two eyes, declares them, and never learns what a television or a headset is.
+
+**Full side by side, at any resolution, is that one format for three reasons.**
+- **Programs already produce it.** Games and VR engines render two viewports side by side, most 3D files carry side by side, and Mesa packs quad-buffer into it at swap. The fewest programs have to change.
+- **It loses nothing.** Each eye keeps its full resolution, so no packing chosen today limits a better display tomorrow. Half formats exist only at the edges, where a display asks for them.
+- **It survives the path.** One ordinary buffer passes through X11, Xwayland, screenshots, screencasts and remote desktop unchanged.
+
+**The cost, stated plainly.**
+A fullscreen video already in the display's own mode is unpacked by the player and packed again by the compositor.
+That conversion is copying and scaling rows and columns, work a compositor does every frame anyway, and every test of this branch runs in software rendering as well as on the GPU.
+Where it matters, the compositor can skip it internally: an optimisation inside one program, not a format question pushed onto every program.
 
 ## Every output is a filter at the end
 
