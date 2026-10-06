@@ -11,6 +11,7 @@ kcmutils_add_qml_kcm(kcm_animations SOURCES ${kcm_animations_PART_SRCS})
 kconfig_add_kcfg_files(kcm_animations animationskdeglobalssettings.kcfgc GENERATE_MOC)
 
 target_link_libraries(kcm_animations PRIVATE
+    Qt::Qml
     Qt::DBus
     Qt::Quick
     KF6::ConfigGui
