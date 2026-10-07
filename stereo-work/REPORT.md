@@ -1,8 +1,15 @@
 STATUS: working
 
-# Mesa stereo report — 2026-10-04
+# Mesa stereo report — 2026-10-07
 
-Partner: GPT-5 via Codex, branch partner/mesa-stereo.
+Partner: GPT-6.1 via Codex, current branch `partner/kwin-one-value-v2` in
+`kwin/`. Mesa's earlier work remains on `stereo3d-26.1`.
+
+Current round: the coordinated KWin +16, helper 1.0.1 and protocol package
+set is built and verified in `pending/`. The requested serial comparison of
+the 64 failed SUSE CI tests is waiting for its two-CPU build to finish.
+No result or classification is claimed for that comparison yet. Its detailed
+records are at the end of this report; the accepted earlier rounds follow.
 
 Milestone 1 remains complete in commit 8a45d8f4dc1. Milestone 2 is complete
 for the GLX DRI2/DRI3 and swrast paths. No class or subclass is declared.
