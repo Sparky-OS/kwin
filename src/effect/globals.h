@@ -179,44 +179,23 @@ enum Layer {
 Q_ENUM_NS(Layer)
 
 /**
- * How a window's picture holds two views, one per eye (stereo content): HDMI's 3D
- * structures for the packing, and the eye order of the frame packing SEI. The
- * right-first values carry the right eye's view on the left or at the top.
+ * How a window's picture holds two views, one per eye: full side by side,
+ * left eye first, at the source's render resolution.
  */
 enum StereoContent {
     StereoContentNone = 0,
-    StereoContentSideBySideHalf,
-    StereoContentSideBySideHalfRightFirst,
-    StereoContentSideBySideFull,
-    StereoContentSideBySideFullRightFirst,
-    StereoContentTopAndBottomHalf,
-    StereoContentTopAndBottomHalfRightFirst,
-    StereoContentTopAndBottomFull,
-    StereoContentTopAndBottomFullRightFirst,
+    StereoContentSideBySideFull = 3,
 };
 Q_ENUM_NS(StereoContent)
 
 // The StereoContent values are the wire format of _KDE_NET_WM_STEREO_CONTENT
 // and of kde-stereo-content-v1; they must never move.
 static_assert(StereoContentNone == 0);
-static_assert(StereoContentSideBySideHalf == 1);
-static_assert(StereoContentSideBySideHalfRightFirst == 2);
 static_assert(StereoContentSideBySideFull == 3);
-static_assert(StereoContentSideBySideFullRightFirst == 4);
-static_assert(StereoContentTopAndBottomHalf == 5);
-static_assert(StereoContentTopAndBottomHalfRightFirst == 6);
-static_assert(StereoContentTopAndBottomFull == 7);
-static_assert(StereoContentTopAndBottomFullRightFirst == 8);
 
 inline bool isSideBySideStereoContent(StereoContent content)
 {
-    return content >= StereoContentSideBySideHalf && content <= StereoContentSideBySideFullRightFirst;
-}
-
-inline bool isRightFirstStereoContent(StereoContent content)
-{
-    return content == StereoContentSideBySideHalfRightFirst || content == StereoContentSideBySideFullRightFirst
-        || content == StereoContentTopAndBottomHalfRightFirst || content == StereoContentTopAndBottomFullRightFirst;
+    return content == StereoContentSideBySideFull;
 }
 
 /**

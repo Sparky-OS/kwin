@@ -43,7 +43,6 @@ WaylandWindow::WaylandWindow(SurfaceInterface *surface)
     connect(surface, &SurfaceInterface::stereoContentChanged,
             this, [this, surface] {
                 setDeclaredStereoContent(surface->stereoContent());
-                setDeclaredStereoContentClass(surface->stereoContentClass(), surface->stereoContentSubclass());
             });
     connect(this, &WaylandWindow::frameGeometryChanged,
             this, &WaylandWindow::updateClientOutputs);
@@ -53,7 +52,6 @@ WaylandWindow::WaylandWindow(SurfaceInterface *surface)
     updateShadow();
 
     setDeclaredStereoContent(surface->stereoContent());
-    setDeclaredStereoContentClass(surface->stereoContentClass(), surface->stereoContentSubclass());
 }
 
 std::unique_ptr<WindowItem> WaylandWindow::createItem(Item *parentItem)

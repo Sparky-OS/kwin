@@ -86,7 +86,7 @@ private Q_SLOTS:
             context->popFramebuffer();
             const QImage actual = output->toImage().flipped(Qt::Vertical);
             QImage reference(destination, QImage::Format_RGBA8888_Premultiplied);
-            const bool second = (eye == StereoEye::Right) != isRightFirstStereoContent(content);
+            const bool second = eye == StereoEye::Right;
             const QPoint offset = second ? (sbs ? QPoint(eyeSize.width(), 0) : QPoint(0, eyeSize.height())) : QPoint();
             for (int y = 0; y < destination.height(); ++y) {
                 for (int x = 0; x < destination.width(); ++x) {

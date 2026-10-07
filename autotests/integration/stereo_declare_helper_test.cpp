@@ -47,25 +47,17 @@ private Q_SLOTS:
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
         QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
-        QCOMPARE(window->declaredStereoContentClass(), 3);
-        QCOMPARE(window->declaredStereoContentSubclass(), 3);
         QCOMPARE(window->surface()->contentType(), ContentType::Game);
-
-        QCOMPARE(stereo_declare_wayland(*surface, STEREO_TAB_HALF_RIGHT_FIRST, STEREO_CLASS_SCIENTIFIC, STEREO_SCIENTIFIC_VR), 0);
+        QCOMPARE(stereo_declare_wayland(*surface, static_cast<stereo_layout>(1), STEREO_CLASS_SCIENTIFIC, STEREO_SCIENTIFIC_VR), -EINVAL);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
-        QCOMPARE(window->stereoContent(), StereoContentTopAndBottomHalfRightFirst);
-        QCOMPARE(window->declaredStereoContentClass(), 4);
-        QCOMPARE(window->declaredStereoContentSubclass(), 1);
-        QCOMPARE(window->surface()->contentType(), ContentType::None);
-        QCOMPARE(stereo_declare_wayland(*surface, STEREO_SBS_FULL, STEREO_CLASS_GAME, 256), -EINVAL);
+        QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
+        QCOMPARE(window->surface()->contentType(), ContentType::Game);
 
         QCOMPARE(stereo_remove_wayland(*surface), 0);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
         QCOMPARE(window->stereoContent(), StereoContentNone);
-        QCOMPARE(window->declaredStereoContentClass(), 0);
-        QCOMPARE(window->declaredStereoContentSubclass(), 0);
         QCOMPARE(window->surface()->contentType(), ContentType::None);
         QCOMPARE(stereo_declare_wayland(*surface, STEREO_SBS_FULL, STEREO_CLASS_VIDEO, STEREO_VIDEO_CURRENT), 0);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
@@ -89,15 +81,15 @@ private Q_SLOTS:
         QTRY_VERIFY(future.isFinished());
         std::unique_ptr<::Display, decltype(&XCloseDisplay)> display(future.result(), XCloseDisplay);
         QVERIFY(display);
-        QCOMPARE(stereo_supported_x11(display.get()), 2u);
+        QCOMPARE(stereo_supported_x11(display.get()), 3u);
         const auto support = XInternAtom(display.get(), "_KDE_NET_WM_STEREO_CONTENT_SUPPORTED", False);
-        const unsigned long version = 2;
+        const unsigned long version = 3;
         XDeleteProperty(display.get(), DefaultRootWindow(display.get()), support);
         QCOMPARE(stereo_supported_x11(display.get()), 0u);
         QCOMPARE(stereo_declare_x11(display.get(), DefaultRootWindow(display.get()), STEREO_SBS_FULL, STEREO_CLASS_GAME, 0), -ENOTSUP);
         XChangeProperty(display.get(), DefaultRootWindow(display.get()), support, XA_CARDINAL, 32,
                         PropModeReplace, reinterpret_cast<const unsigned char *>(&version), 1);
-        QCOMPARE(stereo_supported_x11(display.get()), 2u);
+        QCOMPARE(stereo_supported_x11(display.get()), 3u);
         const auto id = XCreateSimpleWindow(display.get(), DefaultRootWindow(display.get()), 0, 0, 200, 100, 0, 0, 0);
         QCOMPARE(stereo_declare_x11(display.get(), id, STEREO_SBS_FULL, STEREO_CLASS_GAME, STEREO_GAME_3D), 0);
         QSignalSpy added(workspace(), &Workspace::windowAdded);
@@ -109,25 +101,9 @@ private Q_SLOTS:
         QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
         QCOMPARE(window->declaredStereoContentClass(), 3);
         QCOMPARE(window->declaredStereoContentSubclass(), 2);
-        QCOMPARE(stereo_declare_x11(display.get(), id, STEREO_TAB_FULL_RIGHT_FIRST, STEREO_CLASS_VIDEO, STEREO_VIDEO_LEGACY), 0);
-        QTRY_COMPARE(window->stereoContent(), StereoContentTopAndBottomFullRightFirst);
-        QTRY_COMPARE(window->declaredStereoContentClass(), 2);
-        QCOMPARE(window->declaredStereoContentSubclass(), 1);
-        Atom type;
-        int format;
-        unsigned long count, remaining;
-        unsigned char *data = nullptr;
-        QCOMPARE(XGetWindowProperty(display.get(), id, XInternAtom(display.get(), "_KDE_NET_WM_STEREO_CONTENT_CLASS", False),
-                                    0, 2, False, XA_CARDINAL, &type, &format, &count, &remaining, &data), Success);
-        QCOMPARE(format, 32);
-        QCOMPARE(count, 2ul);
-        QCOMPARE(reinterpret_cast<unsigned long *>(data)[0], 2ul);
-        QCOMPARE(reinterpret_cast<unsigned long *>(data)[1], 1ul);
-        XFree(data);
+        QCOMPARE(stereo_declare_x11(display.get(), id, static_cast<stereo_layout>(1), STEREO_CLASS_VIDEO, STEREO_VIDEO_LEGACY), -EINVAL);
         QCOMPARE(stereo_remove_x11(display.get(), id), 0);
         QTRY_COMPARE(window->stereoContent(), StereoContentNone);
-        QTRY_COMPARE(window->declaredStereoContentClass(), 0);
-        QCOMPARE(window->declaredStereoContentSubclass(), 0);
         XDestroyWindow(display.get(), id);
         XFlush(display.get());
         QVERIFY(Test::waitForWindowClosed(window));

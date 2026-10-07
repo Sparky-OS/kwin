@@ -9,11 +9,9 @@
 <interface name="kde_stereo_content_manager_v1" version="1">
   <description summary="declare stereo content of surfaces">
     A program tells the compositor that a surface's picture holds two
-    views, one per eye, with their packing (side by side or top and
-    bottom, full or half resolution per eye) and eye order (left or
-    right first). The compositor renders the declared surface once per
-    eye with that eye's view. The global being present announces
-    support.
+    views, one per eye, packed full side by side, with the left eye
+    first. The compositor renders the declared surface once per eye
+    with that eye's view. The global being present announces support.
 
     Clients may use this protocol to declare stereo content. The version 1
     wire values are stable; future requests must use a new interface version.
@@ -47,76 +45,32 @@
 
   <enum name="error">
     <entry name="no_surface" value="0" summary="the surface no longer exists"/>
-    <entry name="invalid_class" value="1" summary="class or sub-class out of range (both are 8-bit values)"/>
   </enum>
 
   <request name="destroy" type="destructor">
     <description summary="Remove the declaration">
-      Resets layout, class and sub-class to zero on the next wl_surface
-      commit. The surface may receive a new declaration immediately.
+      Resets the content to none on the next wl_surface commit. The surface
+      may receive a new declaration immediately.
     </description>
   </request>
 
   <enum name="content">
-    <description summary="packing and eye order of the two views">
-      Same packing as HDMI's 3D structures, same eye order as the frame
-      packing SEI: the right-first values carry the right eye's view on
-      the left or at the top. The values match the X11 property
-      _KDE_NET_WM_STEREO_CONTENT version 1.
+    <description summary="full side-by-side packing of the two views">
+      The values match the X11 property _KDE_NET_WM_STEREO_CONTENT.
     </description>
     <entry name="none" value="0" summary="no stereo content"/>
-    <entry name="side_by_side_half" value="1" summary="side by side, half width per eye, left first"/>
-    <entry name="side_by_side_half_right_first" value="2" summary="side by side, half width per eye, right first"/>
     <entry name="side_by_side_full" value="3" summary="side by side, full width per eye, left first"/>
-    <entry name="side_by_side_full_right_first" value="4" summary="side by side, full width per eye, right first"/>
-    <entry name="top_and_bottom_half" value="5" summary="top and bottom, half height per eye, left first"/>
-    <entry name="top_and_bottom_half_right_first" value="6" summary="top and bottom, half height per eye, right first"/>
-    <entry name="top_and_bottom_full" value="7" summary="top and bottom, full height per eye, left first"/>
-    <entry name="top_and_bottom_full_right_first" value="8" summary="top and bottom, full height per eye, right first"/>
   </enum>
 
   <request name="set_content">
     <description summary="Declare the surface's stereo content">
       Takes effect with the next commit of the surface. Unknown values
-      are treated as none. Declaring none clears the layout but retains
-      the class and sub-class and does not destroy the declaration object.
+      are treated as none. Declaring none clears the format and does not
+      destroy the declaration object.
     </description>
     <arg name="content" type="uint" enum="content" summary="packing and eye order"/>
   </request>
 
-  <enum name="content_class">
-    <description summary="kind of the stereo content">
-      The kind of program the content comes from, so the compositor can
-      choose a suggested mode per kind. The standard classes also map to
-      wp_content_type_v1 (scientific is none there): a client that knows
-      wp_content_type_v1 should set it too, so the output's HDMI content
-      type follows as the compositor already does.
-    </description>
-    <entry name="none" value="0" summary="no particular kind"/>
-    <entry name="photo" value="1" summary="stereo photo"/>
-    <entry name="video" value="2" summary="stereo video"/>
-    <entry name="game" value="3" summary="game or other entertainment"/>
-    <entry name="scientific" value="4" summary="work: medicine, design review, industry"/>
-  </enum>
-
-  <request name="set_content_class">
-    <description summary="Declare the content's class and sub-class">
-      Takes effect with the next commit of the surface. The sub-class is
-      per class, append-only, 0 means unspecified. For game: 1 = vr (a
-      VR engine adapted to the display, entertainment), 2 = 3d (a game
-      with its own stereo output), 3 = gl (stereo made by a wrapper),
-      4 = stereogl (OpenGL quad-buffer stereo). For video: 1 = legacy
-      (frame-compatible broadcast and web 3D, Blu-ray 3D), 2 = current
-      (MV-HEVC spatial video, VR180). For scientific: 1 = vr (work VR:
-      surgery and medical training, design review, industrial training),
-      2 = stereogl (OpenGL quad-buffer stereo, as scientific viewers use).
-      Other values are reserved. Class and sub-class must each fit in
-      eight bits; otherwise invalid_class is raised. Unknown values within
-      that range are retained for future extensions.
-    </description>
-    <arg name="content_class" type="uint" enum="content_class" summary="kind of the content"/>
-    <arg name="subclass" type="uint" summary="sub-class inside the class, 0 = unspecified"/>
-  </request>
 </interface>
 
 </protocol>

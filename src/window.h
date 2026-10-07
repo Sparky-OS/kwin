@@ -1623,12 +1623,12 @@ public:
 
     /**
      * The class and sub-class of the declared stereo content, as the program
-     * declared them alongside the layout. 0 means unspecified. Stored for the
-     * automatic 3D switch, which acts on them when it is built.
+     * declared them alongside the layout. 0 means unspecified.
      */
     uint8_t declaredStereoContentClass() const;
     uint8_t declaredStereoContentSubclass() const;
     void setDeclaredStereoContentClass(uint8_t contentClass, uint8_t subclass);
+
 
 public Q_SLOTS:
     virtual void closeWindow() = 0;

@@ -349,12 +349,9 @@ public:
     double alphaMultiplier() const;
 
     /**
-     * The surface's declared stereo content from kde_stereo_content_v1,
-     * with the content's class and sub-class.
+     * The surface's declared stereo content from kde_stereo_content_v1.
      */
     StereoContent stereoContent() const;
-    uint8_t stereoContentClass() const;
-    uint8_t stereoContentSubclass() const;
 
     /**
      * Returns the current release point for the buffer on this surface. The buffer keeps the

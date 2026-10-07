@@ -37,7 +37,6 @@ private:
     void kde_stereo_content_v1_destroy_resource(Resource *resource) override;
     void kde_stereo_content_v1_destroy(Resource *resource) override;
     void kde_stereo_content_v1_set_content(Resource *resource, uint32_t content) override;
-    void kde_stereo_content_v1_set_content_class(Resource *resource, uint32_t contentClass, uint32_t subclass) override;
 
     const QPointer<SurfaceInterface> m_surface;
 };
