@@ -1270,3 +1270,23 @@ the same SUSE container; the runtime comparison is still pending. Both
 existing containers remain running with two and four CPU limits respectively.
 The package build writes only to its container filesystem. Disk checks on
 takeover found 25 GB free on /K3D and 54 GB on /, above the current floors.
+
+KWin `4:6.7.4-2+stereo3d16` finished its binary build with return code 0,
+including `dpkg-source --after-build` reversing both patches. The log and
+status are `evidence/kwin-stereo3d16-local-build.log` and `.rc`. The build
+used Qt `6.11.2+dfsg-5` and KConfig/CoreAddons `6.30.0-1`, recorded in
+`evidence/kwin-stereo3d16-build-dependencies.tsv`. The first source-only
+attempt lacked the upstream tarball in the container; after copying the
+retained tarball and signature in, the source build returned 0. Both attempts
+are retained, and the successful record is
+`evidence/kwin-stereo3d16-local-source.log` and `.rc`.
+
+The coordinated binary set, source packages, `.changes` and `.buildinfo`
+files are now in `pending/`. That set is not yet verified or published.
+The package build container was removed after its records were copied out.
+A fresh `debian:testing` container is installing repository KWin +15 and
+helper 1.0.0 for the upgrade proof. The prepared scripts install the new KWin
+without requesting the helper explicitly, require apt to upgrade the helper,
+and run the installed Haruna through installed headless KWin. Its captures
+will check eye colours, frame numbers and unchanged controls against the
+Haruna lane's reference clip. These runtime checks and lintian remain pending.
