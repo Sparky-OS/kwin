@@ -11,7 +11,7 @@ evidence = root / 'evidence'
 expected = (root / 'ci-diagnosis/failed-tests.txt').read_text().splitlines()
 
 
-def results(name):
+def results(name, names=expected):
     tree = ET.parse(evidence / f'kwin-ci-diagnosis-{name}.xml')
     result = {}
     for test in tree.findall('.//testcase'):
@@ -24,13 +24,14 @@ def results(name):
         else:
             outcome = 'pass'
         result[name] = (outcome, float(test.attrib.get('time', 0)))
-    assert set(result) == set(expected), (set(expected) - set(result), set(result) - set(expected))
+    assert set(result) == set(names), (set(names) - set(result), set(result) - set(names))
     return result
 
 
 cleanup = results('one-value')
 base = results('base')
-lines = ['| Test | One-value | Base | Classification |', '|---|---|---|---|']
+fixed = results('fixed', ['kwin-testStereoDownscale'])
+lines = ['| Test | One-value | Base | Corrected cleanup | Classification |', '|---|---|---|---|---|']
 counts = {}
 for name in expected:
     current, current_time = cleanup[name]
@@ -41,8 +42,16 @@ for name in expected:
         ('fail', 'pass'): 'fails only one-value; investigate regression',
         ('pass', 'fail'): 'passes only one-value',
     }.get((current, prior), 'skipped; not verified')
+    correction = 'unchanged; not rerun'
+    if name in fixed:
+        outcome, duration = fixed[name]
+        correction = f'{outcome} ({duration:.2f}s)'
+        if category == 'fails only one-value; investigate regression' and outcome == 'pass':
+            category = 'one-value regression; corrected test data passes'
+        elif outcome != 'pass':
+            category = 'corrected test still fails; investigate regression'
     counts[category] = counts.get(category, 0) + 1
-    lines.append(f'| {name} | {current} ({current_time:.2f}s) | {prior} ({prior_time:.2f}s) | {category} |')
+    lines.append(f'| {name} | {current} ({current_time:.2f}s) | {prior} ({prior_time:.2f}s) | {correction} | {category} |')
 (evidence / 'kwin-ci-diagnosis-table.md').write_text('\n'.join(lines) + '\n')
 for category, count in counts.items():
     print(f'{count}: {category}')

@@ -1332,3 +1332,12 @@ Wayland viewport. The final checker requires that one-pixel bound and checks
 every pixel outside their union. Earlier setup and fixture failures remain
 in evidence. The serial comparison of all 64 CI failures is still pending;
 these package results do not complete that gate.
+
+The package proof containers and their temporary image have been removed.
+The SUSE build continues with two CPUs. A wrapper now starts the serial
+comparison only when that build's recorded return code is 0, using the same
+CI variables as the build. The classifier requires all 64 results on both
+commits and separately checks the corrected downscale test, so a verified
+correction can be distinguished from an outstanding regression. The wrapper
+passed shell parsing and the classifier passed Python parsing in the SUSE
+container. No serial runtime result is claimed yet.
