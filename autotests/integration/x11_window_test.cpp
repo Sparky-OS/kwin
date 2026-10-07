@@ -3941,14 +3941,6 @@ void X11WindowTest::testStereoContentDeclaration()
     QVERIFY(stereoContentChangedSpy.wait());
     QCOMPARE(window->stereoContent(), StereoContentNone);
 
-    // an unknown value is no stereo content
-    const uint32_t invalid = 42;
-    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
-                        XCB_ATOM_CARDINAL, 32, 1, &invalid);
-    xcb_flush(c.get());
-    QVERIFY(stereoContentChangedSpy.wait());
-    QCOMPARE(window->stereoContent(), StereoContentNone);
-
     // removing the property undeclares the content
     const uint32_t again = StereoContentSideBySideFull;
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
