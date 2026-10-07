@@ -1219,3 +1219,18 @@ scale and both-eye reference-average assertions. This source change is
 committed separately; it has not yet been verified by the new serial run.
 The comparison still uses the unchanged cleanup commit `060866b448` and
 its base before testing the fix, so the baseline evidence is retained.
+
+The first replacement CI build was stopped after inspecting its CMake
+cache: KDE's `--only-build` also selects `BUILD_TESTING=OFF`. Its log is
+retained as `evidence/kwin-ci-diagnosis-build-testing-off.log`. The resumed
+harness passes an explicit `-DBUILD_TESTING=ON` after the runner's defaults,
+while retaining Debug, address sanitizer, coverage, and the two-CPU limit.
+The original full CI log and its SHA-256 are now copied into
+`evidence/kwin-one-value-original-ci.log` and `.sha256`, so the queued
+coordinator rerun cannot overwrite this round's starting evidence.
+
+The package tree also contains the isolated downscale test patch. The
+container lacked the `quilt` command; `dpkg-source --before-build .` applied
+it successfully instead. `evidence/kwin16-downscale-quilt.log` retains that
+attempt and the source's applied-patch list was checked. Debian's package
+build has `BUILD_TESTING=OFF`; the correction changes test data only.
