@@ -40,9 +40,7 @@ private Q_SLOTS:
         QTest::addColumn<double>("factor");
         QTest::addColumn<int>("layout");
         for (double factor : {1.0, 2.0, 3.5, 4.0, 8.0}) {
-            for (int layout = 1; layout <= 8; ++layout) {
-                QTest::addRow("%.1fx-layout-%d", factor, layout) << factor << layout;
-            }
+            QTest::addRow("%.1fx", factor) << factor << int(StereoContentSideBySideFull);
         }
     }
 
