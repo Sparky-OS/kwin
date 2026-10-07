@@ -1234,3 +1234,13 @@ container lacked the `quilt` command; `dpkg-source --before-build .` applied
 it successfully instead. `evidence/kwin16-downscale-quilt.log` retains that
 attempt and the source's applied-patch list was checked. Debian's package
 build has `BUILD_TESTING=OFF`; the correction changes test data only.
+
+The original retries also report Wayland socket lock failures before test
+initialization, followed by an ASAN teardown crash in `Compositor::stop()`.
+Those exact lines are retained in
+`evidence/kwin-one-value-original-socket-locks.log`. The serial harness
+cleans surviving own-build test clients and Xwayland between source variants
+while keeping its image, dependency prefix, runtime path, and CPU limits
+fixed. This prevents a timed-out first run from contaminating the base run.
+No other container's processes are touched. The remaining failures still
+need the requested serial comparison before classification.

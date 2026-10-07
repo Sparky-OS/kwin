@@ -5,6 +5,7 @@
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -71,6 +72,15 @@ for name, commit in [('one-value', '060866b448'), ('base', '0ec08b5bd8')]:
     shutil.copyfile(source / 'JUnitTestResults.xml',
                     evidence / f'kwin-ci-diagnosis-{name}.xml')
     print(f'=== {name}: passed={passed}, load={os.getloadavg()} ===', flush=True)
+    # Timed-out test clients can retain the previous run's Wayland socket locks.
+    for process in Path('/proc').glob('[0-9]*'):
+        try:
+            executable = (process / 'exe').resolve(strict=True)
+            if executable.is_relative_to(source / '_build'):
+                os.kill(int(process.name), signal.SIGKILL)
+        except (FileNotFoundError, PermissionError, ProcessLookupError):
+            pass
+    subprocess.run(['killall', '-9', 'Xwayland', 'kscreenlocker_greet'], check=False)
 
 subprocess.run(['git', 'fetch', '--no-tags', '/workspace/kwin', 'a21d282774'], check=True)
 subprocess.run(['git', 'checkout', '--detach', 'a21d282774'], check=True)
