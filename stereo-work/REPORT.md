@@ -1244,3 +1244,19 @@ while keeping its image, dependency prefix, runtime path, and CPU limits
 fixed. This prevents a timed-out first run from contaminating the base run.
 No other container's processes are touched. The remaining failures still
 need the requested serial comparison before classification.
+
+Workspace scratch cleanup removed 164 superseded Mesa +stereo3d1 through
++stereo3d6 and KWin +stereo3d13/+stereo3d14 binary build artifacts, totalling
+2,200,177,684 bytes (2.05 GiB). The exact files and sizes are recorded in
+`evidence/superseded-binary-cleanup.tsv`. Repository Mesa +stereo3d8 and
+KWin +stereo3d15 were checked present before the cleanup. Source records,
+build records, and evidence remain. This does not complete the pending
+coordinated package build or the serial test comparison.
+
+The resumed CMake cache explicitly reports `BUILD_TESTING=ON`, Debug and
+coverage, and `ctest -N` lists 174 tests, recorded in
+`evidence/kwin-ci-diagnosis-test-config.log`. The harness scripts passed
+shell/Python syntax checks inside the same SUSE container in
+`evidence/kwin-ci-diagnosis-harness-syntax.log`. No runtime-test success is
+claimed from these checks. The package source's applied patch list and
+corrected data rows are in `evidence/kwin16-downscale-applied.log`.
