@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Compare the failed CI tests with fixed dependencies and one CTest worker."""
 
 import os
@@ -70,3 +71,24 @@ for name, commit in [('one-value', '060866b448'), ('base', '0ec08b5bd8')]:
     shutil.copyfile(source / 'JUnitTestResults.xml',
                     evidence / f'kwin-ci-diagnosis-{name}.xml')
     print(f'=== {name}: passed={passed}, load={os.getloadavg()} ===', flush=True)
+
+subprocess.run(['git', 'fetch', '--no-tags', '/workspace/kwin', 'a21d282774'], check=True)
+subprocess.run(['git', 'checkout', '--detach', 'a21d282774'], check=True)
+config = configuration()
+environment = EnvironmentHandler.generateFor(str(source / '_install'), config)
+environment.update({str(key): str(value) for key, value in config['Environment'].items()})
+with (evidence / 'kwin-ci-diagnosis-fixed-build.log').open('w') as output:
+    subprocess.run(['cmake', '--build', '_build', '--parallel', '2', '--target', 'testStereoDownscale'],
+                   env=environment, stdout=output, stderr=subprocess.STDOUT, check=True)
+    subprocess.run(['cmake', '--install', '_build'],
+                   env=dict(environment, DESTDIR=str(source / '_staging')),
+                   stdout=output, stderr=subprocess.STDOUT, check=True)
+staged = source / '_staging' / str(source / '_install').lstrip('/')
+shutil.copytree(staged, source / '_install', dirs_exist_ok=True)
+config['Options']['tests-run-in-parallel'] = False
+config['Options']['ctest-arguments'] = '-R ^kwin-testStereoDownscale$'
+passed = TestHandler.run(config, str(source), str(source / '_build'),
+                         str(source / '_install'), environment)
+(evidence / 'kwin-ci-diagnosis-fixed.rc').write_text(f'{0 if passed else 1}\n')
+shutil.copyfile(source / 'JUnitTestResults.xml', evidence / 'kwin-ci-diagnosis-fixed.xml')
+print(f'=== fixed downscale: passed={passed} ===', flush=True)

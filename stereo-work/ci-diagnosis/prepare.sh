@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
 set -eu
 exec > /workspace/evidence/kwin-ci-diagnosis-build.log 2>&1
 trap 'echo $? > /workspace/evidence/kwin-ci-diagnosis-build.rc' EXIT

@@ -1210,3 +1210,12 @@ floors. Host load was about 45; the cause of the failed tests is not yet
 verified. Next: run the failed tests serially on both commits with the same
 SUSE dependencies, classify each result, then verify the coordinated
 installed package set.
+
+The original CI log shows a specific stale-test regression:
+`kwin-testStereoDownscale` still supplies layouts 1 through 8. In its first
+attempt, all five rows for layout 3 pass and all 35 removed-layout rows fail.
+The test data is now limited to full side by side while preserving every
+scale and both-eye reference-average assertions. This source change is
+committed separately; it has not yet been verified by the new serial run.
+The comparison still uses the unchanged cleanup commit `060866b448` and
+its base before testing the fix, so the baseline evidence is retained.
