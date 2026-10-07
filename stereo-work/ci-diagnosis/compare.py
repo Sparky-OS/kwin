@@ -82,13 +82,13 @@ for name, commit in [('one-value', '060866b448'), ('base', '0ec08b5bd8')]:
             pass
     subprocess.run(['killall', '-9', 'Xwayland', 'kscreenlocker_greet'], check=False)
 
-subprocess.run(['git', 'fetch', '--no-tags', '/workspace/kwin', 'a21d282774'], check=True)
+subprocess.run(['git', 'fetch', '--no-tags', '/workspace/kwin', 'partner/kwin-one-value-v2'], check=True)
 subprocess.run(['git', 'checkout', '--detach', 'a21d282774'], check=True)
 config = configuration()
 environment = EnvironmentHandler.generateFor(str(source / '_install'), config)
 environment.update({str(key): str(value) for key, value in config['Environment'].items()})
 with (evidence / 'kwin-ci-diagnosis-fixed-build.log').open('w') as output:
-    subprocess.run(['cmake', '--build', '_build', '--parallel', '2', '--target', 'testStereoDownscale'],
+    subprocess.run(['cmake', '--build', '_build', '--parallel', '2'],
                    env=environment, stdout=output, stderr=subprocess.STDOUT, check=True)
     subprocess.run(['cmake', '--install', '_build'],
                    env=dict(environment, DESTDIR=str(source / '_staging')),

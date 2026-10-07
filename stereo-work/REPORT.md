@@ -1260,3 +1260,13 @@ shell/Python syntax checks inside the same SUSE container in
 `evidence/kwin-ci-diagnosis-harness-syntax.log`. No runtime-test success is
 claimed from these checks. The package source's applied patch list and
 corrected data rows are in `evidence/kwin16-downscale-applied.log`.
+
+The resumed comparison harness now rebuilds all targets after returning from
+the accepted base to the corrected cleanup commit. Its earlier final step
+built only the downscale executable, which could have left the base's KWin
+library under test. Fetching the correction also uses the local branch name
+rather than a short object ID. The updated script passed Python parsing in
+the same SUSE container; the runtime comparison is still pending. Both
+existing containers remain running with two and four CPU limits respectively.
+The package build writes only to its container filesystem. Disk checks on
+takeover found 25 GB free on /K3D and 54 GB on /, above the current floors.
