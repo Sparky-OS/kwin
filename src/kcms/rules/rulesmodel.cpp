@@ -941,14 +941,7 @@ QList<OptionsModel::Data> RulesModel::stereo3dModelData() const
 {
     static const auto modelData = QList<OptionsModel::Data>{
         {StereoContentNone, i18n("None (2D)")},
-        {StereoContentSideBySideHalf, i18n("Side by side (half), left eye first")},
-        {StereoContentSideBySideHalfRightFirst, i18n("Side by side (half), right eye first")},
         {StereoContentSideBySideFull, i18n("Side by side (full), left eye first")},
-        {StereoContentSideBySideFullRightFirst, i18n("Side by side (full), right eye first")},
-        {StereoContentTopAndBottomHalf, i18n("Top and bottom (half), left eye first")},
-        {StereoContentTopAndBottomHalfRightFirst, i18n("Top and bottom (half), right eye first")},
-        {StereoContentTopAndBottomFull, i18n("Top and bottom (full), left eye first")},
-        {StereoContentTopAndBottomFullRightFirst, i18n("Top and bottom (full), right eye first")},
     };
     return modelData;
 }

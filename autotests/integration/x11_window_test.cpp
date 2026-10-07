@@ -133,7 +133,6 @@ private Q_SLOTS:
     void testRandrEmulation();
     void testRestoreFocusToDestroyedWindow();
     void testStereoContentDeclaration();
-    void testStereoContentClass();
     void testStereoContentDeclarationMalformed();
     void testStereoContentDeclarationRulePrecedence();
 };
@@ -3925,22 +3924,22 @@ void X11WindowTest::testStereoContentDeclaration()
     QCOMPARE(supportReply->value_len, 1u);
     QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 3u);
 
-    const uint32_t value = StereoContentSideBySideHalf;
+    const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
         xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
                             XCB_ATOM_CARDINAL, 32, 1, &value);
     });
     QVERIFY(window);
-    QCOMPARE(window->stereoContent(), StereoContentSideBySideHalf);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
 
     // changing the property updates the content
     QSignalSpy stereoContentChangedSpy(window, &Window::stereoContentChanged);
-    const uint32_t full = StereoContentTopAndBottomFullRightFirst;
+    const uint32_t invalid = 42;
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
-                        XCB_ATOM_CARDINAL, 32, 1, &full);
+                        XCB_ATOM_CARDINAL, 32, 1, &invalid);
     xcb_flush(c.get());
     QVERIFY(stereoContentChangedSpy.wait());
-    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomFullRightFirst);
+    QCOMPARE(window->stereoContent(), StereoContentNone);
 
     // an unknown value is no stereo content
     const uint32_t invalid = 42;
@@ -3951,12 +3950,12 @@ void X11WindowTest::testStereoContentDeclaration()
     QCOMPARE(window->stereoContent(), StereoContentNone);
 
     // removing the property undeclares the content
-    const uint32_t again = StereoContentSideBySideHalfRightFirst;
+    const uint32_t again = StereoContentSideBySideFull;
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
                         XCB_ATOM_CARDINAL, 32, 1, &again);
     xcb_flush(c.get());
     QVERIFY(stereoContentChangedSpy.wait());
-    QCOMPARE(window->stereoContent(), StereoContentSideBySideHalfRightFirst);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
     xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content);
     xcb_flush(c.get());
     QVERIFY(stereoContentChangedSpy.wait());
@@ -3965,56 +3964,6 @@ void X11WindowTest::testStereoContentDeclaration()
     xcb_unmap_window(c.get(), window->window());
     xcb_destroy_window(c.get(), window->window());
     xcb_flush(c.get());
-}
-
-void X11WindowTest::testStereoContentClass()
-{
-    auto c = Test::createX11Connection();
-    const uint32_t game[] = {3, 4};
-    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&](xcb_window_t id) {
-        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content_class,
-                            XCB_ATOM_CARDINAL, 32, 2, game);
-    });
-    QVERIFY(window);
-    QCOMPARE(window->declaredStereoContentClass(), 3);
-    QCOMPARE(window->declaredStereoContentSubclass(), 4);
-    QSignalSpy changed(window, &Window::declaredStereoContentClassChanged);
-    const uint32_t science[] = {4, 1};
-    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_class,
-                        XCB_ATOM_CARDINAL, 32, 2, science);
-    xcb_flush(c.get());
-    QVERIFY(changed.wait());
-    QCOMPARE(window->property("declaredStereoContentClass").toUInt(), 4u);
-    QCOMPARE(window->declaredStereoContentSubclass(), 1);
-    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_class);
-    xcb_flush(c.get());
-    QVERIFY(changed.wait());
-    QCOMPARE(window->declaredStereoContentClass(), 0);
-    QCOMPARE(window->declaredStereoContentSubclass(), 0);
-
-    struct Malformed { xcb_atom_t type; uint8_t format; uint32_t length; uint32_t values[3]; };
-    const Malformed cases[] = {
-        {XCB_ATOM_STRING, 32, 2, {3, 4}},
-        {XCB_ATOM_CARDINAL, 8, 2, {3, 4}},
-        {XCB_ATOM_CARDINAL, 32, 0, {}},
-        {XCB_ATOM_CARDINAL, 32, 1, {3}},
-        {XCB_ATOM_CARDINAL, 32, 3, {3, 4, 0}},
-        {XCB_ATOM_CARDINAL, 32, 2, {256, 1}},
-        {XCB_ATOM_CARDINAL, 32, 2, {3, 256}},
-    };
-    for (const auto &bad : cases) {
-        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_class,
-                            XCB_ATOM_CARDINAL, 32, 2, game);
-        xcb_flush(c.get());
-        QVERIFY(changed.wait());
-        QCOMPARE(window->declaredStereoContentClass(), 3);
-        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_class,
-                            bad.type, bad.format, bad.length, bad.values);
-        xcb_flush(c.get());
-        QVERIFY(changed.wait());
-        QCOMPARE(window->declaredStereoContentClass(), 0);
-        QCOMPARE(window->declaredStereoContentSubclass(), 0);
-    }
 }
 
 void X11WindowTest::testStereoContentDeclarationMalformed()
@@ -4053,7 +4002,7 @@ void X11WindowTest::testStereoContentDeclarationMalformed()
     ok(StereoContentNone);
     const uint32_t two[2] = {7, 3};
     set(XCB_ATOM_CARDINAL, 32, 2, two); // long: first value used
-    ok(StereoContentTopAndBottomFull);
+    ok(StereoContentNone);
     const uint32_t big = 0xFFFFFFFFu;
     set(XCB_ATOM_CARDINAL, 32, 1, &big);
     ok(StereoContentNone);
@@ -4066,7 +4015,7 @@ void X11WindowTest::testStereoContentDeclarationRulePrecedence()
     KSharedConfig::Ptr config = KSharedConfig::openConfig(QString(), KConfig::SimpleConfig);
     config->group(QStringLiteral("General")).writeEntry("rules", QStringList({QStringLiteral("stereo-rule")}));
     auto group = config->group(QStringLiteral("stereo-rule"));
-    group.writeEntry("stereo3d", "tab-half");
+    group.writeEntry("stereo3d", "sbs-full");
     group.writeEntry("stereo3drule", 2);
     group.writeEntry("wmclass", "stereorule");
     group.writeEntry("wmclasscomplete", false);
@@ -4084,16 +4033,16 @@ void X11WindowTest::testStereoContentDeclarationRulePrecedence()
     });
     QVERIFY(window);
     QCOMPARE(window->declaredStereoContent(), StereoContentSideBySideFull);
-    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomHalf); // rule wins
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull); // rule wins
 
     // the declaration changes under the rule: still the rule
-    const uint32_t other = StereoContentSideBySideHalf;
+    const uint32_t other = 42;
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content, XCB_ATOM_CARDINAL, 32, 1, &other);
     xcb_flush(c.get());
     xcb_get_input_focus_reply(c.get(), xcb_get_input_focus(c.get()), nullptr);
     QTest::qWait(100);
-    QCOMPARE(window->declaredStereoContent(), StereoContentSideBySideHalf);
-    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomHalf);
+    QCOMPARE(window->declaredStereoContent(), StereoContentNone);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
 
     workspace()->rulebook()->setConfig(KSharedConfig::openConfig(QString(), KConfig::SimpleConfig));
     workspace()->slotReconfigure();

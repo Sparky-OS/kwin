@@ -642,8 +642,6 @@ void SurfaceState::mergeInto(SurfaceState *target)
     target->renderingIntent = renderingIntent;
     target->alphaMultiplier = alphaMultiplier;
     target->stereoContent = stereoContent;
-    target->stereoContentClass = stereoContentClass;
-    target->stereoContentSubclass = stereoContentSubclass;
     target->yuvCoefficients = yuvCoefficients;
     target->fifoBarrier |= std::exchange(fifoBarrier, false);
     target->hasFifoWaitCondition = std::exchange(hasFifoWaitCondition, false);
@@ -1324,16 +1322,6 @@ double SurfaceInterface::alphaMultiplier() const
 StereoContent SurfaceInterface::stereoContent() const
 {
     return d->current->stereoContent;
-}
-
-uint8_t SurfaceInterface::stereoContentClass() const
-{
-    return d->current->stereoContentClass;
-}
-
-uint8_t SurfaceInterface::stereoContentSubclass() const
-{
-    return d->current->stereoContentSubclass;
 }
 
 void SurfaceInterface::clearFifoBarrier(std::optional<std::chrono::nanoseconds> refreshDuration)

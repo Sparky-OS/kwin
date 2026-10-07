@@ -3125,17 +3125,12 @@ void X11Window::handleXwaylandScaleChanged()
 }
 
 // A full-resolution stereo window holds both views at full size. Its X11 window is twice its
-// place on screen, in width (side by side) or height (top and bottom); KWin places it, and
-// takes pointer input in it, at one view's size, so the pointer lands in the left view.
+// place on screen in width; KWin places it, and takes pointer input in it, at one view's size.
 QSizeF X11Window::stereoClientScale() const
 {
     switch (stereoContent()) {
     case StereoContentSideBySideFull:
-    case StereoContentSideBySideFullRightFirst:
         return QSizeF(2, 1);
-    case StereoContentTopAndBottomFull:
-    case StereoContentTopAndBottomFullRightFirst:
-        return QSizeF(1, 2);
     default:
         return QSizeF(1, 1);
     }
@@ -4228,12 +4223,10 @@ Xcb::Property X11Window::fetchStereoContent() const
 
 void X11Window::readStereoContent(Xcb::Property &property)
 {
-    // _KDE_NET_WM_STEREO_CONTENT: CARDINAL/32, one value of the StereoContent
-    // enum (0 none, 1 sbs half, 2 sbs half right first, 3 sbs full,
-    // 4 sbs full right first, 5 tab half, 6 tab half right first, 7 tab full,
-    // 8 tab full right first); absent, malformed or out of range means none.
+    // _KDE_NET_WM_STEREO_CONTENT: CARDINAL/32, 0 none or 3 full side by side.
+    // Absent, malformed or out of range means none.
     const uint32_t value = property.value<uint32_t>().value_or(StereoContentNone);
-    setDeclaredStereoContent(value <= StereoContentTopAndBottomFullRightFirst ? StereoContent(value) : StereoContentNone);
+    setDeclaredStereoContent(value == StereoContentSideBySideFull ? StereoContentSideBySideFull : StereoContentNone);
 }
 
 void X11Window::getStereoContent()
@@ -4249,8 +4242,7 @@ Xcb::Property X11Window::fetchStereoContentClass() const
 
 void X11Window::readStereoContentClass(Xcb::Property &property)
 {
-    // _KDE_NET_WM_STEREO_CONTENT_CLASS: CARDINAL/32, exactly two values:
-    // class (0 none, 1 photo, 2 video, 3 game, 4 scientific), then sub-class.
+    // _KDE_NET_WM_STEREO_CONTENT_CLASS: CARDINAL/32, exactly two values.
     // Both are 8-bit, append-only identifiers; unknown identifiers are retained.
     const auto values = property.array<uint32_t>();
     if (!values || values->size() != 2 || property.data()->bytes_after != 0

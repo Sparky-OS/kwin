@@ -88,22 +88,17 @@ void SurfaceItem::setStereoContent(StereoContent content)
 }
 
 // The eye's view in the surface's orientation (its half of the source box), mapped back
-// to buffer coordinates; the right-first contents hold the left eye's view second.
+// to buffer coordinates.
 WindowQuadList SurfaceItem::eyeQuads(StereoEye eye) const
 {
     const QSizeF orientedBufferSize = m_bufferToSurfaceTransform.map(QSizeF(m_bufferSize));
     const RectF sourceBox = m_bufferToSurfaceTransform.map(m_bufferSourceBox, m_bufferSize);
-    const bool secondView = (eye == StereoEye::Right) != isRightFirstStereoContent(m_stereoContent);
+    const bool secondView = eye == StereoEye::Right;
     RectF view = sourceBox;
     if (isSideBySideStereoContent(m_stereoContent)) {
         view.setWidth(sourceBox.width() / 2);
         if (secondView) {
             view.translate(sourceBox.width() / 2, 0);
-        }
-    } else {
-        view.setHeight(sourceBox.height() / 2);
-        if (secondView) {
-            view.translate(0, sourceBox.height() / 2);
         }
     }
     return buildSourceQuads(m_surfaceToBufferTransform.map(view, orientedBufferSize));
