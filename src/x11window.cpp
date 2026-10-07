@@ -3066,6 +3066,13 @@ void X11Window::sendSyntheticConfigureNotify()
     xcb_flush(kwinApp()->x11Connection());
 }
 
+void X11Window::sendSyntheticConfigureNotifyIfNeeded()
+{
+    if (m_stereoClientScale != m_programSizeScale) {
+        sendSyntheticConfigureNotify();
+    }
+}
+
 void X11Window::handleXwaylandScaleChanged()
 {
     // while KWin implicitly considers the window already resized when the scale changes,
@@ -3599,6 +3606,7 @@ void X11Window::configure(const Rect &nativeGeometry)
             effectiveGeometry.setHeight(std::round(effectiveGeometry.height() * m_stereoClientScale.height()));
         }
     }
+    const bool geometryChanged = m_client.size() != effectiveGeometry.size() || m_client.position() != effectiveGeometry.topLeft();
     if (m_client.size() != effectiveGeometry.size()) {
         m_client.setGeometry(effectiveGeometry);
         // tell a program that declares stereo itself its own size (ICCCM 4.2.3)
@@ -3610,6 +3618,9 @@ void X11Window::configure(const Rect &nativeGeometry)
 
         // A synthetic configure notify event has to be sent if the client window is not
         // resized to let the client know about the new position. See ICCCM 4.1.5.
+        sendSyntheticConfigureNotify();
+    }
+    if (!geometryChanged && m_stereoClientScale != m_programSizeScale) {
         sendSyntheticConfigureNotify();
     }
 }

@@ -3576,8 +3576,19 @@ public:
             return;
         }
         auto configureEvent = reinterpret_cast<xcb_configure_notify_event_t *>(event);
+        m_configureSizes.append(QSize(configureEvent->width, configureEvent->height));
         present(QSize(configureEvent->width, configureEvent->height));
         Q_EMIT handledConfigure();
+    }
+
+    void clearConfigureSizes()
+    {
+        m_configureSizes.clear();
+    }
+
+    const QList<QSize> &configureSizes() const
+    {
+        return m_configureSizes;
     }
 
     bool waitForAndProcessConfigure(const QSize &expectedSize)
@@ -3648,12 +3659,21 @@ public:
         return true;
     }
 
+    void declareStereo()
+    {
+        const uint32_t value = StereoContentSideBySideFull;
+        xcb_change_property(m_display->connection(), XCB_PROP_MODE_REPLACE, m_window->window(),
+                            atoms->kde_net_wm_stereo_content, XCB_ATOM_CARDINAL, 32, 1, &value);
+        xcb_flush(m_display->connection());
+    }
+
 Q_SIGNALS:
     void handledConfigure();
 
 public:
     X11Window *const m_window;
     QSize m_size;
+    QList<QSize> m_configureSizes;
 };
 
 void X11WindowTest::testRandrEmulation()
@@ -3702,6 +3722,7 @@ void X11WindowTest::testRandrEmulation()
 
     auto outputModes = xcb_randr_get_output_info_modes(outputInfo);
     const auto originalModeSize = QSize(crtcInfo->width, crtcInfo->height);
+    const xcb_randr_mode_t originalMode = crtcInfo->mode;
     xcb_randr_mode_t emulatedMode = 0;
     QSize emulatedSize;
     for (int i = 0; i < screenResources->num_modes; i++) {
@@ -3785,6 +3806,30 @@ void X11WindowTest::testRandrEmulation()
         }
         QVERIFY(commit.wait());
     }
+
+    QSignalSpy stereoContentChanged(window.m_window, &Window::stereoContentChanged);
+    window.declareStereo();
+    QVERIFY(stereoContentChanged.wait());
+    window.clearConfigureSizes();
+    auto cookie = xcb_randr_set_crtc_config(x11Display->connection(),
+                                            outputInfo->crtc,
+                                            screenResources->config_timestamp,
+                                            screenResources->config_timestamp,
+                                            crtcInfo->x,
+                                            crtcInfo->y,
+                                            originalMode,
+                                            XCB_RANDR_ROTATION_ROTATE_0,
+                                            1,
+                                            &x11Outputs[outputNum]);
+    xcb_generic_error_t *err = nullptr;
+    auto reply = xcb_randr_set_crtc_config_reply(x11Display->connection(), cookie, &err);
+    QVERIFY(reply);
+    QCOMPARE(reply->status, XCB_RANDR_SET_CONFIG_SUCCESS);
+    QTRY_VERIFY(!window.configureSizes().isEmpty());
+    QCOMPARE(window.configureSizes().constLast(), QSize(100, 100));
+    QVERIFY(std::ranges::any_of(window.configureSizes(), [](const QSize &size) {
+        return size == QSize(200, 100);
+    }));
 }
 
 /**
