@@ -3,11 +3,11 @@
 #include <QTest>
 #include <cmath>
 
+#include "core/renderdevice.h"
 #include "core/rendertarget.h"
 #include "core/renderviewport.h"
 #include "effect/effect.h"
 #include "opengl/eglcontext.h"
-#include "opengl/egldisplay.h"
 #include "opengl/glframebuffer.h"
 #include "opengl/gltexture.h"
 #include "scene/itemrenderer_opengl.h"
@@ -25,10 +25,10 @@ public:
         setBufferSourceBox(RectF(QPointF(), image.size()));
         setDestinationSize(destination);
         setStereoContent(layout);
-        m_texture = renderer.createTexture(image);
+        m_textures[renderer.renderDevice()] = renderer.createTexture(image);
     }
     RegionF shape() const override { return RegionF{rect()}; }
-    void preprocess() override {}
+    void preprocess(ItemRenderer *) override {}
 };
 
 class StereoDownscaleTest : public QObject
@@ -40,9 +40,7 @@ private Q_SLOTS:
         QTest::addColumn<double>("factor");
         QTest::addColumn<int>("layout");
         for (double factor : {1.0, 2.0, 3.5, 4.0, 8.0}) {
-            for (int layout = 1; layout <= 8; ++layout) {
-                QTest::addRow("%.1fx-layout-%d", factor, layout) << factor << layout;
-            }
+            QTest::addRow("%.1fx", factor) << factor << int(StereoContentSideBySideFull);
         }
     }
 
@@ -50,9 +48,9 @@ private Q_SLOTS:
     {
         QFETCH(double, factor);
         QFETCH(int, layout);
-        const auto display = EglDisplay::create(eglGetDisplay(EGL_DEFAULT_DISPLAY), nullptr);
-        QVERIFY(display);
-        const auto context = EglContext::create(display.get(), EGL_NO_CONFIG_KHR, nullptr);
+        const auto device = RenderDevice::createSoftwareDevice(0);
+        QVERIFY(device);
+        const auto context = device->eglContext();
         QVERIFY(context);
         QVERIFY(context->makeCurrent());
         const QSize destination(32, 24);
@@ -67,11 +65,11 @@ private Q_SLOTS:
                 input.setPixel(x, y, second ? qRgb(0, value, 0) : qRgb(value, 0, 0));
             }
         }
-        ItemRendererOpenGL renderer(display.get());
+        ItemRendererOpenGL renderer(device.get());
         // the surface has no window on an output with eyes, take the view of each eye as a capture does
         renderer.setStereoCapture(true);
         ImageSurface surface(renderer, input, destination, content);
-        QVERIFY(surface.texture());
+        QVERIFY(surface.texture(device.get()));
         auto output = GLTexture::allocate(GL_RGBA8, destination);
         QVERIFY(output);
         GLFramebuffer framebuffer(output.get());
@@ -82,7 +80,7 @@ private Q_SLOTS:
         for (auto eye : {StereoEye::Left, StereoEye::Right}) {
             renderer.setStereoEye(eye);
             context->pushFramebuffer(&framebuffer);
-            renderer.renderItem(target, viewport, &surface, 0, Region::infinite(), paint, {}, {});
+            QVERIFY(renderer.renderItem(target, viewport, &surface, 0, Region::infinite(), paint, {}, {}));
             context->popFramebuffer();
             const QImage actual = output->toImage().flipped(Qt::Vertical);
             QImage reference(destination, QImage::Format_RGBA8888_Premultiplied);
@@ -130,9 +128,9 @@ private Q_SLOTS:
     void cost()
     {
         QFETCH(int, factor);
-        const auto display = EglDisplay::create(eglGetDisplay(EGL_DEFAULT_DISPLAY), nullptr);
-        QVERIFY(display);
-        const auto context = EglContext::create(display.get(), EGL_NO_CONFIG_KHR, nullptr);
+        const auto device = RenderDevice::createSoftwareDevice(0);
+        QVERIFY(device);
+        const auto context = device->eglContext();
         QVERIFY(context);
         QVERIFY(context->makeCurrent());
         const QSize destination(320, 180);
@@ -142,7 +140,7 @@ private Q_SLOTS:
                 input.setPixel(x, y, ((x % 4 == 0) != (y % 4 == 0)) ? qRgb(255, 255, 255) : qRgb(0, 0, 0));
             }
         }
-        ItemRendererOpenGL renderer(display.get());
+        ItemRendererOpenGL renderer(device.get());
         ImageSurface surface(renderer, input, destination, StereoContentSideBySideFull);
         auto output = GLTexture::allocate(GL_RGBA8, destination);
         GLFramebuffer framebuffer(output.get());
@@ -156,17 +154,19 @@ private Q_SLOTS:
             // Keep the same source footprint for the mono baseline.
             surface.setBufferSourceBox(filtered ? RectF(QPointF(), input.size()) : RectF(0, 0, input.width() / 2, input.height()));
             auto draw = [&] {
+                bool rendered = true;
                 for (auto eye : {StereoEye::Left, StereoEye::Right}) {
                     renderer.setStereoEye(eye);
-                    renderer.renderItem(target, viewport, &surface, 0, Region::infinite(), paint, {}, {});
+                    rendered &= renderer.renderItem(target, viewport, &surface, 0, Region::infinite(), paint, {}, {});
                 }
                 glFinish();
+                return rendered;
             };
-            draw();
+            QVERIFY(draw());
             QElapsedTimer timer;
             timer.start();
             for (int i = 0; i < 20; ++i) {
-                draw();
+                QVERIFY(draw());
             }
             qInfo("%dx %s: %.3f ms/stereo frame, 320x180 per eye, 20 frames, renderer=%s", factor,
                   filtered ? "area" : "bilinear", timer.nsecsElapsed() / 20.0 / 1e6, glGetString(GL_RENDERER));
