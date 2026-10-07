@@ -160,6 +160,7 @@ public:
 
     void updateVisibility();
     bool hiddenPreview() const; ///< Window is mapped in order to get a window pixmap
+    void sendSyntheticConfigureNotifyIfNeeded();
 
     QString captionNormal() const override
     {

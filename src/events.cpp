@@ -196,6 +196,13 @@ void Workspace::workspaceEvent(xcb_generic_event_t *e)
     }
     case XCB_CONFIGURE_NOTIFY: {
         const auto configureNotifyEvent = reinterpret_cast<xcb_configure_notify_event_t *>(e);
+        if (configureNotifyEvent->event == kwinApp()->x11RootWindow()) {
+            for (Window *window : windows()) {
+                if (auto *x11Window = qobject_cast<X11Window *>(window)) {
+                    x11Window->sendSyntheticConfigureNotifyIfNeeded();
+                }
+            }
+        }
         if (configureNotifyEvent->override_redirect && configureNotifyEvent->event == kwinApp()->x11RootWindow()) {
             if (updateXStackingOrder()) {
                 updateStackingOrder();
