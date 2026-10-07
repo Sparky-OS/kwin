@@ -32,9 +32,14 @@ for path in files:
         colours = [item['colour'] for item in views]
         assert colours == ['red', 'blue'], (path, colours)
         assert all(item['green_left'] and item['geom_ok'] for item in views), views
-        x, y, width, height = views[0]['rect']
+        rectangles = [item['rect'] for item in views]
+        assert all(abs(a - b) <= 1 for a, b in zip(*rectangles)), rectangles
+        x = min(rectangle[0] for rectangle in rectangles)
+        y = min(rectangle[1] for rectangle in rectangles)
+        right = max(rectangle[0] + rectangle[2] for rectangle in rectangles)
+        bottom = max(rectangle[1] + rectangle[3] for rectangle in rectangles)
         difference = np.any(eyes[0] != eyes[1], axis=2)
-        difference[y:y + height, x:x + width] = False
+        difference[y:bottom, x:right] = False
         assert not difference.any(), (path, int(difference.sum()))
         print(f'PASS: {path.name} red/blue, frame={frames[0]}, controls identical')
     else:

@@ -9,10 +9,11 @@ printf '%s\n' 'Package: *' 'Pin: release o=Sparky Stereo OS' 'Pin-Priority: 1001
 apt-get -y update
 apt-get -y --no-install-recommends install \
     kwin-wayland=4:6.7.4-2+stereo3d15 libstereo-declare1=1.0.0-1 \
-    haruna dbus-x11 dbus xvfb xauth x11-utils mesa-utils vulkan-tools \
+    haruna qt6-wayland kde-style-breeze dbus-x11 dbus xvfb xauth x11-utils mesa-utils vulkan-tools \
     libgl1-mesa-dri libegl-mesa0 libglx-mesa0 libgbm1 mesa-vulkan-drivers \
     mesa-vulkan-layer-stereo qml6-module-org-kde-desktop breeze-icon-theme \
     fonts-dejavu-core python3-numpy python3-pil apt-utils dpkg-dev lintian
+useradd --uid 1000 --user-group --no-create-home --home-dir /workspace/.home mesa-proof
 dpkg-query -W kwin-wayland libstereo-declare1 haruna libmpvqt3 libmpv2 \
     libgl1-mesa-dri libegl-mesa0 mesa-vulkan-layer-stereo > /proof-records/before.tsv
 test "$(dpkg-query -W -f='${Version}' kwin-wayland)" = 4:6.7.4-2+stereo3d15

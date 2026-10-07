@@ -1290,3 +1290,45 @@ without requesting the helper explicitly, require apt to upgrade the helper,
 and run the installed Haruna through installed headless KWin. Its captures
 will check eye colours, frame numbers and unchanged controls against the
 Haruna lane's reference clip. These runtime checks and lintian remain pending.
+
+The coordinated package checks are now complete. Lintian returned 0 for
+KWin, stereo-declare and plasma-wayland-protocols on their binary `.changes`.
+All three source packages unpacked successfully. Their corrected declaration
+files, helper implementation and downscale test match the source trees.
+The records are in `evidence/coordinated-package-records/`, including
+`lintian-*.log`, `lintian-*.rc`, `source-unpack.log` and `source-check.rc`.
+
+The fresh testing container first installed repository KWin +15 and helper
+1.0.0. Asking apt for KWin +16 and the new protocol package, without asking
+for the helper, selected and installed helper 1.0.1. The before/after version
+lists, policy and solver plan are `before.tsv`, `after.tsv`,
+`upgrade-policy.txt` and `upgrade-plan.txt` in that same evidence folder.
+`upgrade-command.rc` is 0, and `upgrade.rc` records the expected-result check.
+
+Installed Haruna `1.8.1-1+stereo3d1` uses the installed helper through MpvQt
+under installed KWin +16, with Mesa +stereo3d8 and renderD128. Its Wayland
+trace contains one `set_content(3)`, `wp_content_type_v1.set_content_type(2)`
+and no removed `set_content_class` request. Its process maps contain the
+installed `libstereo-declare.so.1.1.0`. The client remained alive. Six stereo
+captures passed: red left, blue right, matching video/subtitle frame numbers
+183, 222, 249, 29, 65 and 98, and 0 different pixels outside the video.
+The mono control made no stereo declaration and all six captures stayed
+1280 pixels wide. Swapping the stereo halves returned 1 at the expected
+red/blue assertion. These results are in `coordinated-haruna-*.log` and
+`.rc`; the captures and request traces are in
+`evidence/coordinated-packages/stereo/` and `mono/`. The first final stereo
+capture was also inspected visually.
+
+The proof setup needed a passwd entry for uid 1000 and Qt's Wayland shell
+plugin. Both were added only inside the disposable container; the final
+setup script includes them. The first shared fixture folder let Haruna advance
+from the mono clip to the stereo clip, so each control now has its own
+folder. The collector's mean-colour classifier samples the reference clip's
+subtitle and returns 1; the actual oracle uses its frame markers and known
+eye colours. Its RPC/read failures return 2 or more and still stop the test.
+The initial crop missed one video edge column: the two marker rectangles
+differ by one filtered pixel, and their union agrees with the 844-pixel
+Wayland viewport. The final checker requires that one-pixel bound and checks
+every pixel outside their union. Earlier setup and fixture failures remain
+in evidence. The serial comparison of all 64 CI failures is still pending;
+these package results do not complete that gate.
