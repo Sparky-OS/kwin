@@ -7,7 +7,7 @@ Partner: GPT-6.1 via Codex, current branch `partner/kwin-one-value-v2` in
 
 Current round: the coordinated KWin +16, helper 1.0.1 and protocol package
 set is built and verified in `pending/`. The requested serial comparison of
-the 64 failed SUSE CI tests is waiting for its two-CPU build to finish.
+the 64 failed SUSE CI tests is running after its two-CPU build returned 0.
 No result or classification is claimed for that comparison yet. Its detailed
 records are at the end of this report; the accepted earlier rounds follow.
 
@@ -1348,3 +1348,13 @@ commits and separately checks the corrected downscale test, so a verified
 correction can be distinguished from an outstanding regression. The wrapper
 passed shell parsing and the classifier passed Python parsing in the SUSE
 container. No serial runtime result is claimed yet.
+
+The SUSE build returned 0 and installed its targets. After it finished, two
+waiting comparison launchers started: the earlier container-start wrapper
+and the later wrapper with the complete CI environment. I stopped both
+while they were extracting dependencies, before any test ran, then started
+only the later wrapper. The process list is retained in
+`evidence/kwin-ci-diagnosis-duplicate-launchers.txt`; their interrupted logs
+are `kwin-ci-diagnosis-duplicate-old.log` and `-duplicate-new.log`. The
+restarted comparison re-extracts the fixed runtime dependencies and is the
+only comparison process. No test result is claimed from either aborted run.
