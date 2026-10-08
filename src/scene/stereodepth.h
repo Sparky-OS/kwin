@@ -36,6 +36,9 @@ public:
 
     static qreal level(const Window *window);
 
+    static qreal poppedLimit(int viewWidth);
+    static qreal sunkLimit(int viewWidth);
+
     /**
      * The parallax between the eyes' copies of the window in pixels of a view that is
      * @a viewWidth pixels wide, positive when the window is nearer than the screen.
