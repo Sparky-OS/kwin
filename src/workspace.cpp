@@ -245,6 +245,7 @@ void Workspace::init()
         if (!result) {
             qCWarning(KWIN_CORE, "Applying sensor changes failed: %s", qPrintable(result.error().message));
         }
+        input()->pointer()->updateAfterScreenChange();
     };
     connect(m_lidSwitchTracker.get(), &LidSwitchTracker::lidStateChanged, this, applySensorChanges);
     connect(kwinApp()->tabletModeManager(), &TabletModeManager::tabletModeChanged, this, applySensorChanges);
@@ -611,7 +612,9 @@ std::expected<void, OutputError> Workspace::applyOutputConfiguration(OutputConfi
         if (m_dpms == DpmsState::Off || m_dpms == DpmsState::TurningOff) {
             config.changeSet(output)->dpmsMode = BackendOutput::DpmsMode::Off;
         } else {
-            config.changeSet(output)->dpmsMode = BackendOutput::DpmsMode::On;
+            config.changeSet(output)->dpmsMode = m_lidSwitchTracker->isLidClosed() && output->isInternal()
+                ? BackendOutput::DpmsMode::Off
+                : BackendOutput::DpmsMode::On;
         }
     }
     auto result = kwinApp()->outputBackend()->applyOutputChanges(config);
@@ -1269,12 +1272,12 @@ void Workspace::updateCurrentActivity(const QString &new_activity)
 #endif
 }
 
-LogicalOutput *Workspace::outputAt(const QPointF &pos) const
+static LogicalOutput *nearestOutput(const QPointF &pos, const QList<LogicalOutput *> &outputs)
 {
     LogicalOutput *bestOutput = nullptr;
     qreal minDistance;
 
-    for (LogicalOutput *output : std::as_const(m_outputs)) {
+    for (LogicalOutput *output : outputs) {
         const RectF geo = output->geometry();
 
         const QPointF closestPoint(std::clamp(pos.x(), geo.x(), geo.x() + geo.width() - 1),
@@ -1288,6 +1291,30 @@ LogicalOutput *Workspace::outputAt(const QPointF &pos) const
         }
     }
     return bestOutput;
+}
+
+LogicalOutput *Workspace::outputAt(const QPointF &pos) const
+{
+    return nearestOutput(pos, m_outputs);
+}
+
+bool Workspace::isOutputInteractive(const LogicalOutput *output) const
+{
+    if (!m_lidSwitchTracker->isLidClosed() || !output->isInternal()) {
+        return true;
+    }
+    return std::ranges::any_of(kwinApp()->outputBackend()->outputs(), [output](BackendOutput *backend) {
+        return backend->isEnabled() && !backend->isInternal() && backend->replicationSource() == output->backendOutput()->uuid();
+    });
+}
+
+LogicalOutput *Workspace::interactiveOutputAt(const QPointF &pos) const
+{
+    QList<LogicalOutput *> outputs;
+    std::copy_if(m_outputs.begin(), m_outputs.end(), std::back_inserter(outputs), [this](LogicalOutput *output) {
+        return isOutputInteractive(output);
+    });
+    return nearestOutput(pos, outputs);
 }
 
 LogicalOutput *Workspace::findOutput(const QString &name) const
@@ -2566,6 +2593,11 @@ void Workspace::rearrange(const QHash<Window *, LogicalOutput *> &oldOutputs)
  */
 RectF Workspace::clientArea(clientAreaOption opt, const LogicalOutput *output) const
 {
+    if (opt == PlacementArea && !isOutputInteractive(output)) {
+        if (const auto interactive = interactiveOutputAt(output->geometry().center())) {
+            output = interactive;
+        }
+    }
     switch (opt) {
     case MaximizeArea:
     case PlacementArea:
@@ -2683,6 +2715,11 @@ QList<LogicalOutput *> Workspace::outputOrder() const
 
 LogicalOutput *Workspace::activeOutput() const
 {
+    if (m_activeOutput && !isOutputInteractive(m_activeOutput)) {
+        if (const auto interactive = interactiveOutputAt(m_activeOutput->geometry().center())) {
+            return interactive;
+        }
+    }
     return m_activeOutput;
 }
 

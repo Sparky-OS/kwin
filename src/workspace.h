@@ -158,6 +158,8 @@ public:
     QList<LogicalOutput *> outputOrder() const;
 
     LogicalOutput *activeOutput() const;
+    bool isOutputInteractive(const LogicalOutput *output) const;
+    LogicalOutput *interactiveOutputAt(const QPointF &pos) const;
     void setActiveOutput(LogicalOutput *output);
     void setActiveOutput(const QPointF &pos);
 
