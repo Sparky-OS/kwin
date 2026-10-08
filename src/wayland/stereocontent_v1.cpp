@@ -17,7 +17,7 @@ static constexpr uint32_t s_version = 1;
 
 static constexpr StereoContent toStereoContent(uint32_t content)
 {
-    return content <= StereoContentTopAndBottomFullRightFirst ? StereoContent(content) : StereoContentNone;
+    return content == StereoContentSideBySideFull ? StereoContentSideBySideFull : StereoContentNone;
 }
 
 StereoContentManagerV1::StereoContentManagerV1(Display *display, QObject *parent)
@@ -54,8 +54,6 @@ StereoContentSurfaceV1::~StereoContentSurfaceV1()
         const auto priv = SurfaceInterfacePrivate::get(m_surface);
         priv->stereoContent = nullptr;
         priv->pending->stereoContent = StereoContentNone;
-        priv->pending->stereoContentClass = 0;
-        priv->pending->stereoContentSubclass = 0;
         priv->pending->committed |= SurfaceState::Field::StereoContent;
     }
 }
@@ -78,22 +76,6 @@ void StereoContentSurfaceV1::kde_stereo_content_v1_set_content(Resource *resourc
     }
     const auto priv = SurfaceInterfacePrivate::get(m_surface);
     priv->pending->stereoContent = toStereoContent(content);
-    priv->pending->committed |= SurfaceState::Field::StereoContent;
-}
-
-void StereoContentSurfaceV1::kde_stereo_content_v1_set_content_class(Resource *resource, uint32_t contentClass, uint32_t subclass)
-{
-    if (!m_surface) {
-        wl_resource_post_error(resource->handle, error_no_surface, "wl_surface was destroyed before a set_content_class request");
-        return;
-    }
-    if (contentClass > std::numeric_limits<uint8_t>::max() || subclass > std::numeric_limits<uint8_t>::max()) {
-        wl_resource_post_error(resource->handle, error_invalid_class, "class and sub-class are 8-bit values");
-        return;
-    }
-    const auto priv = SurfaceInterfacePrivate::get(m_surface);
-    priv->pending->stereoContentClass = contentClass;
-    priv->pending->stereoContentSubclass = subclass;
     priv->pending->committed |= SurfaceState::Field::StereoContent;
 }
 

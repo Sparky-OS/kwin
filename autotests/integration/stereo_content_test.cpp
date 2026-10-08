@@ -34,11 +34,8 @@ private Q_SLOTS:
 
     void testDefaultValue();
     void testSetContent();
-    void testAllLayouts();
-    void testInvalidClass();
     void testSubsurface();
     void testSetContentInvalidValue();
-    void testSetContentClass();
     void testRemoveOnDestroy();
     void testRecreateAfterDestroy();
     void testDoubleDeclarationError();
@@ -66,7 +63,7 @@ void StereoContentTest::cleanup()
     Test::destroyWaylandConnection();
 }
 
-// Without a declaration, a surface carries no stereo content and no class.
+// Without a declaration, a surface carries no stereo content.
 void StereoContentTest::testDefaultValue()
 {
     std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
@@ -75,11 +72,7 @@ void StereoContentTest::testDefaultValue()
     QVERIFY(window);
 
     QCOMPARE(window->surface()->stereoContent(), StereoContentNone);
-    QCOMPARE(window->surface()->stereoContentClass(), 0);
-    QCOMPARE(window->surface()->stereoContentSubclass(), 0);
     QCOMPARE(window->stereoContent(), StereoContentNone);
-    QCOMPARE(window->declaredStereoContentClass(), 0);
-    QCOMPARE(window->declaredStereoContentSubclass(), 0);
 }
 
 // set_content is double-buffered: it applies on commit and reaches the window.
@@ -102,43 +95,12 @@ void StereoContentTest::testSetContent()
     QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideFull);
     QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
 
-    // Change: top and bottom, half height, right first.
-    declaration->set_content(Test::StereoContentV1::content_top_and_bottom_half_right_first);
-    surface->commit(KWayland::Client::Surface::CommitFlag::None);
-    QVERIFY(committed.wait());
-    QCOMPARE(window->surface()->stereoContent(), StereoContentTopAndBottomHalfRightFirst);
-    QCOMPARE(window->stereoContent(), StereoContentTopAndBottomHalfRightFirst);
-
     // Declaring none clears it again.
     declaration->set_content(Test::StereoContentV1::content_none);
     surface->commit(KWayland::Client::Surface::CommitFlag::None);
     QVERIFY(committed.wait());
     QCOMPARE(window->surface()->stereoContent(), StereoContentNone);
     QCOMPARE(window->stereoContent(), StereoContentNone);
-}
-
-void StereoContentTest::testAllLayouts()
-{
-    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
-    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
-    declaration->set_content(3);
-    declaration->set_content_class(3, 4);
-    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
-    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
-    QVERIFY(window);
-    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
-    QCOMPARE(window->declaredStereoContentSubclass(), 4);
-    QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
-    for (uint32_t layout = 0; layout <= 8; ++layout) {
-        declaration->set_content(layout);
-        surface->commit(KWayland::Client::Surface::CommitFlag::None);
-        QVERIFY(committed.wait());
-        QCOMPARE(uint32_t(window->stereoContent()), layout);
-        QCOMPARE(window->declaredStereoContentClass(), 3);
-        surface->commit(KWayland::Client::Surface::CommitFlag::None);
-        QVERIFY(committed.wait());
-        QCOMPARE(uint32_t(window->stereoContent()), layout);
-    }
 }
 
 void StereoContentTest::testSubsurface()
@@ -162,13 +124,6 @@ void StereoContentTest::testSubsurface()
     auto *item = qobject_cast<SurfaceItem *>(children.front());
     QVERIFY(item);
     QCOMPARE(item->stereoContent(), StereoContentSideBySideFull);
-    declaration->set_content(6);
-    child->commit(KWayland::Client::Surface::CommitFlag::None);
-    QVERIFY(Test::waylandSync());
-    QCOMPARE(item->stereoContent(), StereoContentSideBySideFull);
-    surface->commit(KWayland::Client::Surface::CommitFlag::None);
-    QVERIFY(committed.wait());
-    QCOMPARE(item->stereoContent(), StereoContentTopAndBottomHalfRightFirst);
     declaration.reset();
     child->commit(KWayland::Client::Surface::CommitFlag::None);
     surface->commit(KWayland::Client::Surface::CommitFlag::None);
@@ -176,16 +131,7 @@ void StereoContentTest::testSubsurface()
     QCOMPARE(item->stereoContent(), StereoContentNone);
 }
 
-void StereoContentTest::testInvalidClass()
-{
-    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
-    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
-    QSignalSpy error(Test::waylandConnection(), &KWayland::Client::ConnectionThread::errorOccurred);
-    declaration->set_content_class(3, 256);
-    QVERIFY(error.wait());
-}
-
-// A value outside 0..8 is read as none.
+// A value other than 0 or 3 is read as none.
 void StereoContentTest::testSetContentInvalidValue()
 {
     std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
@@ -206,48 +152,6 @@ void StereoContentTest::testSetContentInvalidValue()
     QCOMPARE(window->surface()->stereoContent(), StereoContentNone);
 }
 
-// The class and sub-class travel with their own request and reach the window.
-void StereoContentTest::testSetContentClass()
-{
-    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
-    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
-    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
-    QVERIFY(window);
-
-    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
-
-    declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
-    declaration->set_content_class(Test::StereoContentV1::content_class_game, 2); // game, a stereo 3D game
-    QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
-    surface->commit(KWayland::Client::Surface::CommitFlag::None);
-    QVERIFY(committed.wait());
-    QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideFull);
-    QCOMPARE(window->surface()->stereoContentClass(), 3);
-    QCOMPARE(window->surface()->stereoContentSubclass(), 2);
-    QCOMPARE(window->declaredStereoContentClass(), 3);
-    QCOMPARE(window->declaredStereoContentSubclass(), 2);
-
-    // A class-only commit must retain the layout.
-    QVERIFY(Test::waylandSync());
-    QCOMPARE(window->declaredStereoContentSubclass(), 2);
-
-    // Change the sub-class.
-    declaration->set_content_class(Test::StereoContentV1::content_class_game, 1); // game, VR engine
-    surface->commit(KWayland::Client::Surface::CommitFlag::None);
-    QVERIFY(committed.wait());
-    QCOMPARE(window->declaredStereoContentClass(), 3);
-    QCOMPARE(window->declaredStereoContentSubclass(), 1);
-    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
-
-    declaration->set_content_class(Test::StereoContentV1::content_class_scientific, 1);
-    QVERIFY(Test::waylandSync());
-    QCOMPARE(window->declaredStereoContentClass(), 3);
-    surface->commit(KWayland::Client::Surface::CommitFlag::None);
-    QVERIFY(committed.wait());
-    QCOMPARE(window->declaredStereoContentClass(), 4);
-    QCOMPARE(window->declaredStereoContentSubclass(), 1);
-}
-
 // Destroying the declaration resets the surface on the next commit.
 void StereoContentTest::testRemoveOnDestroy()
 {
@@ -257,30 +161,25 @@ void StereoContentTest::testRemoveOnDestroy()
     QVERIFY(window);
 
     auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
-    declaration->set_content(Test::StereoContentV1::content_side_by_side_half);
-    declaration->set_content_class(Test::StereoContentV1::content_class_video, 2);
+    declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
     {
         QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
-        QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideHalf);
-        QCOMPARE(window->declaredStereoContentClass(), 2);
+        QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideFull);
     }
 
     declaration.reset();
 
     QVERIFY(Test::waylandSync());
     // The reset is double-buffered like the set.
-    QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideHalf);
+    QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideFull);
     {
         QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
         QCOMPARE(window->surface()->stereoContent(), StereoContentNone);
-        QCOMPARE(window->surface()->stereoContentClass(), 0);
         QCOMPARE(window->stereoContent(), StereoContentNone);
-        QCOMPARE(window->declaredStereoContentClass(), 0);
-        QCOMPARE(window->declaredStereoContentSubclass(), 0);
     }
 }
 
@@ -306,12 +205,12 @@ void StereoContentTest::testRecreateAfterDestroy()
     declaration.reset();
 
     auto declaration2 = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
-    declaration2->set_content(Test::StereoContentV1::content_top_and_bottom_full);
+    declaration2->set_content(Test::StereoContentV1::content_side_by_side_full);
     {
         QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
-        QCOMPARE(window->surface()->stereoContent(), StereoContentTopAndBottomFull);
+        QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideFull);
     }
 
     QVERIFY(error.isEmpty());

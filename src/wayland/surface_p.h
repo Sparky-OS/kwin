@@ -101,8 +101,6 @@ struct SurfaceState
     std::shared_ptr<SyncObjReleasePoint> releasePoint;
     double alphaMultiplier = 1;
     StereoContent stereoContent = StereoContentNone;
-    uint8_t stereoContentClass = 0;
-    uint8_t stereoContentSubclass = 0;
     YUVMatrixCoefficients yuvCoefficients = YUVMatrixCoefficients::Identity;
     EncodingRange range = EncodingRange::Full;
     bool fifoBarrier = false;

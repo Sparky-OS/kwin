@@ -171,6 +171,10 @@ void Rules::readFromSettings(const RuleSettings *settings)
     READ_SET_RULE(desktopfile);
     READ_FORCE_RULE(layer, );
     READ_FORCE_RULE(stereo3d, );
+    if (stereo3d == static_cast<StereoContent>(1)) {
+        // KConfigXT stores enum choices by index, while the wire values are sparse.
+        stereo3d = StereoContentSideBySideFull;
+    }
     READ_FORCE_RULE(adaptivesync, );
     READ_FORCE_RULE(tearing, );
     READ_SET_RULE(excludefromcapture);
