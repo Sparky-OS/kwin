@@ -1,17 +1,23 @@
-STATUS: working
+STATUS: review
 
 # Mesa stereo report — 2026-10-08
 
 Partner: GPT-6.1 via Codex, current branch `partner/kwin-one-value-v2` in
 `kwin/`. Mesa's earlier work remains on `stereo3d-26.1`.
 
-Current round: the coordinated KWin +16, helper 1.0.1 and protocol package
-set is built and verified in `pending/`. The requested serial comparison of
-the 64 failed SUSE CI tests has completed its first variant: 51 passed and
-13 failed on the unchanged cleanup; 52 passed and 12 failed on the accepted
-base. The corrected cleanup is rebuilding. Four cleanup-only failures need
-verification: the downscale correction and three targeted retests. Its detailed
-records are at the end of this report; the accepted earlier rounds follow.
+Current round is complete. The 64 original CI failures are classified below:
+48 pass on both commits, nine fail on both, the stale downscale test is fixed
+and passes, three cleanup-only failures pass on the unchanged implementation
+when retested, and three fail only on the accepted base. No cleanup-only
+failure remains unresolved by these checks. This does not make the full CI
+suite green or prove that load caused every original failure.
+
+The coordinated KWin `4:6.7.4-2+stereo3d16`, stereo-declare `1.0.1-1` and
+plasma-wayland-protocols `1.21.0-1+stereo3d3` packages, source packages and
+build records are verified in `pending/`. Lintian returned 0 for each source's
+binary `.changes`; the fresh installed-package Haruna stereo/mono proof and
+automatic helper upgrade passed. Detailed evidence and the 64-row table are
+at the end of this report. The accepted earlier rounds follow.
 
 Milestone 1 remains complete in commit 8a45d8f4dc1. Milestone 2 is complete
 for the GLX DRI2/DRI3 and swrast paths. No class or subclass is declared.
@@ -1402,3 +1408,139 @@ diff from the original cleanup to contain only the downscale test data.
 The check excludes only `stereo-work/`, which holds the report and harness;
 all other tracked project paths are checked. The final classifier requires
 those results before accepting the comparison.
+
+## CI diagnosis and coordinated packages: review (2026-10-08)
+
+The corrected cleanup rebuilt and installed successfully at
+`a21d282774701d313cfb8f4a771aebda1170af25`. The final cache records
+BUILD_TESTING=ON, Debug, address sanitizer and BUILD_COVERAGE=ON in
+`evidence/kwin-ci-diagnosis-final-config.txt`. The container record confirms
+uid 1000, two CPUs, the workspace as its only writable bind mount and the
+shared cache read-only. Its image digest is recorded above. Both complete
+serial runs used the same extracted dependency prefix and KDE TestHandler,
+with one CTest worker and a 90-second timeout.
+
+The corrected downscale test passed all nine QtTest rows, including the five
+reference-average checks at 1x, 2x, 3.5x, 4x and 8x for both eyes. The CTest
+result is 0 in `kwin-ci-diagnosis-fixed.rc`, with its XML and comparison log
+beside it. The source correction is commit `a21d282774`; it is already in
+patch 0002 of the built KWin source package. No rendering change was needed.
+
+Region, DecorationInput and PointerInput then passed in 18.27, 18.00 and
+33.36 seconds respectively. The retest preserved the two-CPU limit, one
+worker, 90-second timeout, ASAN options and dependency paths. Its source
+check requires that every project path outside `stereo-work/` differ from
+`060866b448` only in the downscale test data. The three tests' implementation
+was unchanged. The records are `kwin-ci-diagnosis-retest.xml`, `.rc`, `.log`
+and `-environment.txt`; the recorded start load was 9.16. This is consistent
+with timing and resource variability, but does not isolate load as the cause.
+
+The classifier returned 0. It requires all 64 unique original names on both
+commits, the corrected downscale result and all three targeted retest results.
+Its records are `evidence/kwin-ci-diagnosis-classify.log`, `.rc` and
+`kwin-ci-diagnosis-table.md`. The table below retains the first serial result
+when a later retest passes.
+
+Nine tests still fail on both commits. GameController reports missing
+`/dev/uinput`; Drm, DrmLegacy and DrmNoModifiers report no suitable KMS device.
+They skip their actual device tests, then ASAN reports the same teardown
+crash in `Compositor::stop()` on the accepted base. Those devices were not
+exercised. OutputChanges and X11Window reach the 90-second limit on both.
+LockScreen and PlasmaWindow fail while waiting for the lock-screen window.
+ScreenshotStereo reproduces alpha and capture-size assertion failures on
+both. No cause is claimed for those baseline capture or lock-screen failures.
+The compact excerpts are `evidence/kwin-ci-diagnosis-failure-summary.txt`;
+the full JUnit records retain every assertion and diagnostic.
+
+Three tests fail only on the accepted base: XdgShellWindowRules and
+InputMethod fail setting up a Wayland connection, and XwaylandSelection
+receives empty clipboard data instead of `foobar`. They pass in the cleanup
+run. Their base-only failures are preserved rather than counted as passes
+on both. No new full 174-test CI run was started; Claude's queued rerun remains
+the full-suite check.
+
+The coordinated package evidence is unchanged by the retests. KWin +16
+Breaks helper versions below 1.0.1-1. Apt upgrades the old repository helper
+automatically when asked only for the new KWin and protocol package. All
+three sources unpack and match the corrected interface. Installed Haruna
+uses the installed helper, sends full side by side and standard video content
+type, remains alive and produces the expected six stereo captures and six
+mono controls. Swapping the stereo eyes fails. Exact package versions,
+solver output, lintian results, captures and the failing swap are recorded
+above and in `evidence/coordinated-package-records/` and
+`evidence/coordinated-packages/`.
+
+The disposable CI container was removed after saving its results and final
+configuration. The disk monitor was stopped. Cleanup is recorded in
+`evidence/kwin-ci-diagnosis-container-cleanup.log`; the final disk check showed
+65 GB free on /K3D and 44 GB on /. The package-proof containers and temporary
+image had already been removed. Packages and sources remain in this
+workspace's `pending/` for coordinator review and repository integration.
+The next queued milestone is the Desktop Cube hooks, after this review.
+
+| Test | One-value | Base | Corrected cleanup | Classification |
+|---|---|---|---|---|
+| kwin-testRegion | fail (90.55s) | pass (66.03s) | pass (18.27s) | cleanup failure not reproduced on the same implementation |
+| kwin-testRegionF | pass (80.49s) | pass (50.27s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testStereoDownscale | fail (19.75s) | pass (6.56s) | pass (1.50s) | one-value regression; corrected test data passes |
+| kwin-testLockScreen | fail (90.01s) | fail (67.71s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testBounceKeys | pass (63.38s) | pass (33.30s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testVulkan | pass (74.57s) | pass (18.89s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testButtonRebind | pass (65.66s) | pass (21.96s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testGameController | fail (4.93s) | fail (4.38s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testDecorationInput | fail (56.67s) | pass (35.44s) | pass (18.00s) | cleanup failure not reproduced on the same implementation |
+| kwin-testTouchInput | pass (34.56s) | pass (28.83s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testPointerInput | fail (88.48s) | pass (41.73s) | pass (33.36s) | cleanup failure not reproduced on the same implementation |
+| kwin-testPlatformCursor | pass (51.67s) | pass (22.68s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testDebugConsole | pass (53.60s) | pass (30.22s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testPlasmaSurface | pass (52.15s) | pass (29.08s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testXdgShellWindow | pass (68.80s) | pass (43.85s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testVirtualDesktop | pass (33.39s) | pass (26.51s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testXdgShellWindowRules | pass (56.36s) | fail (45.96s) | unchanged; not rerun | passes only one-value |
+| kwin-testInputMethod | pass (57.92s) | fail (48.94s) | unchanged; not rerun | passes only one-value |
+| kwin-testScreens | pass (66.50s) | pass (35.56s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testScreenEdges | pass (62.92s) | pass (41.44s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testOutputChanges | fail (90.01s) | fail (90.01s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testTiles | pass (50.04s) | pass (32.90s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testFractionalScaling | pass (48.56s) | pass (32.45s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testMoveResize | pass (56.59s) | pass (51.33s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testPlasmaWindow | fail (42.25s) | fail (51.89s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testQuickTiling | pass (89.31s) | pass (81.63s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testStackingOrder | pass (46.85s) | pass (45.90s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testDbusInterface | pass (43.25s) | pass (48.07s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testFakeInput | pass (43.85s) | pass (35.09s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testSecurityContext | pass (31.54s) | pass (34.17s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testSlowKeys | pass (35.38s) | pass (32.32s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testStickyKeys | pass (30.10s) | pass (29.26s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testWorkspace | pass (28.29s) | pass (30.65s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testColorManagement | pass (34.54s) | pass (29.49s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testScreenshotStereo | fail (40.26s) | fail (27.87s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testFifo | pass (51.16s) | pass (52.76s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testXdgSession | pass (55.98s) | pass (54.72s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testFractionalRepaint | pass (55.76s) | pass (28.10s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testDrm | fail (7.60s) | fail (2.03s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testDrmLegacy | fail (6.19s) | fail (2.16s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testDrmNoModifiers | fail (5.93s) | fail (2.07s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testToplevelDrag | pass (62.65s) | pass (22.13s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testA11yKeyboardMonitor | pass (69.64s) | pass (28.53s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testSubsurface | pass (65.54s) | pass (28.07s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testDontCrashEmptyDeco | pass (69.30s) | pass (25.63s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testXwaylandDnd | pass (66.89s) | pass (26.26s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testXwaylandSelection | pass (48.62s) | fail (25.80s) | unchanged; not rerun | passes only one-value |
+| kwin-testXinerama | pass (31.59s) | pass (27.54s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testX11KeyRead | pass (32.53s) | pass (18.27s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testXwaylandInput | pass (36.19s) | pass (20.28s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testXwaylandServerRestart | pass (39.49s) | pass (26.19s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testWindowRules | pass (35.64s) | pass (25.99s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testX11Window | fail (90.02s) | fail (90.02s) | unchanged; not rerun | fails both; also present in accepted base |
+| kwin-testDontCrashAuroraeDestroyDeco | pass (65.51s) | pass (26.35s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testGlobalShortcuts | pass (61.42s) | pass (37.90s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testActivities | pass (34.15s) | pass (32.58s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testSlidingPopups | pass (34.55s) | pass (26.78s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testScriptedEffects | pass (34.82s) | pass (32.11s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testToplevelOpenCloseAnimation | pass (31.54s) | pass (27.03s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testPopupOpenCloseAnimation | pass (29.75s) | pass (24.09s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testDesktopSwitchingAnimation | pass (25.52s) | pass (27.53s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testMinimizeAnimation | pass (15.16s) | pass (32.68s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testMaximizeAnimation | pass (14.64s) | pass (34.48s) | unchanged; not rerun | passes both; serial retest resolves original failure |
+| kwin-testActivation | pass (17.33s) | pass (35.45s) | unchanged; not rerun | passes both; serial retest resolves original failure |
