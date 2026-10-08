@@ -1272,6 +1272,15 @@ void OutputChangesTest::testLaptopLidClosed()
         QVERIFY(newWindow);
         QVERIFY(originalExternal.contains(newWindow->frameGeometry()));
         QCOMPARE(window->frameGeometry(), originalWindow);
+
+        std::unique_ptr<KWayland::Client::Surface> transientSurface(Test::createSurface());
+        std::unique_ptr<Test::XdgToplevel> transientShellSurface(Test::createXdgToplevelSurface(transientSurface.get()));
+        transientShellSurface->set_parent(shellSurface->object());
+        const auto transientWindow = Test::renderAndWaitForShown(transientSurface.get(), QSize(80, 40), Qt::green);
+        QVERIFY(transientWindow);
+        QCOMPARE(transientWindow->transientFor(), window);
+        QVERIFY(originalExternal.contains(transientWindow->frameGeometry()));
+        QCOMPARE(window->frameGeometry(), originalWindow);
     } else {
         input()->pointer()->warp(QPointF(200, 200));
         QCOMPARE(input()->pointer()->pos(), QPointF(100, 100));
