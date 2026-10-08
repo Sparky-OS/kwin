@@ -119,7 +119,9 @@ WaylandTestApplication::~WaylandTestApplication()
     }
     destroyPlugins();
 
-    Compositor::self()->stop();
+    if (auto compositor = Compositor::self()) {
+        compositor->stop();
+    }
 
 #if KWIN_BUILD_X11
     m_xwayland.reset();

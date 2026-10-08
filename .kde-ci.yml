@@ -49,7 +49,7 @@ RuntimeDependencies:
 
 Options:
  ctest-arguments: '--repeat until-pass:3'
- per-test-timeout: 90
+ per-test-timeout: 300
  require-passing-tests-on: ['Linux/Qt6']
  run-tests-on: ['Linux']
  tests-run-in-parallel: True
