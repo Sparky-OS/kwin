@@ -7,8 +7,9 @@ Partner: GPT-6.1 via Codex, current branch `partner/kwin-one-value-v2` in
 
 Current round: the coordinated KWin +16, helper 1.0.1 and protocol package
 set is built and verified in `pending/`. The requested serial comparison of
-the 64 failed SUSE CI tests is running after its two-CPU build returned 0.
-No result or classification is claimed for that comparison yet. Its detailed
+the 64 failed SUSE CI tests has completed its first variant: 51 passed and
+13 failed on the unchanged cleanup. The accepted base is rebuilding. No
+comparison classification is claimed yet. Its detailed
 records are at the end of this report; the accepted earlier rounds follow.
 
 Milestone 1 remains complete in commit 8a45d8f4dc1. Milestone 2 is complete
@@ -1358,3 +1359,19 @@ only the later wrapper. The process list is retained in
 are `kwin-ci-diagnosis-duplicate-old.log` and `-duplicate-new.log`. The
 restarted comparison re-extracts the fixed runtime dependencies and is the
 only comparison process. No test result is claimed from either aborted run.
+
+The unchanged cleanup's serial run completed all 64 selected executables:
+51 passed and 13 failed, with four 90-second timeouts. Its JUnit record is
+`evidence/kwin-ci-diagnosis-one-value.xml` and its result is 1. It took
+3078.37 seconds. Host load was 34.04 at the start and 13.00 at the end;
+this does not prove the cause of any failure. The accepted base is rebuilding
+in the same source/build paths and will run the same selected tests.
+
+After the first variant completed, the container's extracted dependency
+prefix was kept and 110 copied dependency archives were removed. Their
+7,425,730,560 bytes, names and SHA-256 hashes are recorded in
+`evidence/kwin-ci-diagnosis-retired-archives.tsv`; all 110 metadata files
+are retained in `kwin-ci-diagnosis-dependency-metadata/`. The cleanup returned
+0 and checked that no archive remained in the own-container cache. The
+read-only shared cache was untouched. The base and corrected builds use
+the extracted prefix and do not retrieve dependencies again.
