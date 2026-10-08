@@ -24,6 +24,17 @@
 namespace KWin
 {
 
+static RectF visiblePlacementArea(const RectF &area)
+{
+    const auto output = workspace()->outputAt(area.center());
+    if (output && !workspace()->isOutputInteractive(output)) {
+        if (const auto interactive = workspace()->interactiveOutputAt(area.center())) {
+            return workspace()->clientArea(PlacementArea, interactive);
+        }
+    }
+    return area;
+}
+
 Placement::Placement()
 {
 }
@@ -31,8 +42,9 @@ Placement::Placement()
 /**
  * Places the client \a c according to the workspace's layout policy
  */
-std::optional<PlacementCommand> Placement::place(const Window *c, const RectF &area)
+std::optional<PlacementCommand> Placement::place(const Window *c, const RectF &requestedArea)
 {
+    const auto area = visiblePlacementArea(requestedArea);
     PlacementPolicy policy = c->rules()->checkPlacement(PlacementDefault);
     if (policy != PlacementDefault) {
         return place(c, area, policy);
@@ -55,8 +67,9 @@ std::optional<PlacementCommand> Placement::place(const Window *c, const RectF &a
     }
 }
 
-std::optional<PlacementCommand> Placement::place(const Window *c, const RectF &area, PlacementPolicy policy, PlacementPolicy nextPlacement)
+std::optional<PlacementCommand> Placement::place(const Window *c, const RectF &requestedArea, PlacementPolicy policy, PlacementPolicy nextPlacement)
 {
+    const auto area = visiblePlacementArea(requestedArea);
     if (policy == PlacementUnknown || policy == PlacementDefault) {
         policy = options->placement();
     }
