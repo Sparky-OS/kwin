@@ -52,7 +52,7 @@ private:
 /**
  * @brief OpenGL Backend using Egl on a GBM surface.
  */
-class VirtualEglBackend : public EglBackend
+class KWIN_EXPORT VirtualEglBackend : public EglBackend
 {
     Q_OBJECT
 

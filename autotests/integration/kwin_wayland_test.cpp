@@ -52,7 +52,7 @@ Q_IMPORT_PLUGIN(KWinIdleTimePoller)
 namespace KWin
 {
 
-WaylandTestApplication::WaylandTestApplication(int &argc, char **argv, bool runOnKMS)
+WaylandTestApplication::WaylandTestApplication(int &argc, char **argv, bool runOnKMS, std::function<std::unique_ptr<OutputBackend>()> createOutputBackend)
     : Application(argc, argv)
 {
     // create a temporary folder for test configs
@@ -99,7 +99,7 @@ WaylandTestApplication::WaylandTestApplication(int &argc, char **argv, bool runO
         setOutputBackend(std::make_unique<DrmBackend>(session()));
     } else {
         setSession(Session::create(Session::Type::Noop));
-        setOutputBackend(std::make_unique<VirtualBackend>());
+        setOutputBackend(createOutputBackend ? createOutputBackend() : std::make_unique<VirtualBackend>());
     }
     m_waylandServer.reset(WaylandServer::create());
     setProcessStartupEnvironment(QProcessEnvironment::systemEnvironment());

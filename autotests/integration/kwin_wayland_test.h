@@ -133,7 +133,7 @@ class WaylandTestApplication : public Application
     Q_OBJECT
 
 public:
-    WaylandTestApplication(int &argc, char **argv, bool runOnKMS);
+    WaylandTestApplication(int &argc, char **argv, bool runOnKMS, std::function<std::unique_ptr<OutputBackend>()> createOutputBackend = {});
     ~WaylandTestApplication() override;
 
     void setInputMethodServerToStart(const QString &inputMethodServer)
@@ -1665,7 +1665,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(KWin::Test::AdditionalWaylandInterfaces)
 Q_DECLARE_METATYPE(KWin::Test::XdgToplevel::States)
 Q_DECLARE_METATYPE(QtWayland::zxdg_toplevel_decoration_v1::mode)
 
-#define WAYLANDTEST_MAIN_OPT(TestObject, useDrm)                                                                                          \
+#define WAYLANDTEST_MAIN_OPT(TestObject, useDrm, createOutputBackend)                                                                     \
     int main(int argc, char *argv[])                                                                                                      \
     {                                                                                                                                     \
         setenv("QT_QPA_PLATFORM", "wayland-org.kde.kwin.qpa", true);                                                                      \
@@ -1675,7 +1675,7 @@ Q_DECLARE_METATYPE(QtWayland::zxdg_toplevel_decoration_v1::mode)
         qunsetenv("KDE_SESSION_VERSION");                                                                                                 \
         qunsetenv("XDG_SESSION_DESKTOP");                                                                                                 \
         qunsetenv("XDG_CURRENT_DESKTOP");                                                                                                 \
-        KWin::WaylandTestApplication app(argc, argv, useDrm);                                                                             \
+        KWin::WaylandTestApplication app(argc, argv, useDrm, createOutputBackend);                                                        \
         qunsetenv("QT_QPA_PLATFORM");                                                                                                     \
         qunsetenv("QT_QPA_PLATFORM_PLUGIN_PATH");                                                                                         \
         qunsetenv("KWIN_FORCE_OWN_QPA");                                                                                                  \
@@ -1684,7 +1684,7 @@ Q_DECLARE_METATYPE(QtWayland::zxdg_toplevel_decoration_v1::mode)
         return QTest::qExec(&tc, argc, argv);                                                                                             \
     }
 
-#define WAYLANDTEST_MAIN(TestObject) WAYLANDTEST_MAIN_OPT(TestObject, false)
-#define WAYLAND_DRM_TEST_MAIN(TestObject) WAYLANDTEST_MAIN_OPT(TestObject, true)
+#define WAYLANDTEST_MAIN(TestObject) WAYLANDTEST_MAIN_OPT(TestObject, false, {})
+#define WAYLAND_DRM_TEST_MAIN(TestObject) WAYLANDTEST_MAIN_OPT(TestObject, true, {})
 
 #endif
