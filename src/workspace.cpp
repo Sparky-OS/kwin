@@ -178,6 +178,7 @@ Workspace::Workspace()
         // applyOutputConfiguration sets the correct value
         OutputConfiguration cfg;
         applyOutputConfiguration(cfg);
+        maybeUpdateDpmsState();
     });
 
     initShortcuts();
