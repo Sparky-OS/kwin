@@ -518,7 +518,7 @@ std::optional<PlacementCommand> Placement::placeOnMainWindow(const Window *c, co
     geom.moveCenter(place_on->frameGeometry().center().toPoint());
 
     // get area again, because the mainwindow may be on different xinerama screen
-    const Rect placementArea = workspace()->clientArea(PlacementArea, c, geom.center()).toRect();
+    const Rect placementArea = visiblePlacementArea(workspace()->clientArea(PlacementArea, c, geom.center())).toRect();
     return c->keepInArea(geom, placementArea).topLeft(); // make sure it's kept inside workarea
 }
 
