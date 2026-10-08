@@ -2593,11 +2593,6 @@ void Workspace::rearrange(const QHash<Window *, LogicalOutput *> &oldOutputs)
  */
 RectF Workspace::clientArea(clientAreaOption opt, const LogicalOutput *output) const
 {
-    if (opt == PlacementArea && !isOutputInteractive(output)) {
-        if (const auto interactive = interactiveOutputAt(output->geometry().center())) {
-            output = interactive;
-        }
-    }
     switch (opt) {
     case MaximizeArea:
     case PlacementArea:

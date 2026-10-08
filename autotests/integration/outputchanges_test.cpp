@@ -1229,8 +1229,8 @@ void OutputChangesTest::testLaptopLidClosed()
     const auto internal = outputs.front();
     QVERIFY(internal->isInternal());
     const auto originalGeometry = workspace()->geometry();
-    const auto originalInternal = workspace()->findOutput(internal)->geometry();
-    const auto originalExternal = externalPresent ? workspace()->findOutput(outputs.back())->geometry() : Rect();
+    const auto originalInternal = workspace()->findOutput(internal)->geometryF();
+    const auto originalExternal = externalPresent ? workspace()->findOutput(outputs.back())->geometryF() : RectF();
 
     workspace()->setActiveOutput(workspace()->findOutput(internal));
     std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
@@ -1254,14 +1254,14 @@ void OutputChangesTest::testLaptopLidClosed()
     QCOMPARE(internal->dpmsMode(), BackendOutput::DpmsMode::Off);
     QCOMPARE(workspace()->outputs().size(), outputInfo.size());
     QCOMPARE(workspace()->geometry(), originalGeometry);
-    QCOMPARE(workspace()->findOutput(internal)->geometry(), originalInternal);
+    QCOMPARE(workspace()->findOutput(internal)->geometryF(), originalInternal);
     QCOMPARE(window->frameGeometry(), originalWindow);
     QCOMPARE(window->output()->backendOutput(), internal);
     if (externalPresent) {
         const auto external = outputs.back();
         QVERIFY(external->isEnabled());
         QCOMPARE(external->dpmsMode(), BackendOutput::DpmsMode::On);
-        QCOMPARE(workspace()->findOutput(external)->geometry(), originalExternal);
+        QCOMPARE(workspace()->findOutput(external)->geometryF(), originalExternal);
         QVERIFY(originalExternal.contains(input()->pointer()->pos()));
         input()->pointer()->warp(QPointF(100, 100));
         QVERIFY(originalExternal.contains(input()->pointer()->pos()));
