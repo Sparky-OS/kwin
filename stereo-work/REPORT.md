@@ -8,9 +8,9 @@ Partner: GPT-6.1 via Codex, current branch `partner/kwin-one-value-v2` in
 Current round: the coordinated KWin +16, helper 1.0.1 and protocol package
 set is built and verified in `pending/`. The requested serial comparison of
 the 64 failed SUSE CI tests has completed its first variant: 51 passed and
-13 failed on the unchanged cleanup. The accepted base is running the same
-64 tests after its successful rebuild and install. No
-comparison classification is claimed yet. Its detailed
+13 failed on the unchanged cleanup; 52 passed and 12 failed on the accepted
+base. The corrected cleanup is rebuilding. Four cleanup-only failures need
+verification: the downscale correction and three targeted retests. Its detailed
 records are at the end of this report; the accepted earlier rounds follow.
 
 Milestone 1 remains complete in commit 8a45d8f4dc1. Milestone 2 is complete
@@ -1385,3 +1385,18 @@ with the same ASAN options and dependency paths; KDE's TestHandler forces
 software GL when it launches CTest. Host load at its start was 46.76. Region
 passed in 66.03 seconds on the base after timing out on cleanup. That mismatch
 still needs a retest on the corrected cleanup before drawing a conclusion.
+
+The base completed all 64 tests in 2195.97 seconds, returning 1. Its record
+is `evidence/kwin-ci-diagnosis-base.xml`. The two original serial runs give
+48 passes on both, nine failures on both, four cleanup-only failures and
+three base-only failures. The cleanup-only set is Downscale, Region,
+DecorationInput and PointerInput. The base-only set is XdgShellWindowRules,
+InputMethod and XwaylandSelection. These are measured outcomes, not proof
+of a particular load-related cause.
+
+The harness has returned to `a21d282774` for the corrected build. A targeted
+follow-up waits for the corrected downscale test to pass, then retests the
+other three cleanup-only failures with the same two-CPU limit, one CTest
+worker, 90-second timeout and dependency prefix. It also requires the source
+diff from the original cleanup to contain only the downscale test data.
+The final classifier requires those results before accepting the comparison.

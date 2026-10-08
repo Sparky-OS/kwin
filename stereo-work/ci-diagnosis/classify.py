@@ -31,6 +31,9 @@ def results(name, names=expected):
 cleanup = results('one-value')
 base = results('base')
 fixed = results('fixed', ['kwin-testStereoDownscale'])
+retest_names = [name for name in expected if name != 'kwin-testStereoDownscale'
+                and cleanup[name][0] == 'fail' and base[name][0] == 'pass']
+retests = results('retest', retest_names) if retest_names else {}
 lines = ['| Test | One-value | Base | Corrected cleanup | Classification |', '|---|---|---|---|---|']
 counts = {}
 for name in expected:
@@ -50,6 +53,11 @@ for name in expected:
             category = 'one-value regression; corrected test data passes'
         elif outcome != 'pass':
             category = 'corrected test still fails; investigate regression'
+    elif name in retests:
+        outcome, duration = retests[name]
+        correction = f'{outcome} ({duration:.2f}s)'
+        category = ('cleanup failure not reproduced on the same implementation' if outcome == 'pass'
+                    else 'cleanup-only failure persists; investigate regression')
     counts[category] = counts.get(category, 0) + 1
     lines.append(f'| {name} | {current} ({current_time:.2f}s) | {prior} ({prior_time:.2f}s) | {correction} | {category} |')
 (evidence / 'kwin-ci-diagnosis-table.md').write_text('\n'.join(lines) + '\n')
