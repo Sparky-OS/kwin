@@ -1,6 +1,6 @@
 STATUS: working
 
-# Mesa stereo report — 2026-10-07
+# Mesa stereo report — 2026-10-08
 
 Partner: GPT-6.1 via Codex, current branch `partner/kwin-one-value-v2` in
 `kwin/`. Mesa's earlier work remains on `stereo3d-26.1`.
@@ -8,7 +8,8 @@ Partner: GPT-6.1 via Codex, current branch `partner/kwin-one-value-v2` in
 Current round: the coordinated KWin +16, helper 1.0.1 and protocol package
 set is built and verified in `pending/`. The requested serial comparison of
 the 64 failed SUSE CI tests has completed its first variant: 51 passed and
-13 failed on the unchanged cleanup. The accepted base is rebuilding. No
+13 failed on the unchanged cleanup. The accepted base is running the same
+64 tests after its successful rebuild and install. No
 comparison classification is claimed yet. Its detailed
 records are at the end of this report; the accepted earlier rounds follow.
 
@@ -1375,3 +1376,12 @@ are retained in `kwin-ci-diagnosis-dependency-metadata/`. The cleanup returned
 0 and checked that no archive remained in the own-container cache. The
 read-only shared cache was untouched. The base and corrected builds use
 the extracted prefix and do not retrieve dependencies again.
+
+The accepted base rebuilt and installed successfully. Its serial run uses
+`ctest -T Test ... -j 1 --timeout 90 --tests-from-file
+/workspace/ci-diagnosis/failed-tests.txt`, recorded in the comparison log.
+The base environment record confirms `0ec08b5bd84a94d14a1fe0f6eb28d7a860bd469a`
+with the same ASAN options and dependency paths; KDE's TestHandler forces
+software GL when it launches CTest. Host load at its start was 46.76. Region
+passed in 66.03 seconds on the base after timing out on cleanup. That mismatch
+still needs a retest on the corrected cleanup before drawing a conclusion.
