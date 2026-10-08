@@ -182,6 +182,7 @@ Workspace::Workspace()
         if (!result) {
             qCWarning(KWIN_CORE, "Setting DPMS mode to \"TurningOff\" failed: %s", qPrintable(result.error().message));
         }
+        maybeUpdateDpmsState();
     });
 
     initShortcuts();
