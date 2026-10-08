@@ -1297,6 +1297,15 @@ void OutputChangesTest::testLaptopLidClosed()
     QCOMPARE(window->frameGeometry(), originalWindow);
     input()->pointer()->warp(QPointF(100, 100));
     QCOMPARE(input()->pointer()->pos(), QPointF(100, 100));
+
+    Q_EMIT lidSwitch->switchToggle(SwitchState::On, timestamp++, lidSwitch.get());
+    workspace()->requestDpmsState(Workspace::DpmsState::Off);
+    QTRY_COMPARE(workspace()->dpmsState(), Workspace::DpmsState::Off);
+    Q_EMIT lidSwitch->switchToggle(SwitchState::Off, timestamp++, lidSwitch.get());
+    QTRY_COMPARE(workspace()->dpmsState(), Workspace::DpmsState::On);
+    QCOMPARE(internal->dpmsMode(), BackendOutput::DpmsMode::On);
+    QCOMPARE(workspace()->geometry(), originalGeometry);
+    QCOMPARE(window->frameGeometry(), originalWindow);
 }
 
 #if KWIN_BUILD_X11
