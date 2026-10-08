@@ -76,6 +76,21 @@ class KWIN_EXPORT QuickSceneView : public OffscreenQuickView
      */
     Q_PROPERTY(VirtualDesktop *currentDesktop READ currentDesktop WRITE setCurrentDesktop NOTIFY currentDesktopChanged)
 
+    /*!
+     * \qmlattachedproperty bool SceneView::stereo
+     */
+    Q_PROPERTY(bool stereo READ isStereo CONSTANT)
+
+    /*!
+     * \qmlattachedproperty real SceneView::stereoPopped
+     */
+    Q_PROPERTY(qreal stereoPopped READ stereoPopped NOTIFY stereoLimitsChanged)
+
+    /*!
+     * \qmlattachedproperty real SceneView::stereoSunk
+     */
+    Q_PROPERTY(qreal stereoSunk READ stereoSunk NOTIFY stereoLimitsChanged)
+
 public:
     /*!
      * Constructs a scene view for the given \a effect and \a screen.
@@ -85,6 +100,9 @@ public:
 
     QuickSceneEffect *effect() const;
     LogicalOutput *screen() const;
+
+    qreal stereoPopped() const;
+    qreal stereoSunk() const;
 
     QQuickItem *rootItem() const;
     void setRootItem(QQuickItem *item);
@@ -127,6 +145,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void currentDesktopChanged(VirtualDesktop *newDesktop);
+    void stereoLimitsChanged();
 
 private:
     QuickSceneEffect *m_effect;
@@ -187,6 +206,13 @@ class KWIN_EXPORT QuickSceneEffect : public Effect
      */
     Q_PROPERTY(QQmlComponent *delegate READ delegate WRITE setDelegate NOTIFY delegateChanged)
 
+    /*!
+     * \qmlproperty bool QuickSceneEffect::stereo
+     *
+     * Whether the effect can render full side by side on stereo outputs. Set before starting.
+     */
+    Q_PROPERTY(bool stereo READ isStereo WRITE setStereo NOTIFY stereoChanged)
+
 public:
     /*!
      * Constructs a QtQuick scene effect with the given \a parent.
@@ -203,6 +229,9 @@ public:
      * Starts or stops the effect depending on \a running.
      */
     void setRunning(bool running);
+
+    bool isStereo() const;
+    void setStereo(bool stereo);
 
     /*!
      * Returns the active view. The active view is usually a view that the user interacted with
@@ -336,6 +365,7 @@ Q_SIGNALS:
     void itemDroppedOutOfScreen(const QPointF &globalPos, QQuickItem *item, LogicalOutput *screen);
     void activeViewChanged(KWin::QuickSceneView *view);
     void delegateChanged();
+    void stereoChanged();
     void activated();
     void deactivated();
 
