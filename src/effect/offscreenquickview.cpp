@@ -86,6 +86,8 @@ public:
     bool m_hasAlphaChannel = true;
     bool m_automaticRepaint = true;
     bool m_automaticFrame = true;
+    bool m_stereo = false;
+    Rect m_geometry;
 
     std::optional<qreal> m_explicitDpr;
 
@@ -157,6 +159,7 @@ OffscreenQuickView::OffscreenQuickView(ExportMode exportMode, bool alpha)
     d->m_renderControl = std::make_unique<QQuickRenderControl>();
 
     d->m_view = std::make_unique<QQuickWindow>(d->m_renderControl.get());
+    d->m_geometry = d->m_view->geometry();
     Q_ASSERT(d->m_view->setProperty("_KWIN_WINDOW_IS_OFFSCREEN", true) || true);
     d->m_view->setFlags(Qt::FramelessWindowHint);
     d->m_view->setColor(Qt::transparent);
@@ -553,7 +556,22 @@ void OffscreenQuickView::forwardTouchCancel()
 
 Rect OffscreenQuickView::geometry() const
 {
-    return d->m_view->geometry();
+    return d->m_geometry;
+}
+
+bool OffscreenQuickView::isStereo() const
+{
+    return d->m_stereo;
+}
+
+void OffscreenQuickView::setStereo(bool stereo)
+{
+    if (!d->m_surfaceItem || d->m_stereo == stereo) {
+        return;
+    }
+    d->m_stereo = stereo;
+    d->m_surfaceItem->setStereoContent(stereo ? StereoContentSideBySideFull : StereoContentNone);
+    setGeometry(geometry());
 }
 
 void OffscreenQuickView::setOpacity(qreal opacity)
@@ -622,16 +640,21 @@ void OffscreenQuickView::scheduleFrame()
 
 QSize OffscreenQuickView::size() const
 {
-    return d->m_view->geometry().size();
+    return geometry().size();
 }
 
 void OffscreenQuickView::setGeometry(const Rect &rect)
 {
-    const Rect oldGeometry = d->m_view->geometry();
-    if (oldGeometry == rect) {
+    const Rect oldGeometry = geometry();
+    d->m_geometry = rect;
+    Rect bufferGeometry = rect;
+    if (isStereo()) {
+        bufferGeometry.setWidth(rect.width() * 2);
+    }
+    if (d->m_view->geometry() == bufferGeometry) {
         return;
     }
-    d->m_view->setGeometry(rect);
+    d->m_view->setGeometry(bufferGeometry);
     // QWindow::setGeometry() won't sync output if there's no platform window.
     d->m_view->setScreen(QGuiApplication::screenAt(rect.center()));
     Q_EMIT geometryChanged(oldGeometry, rect);

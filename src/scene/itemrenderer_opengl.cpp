@@ -125,7 +125,7 @@ static RenderGeometry clipQuads(ItemRenderer *renderer, const Item *item, const 
             windowItem = qobject_cast<const WindowItem *>(parent);
         }
         const Window *window = windowItem ? windowItem->window() : nullptr;
-        const bool hasStereoEyes = context->stereoCapture || (window && window->output() && window->output()->hasStereoEyes());
+        const bool hasStereoEyes = context->stereoCapture || (window ? window->output() && window->output()->hasStereoEyes() : context->stereoEye != StereoEye::None);
         quads = surfaceItem->eyeQuads(hasStereoEyes && context->stereoEye == StereoEye::Right ? StereoEye::Right : StereoEye::Left);
     } else {
         quads = item->quads(renderer);

@@ -80,6 +80,9 @@ public:
     void setGeometry(const Rect &rect);
     Rect geometry() const;
 
+    bool isStereo() const;
+    void setStereo(bool stereo);
+
     void setOpacity(qreal opacity);
     qreal opacity() const;
     bool hasAlphaChannel() const;

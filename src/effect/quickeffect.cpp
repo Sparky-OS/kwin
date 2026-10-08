@@ -8,6 +8,8 @@
 #include "core/output.h"
 #include "effect/effecthandler.h"
 #include "input_event.h"
+#include "options.h"
+#include "scene/stereodepth.h"
 #include "virtualdesktops.h"
 
 #include "logging_p.h"
@@ -81,6 +83,7 @@ public:
     QPointer<QuickSceneView> mouseImplicitGrab;
     bool running = false;
     bool viewCachingEnabled = false;
+    bool stereo = false;
 };
 
 bool QuickSceneEffectPrivate::isItemOnScreen(QQuickItem *item, LogicalOutput *screen) const
@@ -98,7 +101,10 @@ QuickSceneView::QuickSceneView(QuickSceneEffect *effect, LogicalOutput *screen)
     , m_effect(effect)
     , m_screen(screen)
 {
+    setStereo(effect->isStereo() && screen->hasStereoEyes());
     setGeometry(screen->geometry());
+    connect(this, &OffscreenQuickView::geometryChanged, this, &QuickSceneView::stereoLimitsChanged);
+    connect(options, &Options::stereoDepthChanged, this, &QuickSceneView::stereoLimitsChanged);
     connect(screen, &LogicalOutput::geometryChanged, this, [this, screen]() {
         setGeometry(screen->geometry());
     });
@@ -145,6 +151,16 @@ QuickSceneEffect *QuickSceneView::effect() const
 LogicalOutput *QuickSceneView::screen() const
 {
     return m_screen;
+}
+
+qreal QuickSceneView::stereoPopped() const
+{
+    return StereoDepth::poppedLimit(geometry().width());
+}
+
+qreal QuickSceneView::stereoSunk() const
+{
+    return StereoDepth::sunkLimit(geometry().width());
 }
 
 bool QuickSceneView::isDirty() const
@@ -260,6 +276,24 @@ void QuickSceneEffect::setRunning(bool running)
         } else {
             stopInternal();
         }
+    }
+}
+
+bool QuickSceneEffect::isStereo() const
+{
+    return d->stereo;
+}
+
+void QuickSceneEffect::setStereo(bool stereo)
+{
+    if (isRunning()) {
+        qWarning() << "Cannot change QuickSceneEffect.stereo while running";
+        return;
+    }
+    if (d->stereo != stereo) {
+        d->stereo = stereo;
+        clearCachedViews();
+        Q_EMIT stereoChanged();
     }
 }
 
@@ -478,7 +512,7 @@ void QuickSceneEffect::handleScreenRemoved(LogicalOutput *screen)
 void QuickSceneEffect::addScreen(LogicalOutput *screen)
 {
     auto properties = initialProperties(screen);
-    properties["width"] = screen->geometry().width();
+    properties["width"] = screen->geometry().width() * (isStereo() && screen->hasStereoEyes() ? 2 : 1);
     properties["height"] = screen->geometry().height();
 
     auto incubator = new QuickSceneViewIncubator(this, screen, [this, screen](QuickSceneViewIncubator *incubator) {

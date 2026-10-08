@@ -526,9 +526,17 @@ static bool prepareRendering(RenderView *view, LogicalOutput *logicalOutput, Bac
     return layer->preparePresentationTest();
 }
 
-// a window with stereo content is shown in the view
+// a window or overlay with stereo content is shown in the view
 static bool showsStereoContent(RenderView *view)
 {
+    const QList<Item *> overlayItems = kwinApp()->scene()->overlayItem()->childItems();
+    for (Item *item : overlayItems) {
+        const auto surfaceItem = qobject_cast<SurfaceItem *>(item);
+        if (surfaceItem && surfaceItem->isVisible() && surfaceItem->stereoContent() != StereoContentNone
+            && surfaceItem->mapToScene(surfaceItem->boundingRect()).intersects(view->viewport())) {
+            return true;
+        }
+    }
     const QList<Item *> windowItems = kwinApp()->scene()->containerItem()->childItems();
     return std::ranges::any_of(windowItems, [view](Item *item) {
         const auto windowItem = static_cast<WindowItem *>(item);

@@ -7,6 +7,7 @@
 #include "scene/stereodepth.h"
 
 #include "core/output.h"
+#include "effect/effecthandler.h"
 #include "options.h"
 #include "window.h"
 #include "workspace.h"
@@ -148,8 +149,21 @@ int StereoDepth::parallax(const Window *window, int viewWidth)
     return std::lround(level * limit * viewWidth / s_referenceWidth);
 }
 
+qreal StereoDepth::poppedLimit(int viewWidth)
+{
+    return options->stereoPoppedLimit() * viewWidth / s_referenceWidth;
+}
+
+qreal StereoDepth::sunkLimit(int viewWidth)
+{
+    return options->stereoSunkLimit() * viewWidth / s_referenceWidth;
+}
+
 int StereoDepth::pointerParallax(const QPointF &pos, int viewWidth)
 {
+    if (effects && effects->activeFullScreenEffect()) {
+        return 0;
+    }
     const Window *window = workspace()->moveResizeWindow();
     if (!window) {
         const QList<Window *> &stack = workspace()->stackingOrder();

@@ -281,6 +281,9 @@ static bool isCandidate(SurfaceItem *item, const Rect &deviceRect, bool isOpaque
     if (!item || !item->buffer() || !item->buffer()->dmabufAttributes()) {
         return false;
     }
+    if (item->stereoContent() != StereoContentNone) {
+        return false;
+    }
     // TODO make the compositor handle item opacity as well
     if (item->opacity() < 1.0) {
         return false;
