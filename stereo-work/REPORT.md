@@ -1399,4 +1399,6 @@ follow-up waits for the corrected downscale test to pass, then retests the
 other three cleanup-only failures with the same two-CPU limit, one CTest
 worker, 90-second timeout and dependency prefix. It also requires the source
 diff from the original cleanup to contain only the downscale test data.
-The final classifier requires those results before accepting the comparison.
+The check excludes only `stereo-work/`, which holds the report and harness;
+all other tracked project paths are checked. The final classifier requires
+those results before accepting the comparison.

@@ -21,8 +21,8 @@ assert (evidence / 'kwin-ci-diagnosis-fixed.rc').read_text().strip() == '0'
 os.chdir(source)
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
 assert commit.startswith('a21d282774')
-changed = subprocess.check_output(['git', 'diff', '--name-only', '060866b448', 'HEAD'], text=True)
-assert changed.strip() == 'autotests/test_stereo_downscale.cpp'
+changed = subprocess.check_output(['git', 'diff', '--name-only', '060866b448', 'HEAD'], text=True).splitlines()
+assert [path for path in changed if not path.startswith('stereo-work/')] == ['autotests/test_stereo_downscale.cpp']
 
 os.environ.update({
     'CI': 'true', 'CI_JOB_ID': '6016', 'CI_COMMIT_REF_PROTECTED': 'false',
