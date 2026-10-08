@@ -330,6 +330,7 @@ void OffscreenQuickView::update(OutputFrame *frame)
         const QSize nativeSize = d->m_view->size() * dpr;
         if (!d->m_swapchain || d->m_swapchain->size() != nativeSize || d->m_surfaceNeedsReallocation) {
             d->m_textureExport.reset(nullptr);
+            d->m_swapchain.reset();
 
             QOpenGLFramebufferObjectFormat fboFormat;
             fboFormat.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
