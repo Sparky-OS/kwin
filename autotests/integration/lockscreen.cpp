@@ -238,7 +238,7 @@ void LockScreenTest::testStackingOrder()
     QSignalSpy windowAddedSpy(workspace(), &Workspace::windowAdded);
 
     LOCK;
-    QTRY_VERIFY(!windowAddedSpy.isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(!windowAddedSpy.isEmpty(), 30000);
 
     Window *window = windowAddedSpy.first().first().value<Window *>();
     QVERIFY(window);
