@@ -1,4 +1,29 @@
-> **This branch (`stereo3d`):** stereo 3D output for KWin. The design in one page: [STEREO3D.md](STEREO3D.md).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/sparky-stereo-os/sparkyos-swirl-light-128.png">
+  <img src=".github/sparky-stereo-os/sparkyos-swirl-dark-128.png" alt="SparkyOS" width="128" height="128">
+</picture>
+
+## Sparky Stereo OS
+
+This is the stereo version of KWin by Sparky Stereo OS, forked from [KDE/kwin](https://github.com/KDE/kwin).
+It adds stereo 3D output: the HDMI 1.4a 3D modes of 3D televisions, anaglyph for any screen, and stereo windows that programs declare.
+
+Where it comes from:
+
+- [KWin](https://invent.kde.org/plasma/kwin) is made by the KDE community. Its authors include Matthias Ettrich, Cristian Tibirna, Daniel M. Duley, Luboš Luňák and Martin Flöser. Its maintainers are David Edmundson, Roman Gilg, Vlad Zahorodnii and Xaver Hugl.
+- [Debian](https://www.debian.org/) is the base of the system.
+- [SparkyLinux](https://sparkylinux.org/), by Paweł "pavroo" Pijanowski, builds on Debian.
+- [Sparky Stereo OS](https://github.com/Sparky-OS/sparky-stereo-os) is the stereo 3D edition of SparkyLinux: SparkyOS, powered by Debian.
+
+The `stereo3d` branch holds the version the distribution builds.
+The design is described in [STEREO3D.md](STEREO3D.md).
+KDE develops KWin on invent.kde.org.
+The canonical version of this work is there too, on the [`stereo3d`](https://invent.kde.org/danielcamposramos/kwin/-/tree/stereo3d) branch.
+The licences are unchanged; see [LICENSES](LICENSES).
+
+Sparky Stereo OS, Daniel Ramos's edition of SparkyLinux (by Paweł "pavroo" Pijanowski).
+
+---
 
 # KWin
 
