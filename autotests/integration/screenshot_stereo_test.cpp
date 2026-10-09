@@ -6,6 +6,7 @@
 
 #include "kwin_wayland_test.h"
 
+#include "compositor.h"
 #include "core/output.h"
 #include "core/outputconfiguration.h"
 #include "effect/effectloader.h"
@@ -94,9 +95,6 @@ static void saveEvidence(const QString &name, const QImage &image)
 
 void ScreenshotStereoTest::initTestCase()
 {
-    if (!Test::renderNodeAvailable()) {
-        QSKIP("A DRM render node is required for the virtual EGL screenshot backend");
-    }
     qputenv("KWIN_COMPOSE", QByteArrayLiteral("O2"));
     QVERIFY(waylandServer()->init(qAppName()));
     auto config = KSharedConfig::openConfig(QString(), KConfig::SimpleConfig);
@@ -120,7 +118,7 @@ void ScreenshotStereoTest::init()
         change->stereoPairRole = StereoPairRole::Left;
         change->stereoPairReflection = StereoPairReflection::None;
     }
-    QVERIFY(workspace()->applyOutputConfiguration(clearPair) == OutputConfigurationError::None);
+    QVERIFY(workspace()->applyOutputConfiguration(clearPair).has_value());
     Test::setOutputConfig({Test::OutputInfo{
         .geometry = Rect(QPoint(), s_outputSize),
         .modes = {plainMode(), stereoMode(), anaglyphMode(), frameSequentialMode()},
@@ -129,7 +127,7 @@ void ScreenshotStereoTest::init()
     for (LogicalOutput *output : workspace()->outputs()) {
         resetMode.changeSet(output->backendOutput())->currentMode = plainMode();
     }
-    QVERIFY(workspace()->applyOutputConfiguration(resetMode) == OutputConfigurationError::None);
+    QVERIFY(workspace()->applyOutputConfiguration(resetMode).has_value());
     QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1));
 }
 
@@ -155,7 +153,7 @@ void ScreenshotStereoTest::testDeclaredWindowOnTwoDimensionalOutput()
     QVERIFY(windowImage);
     saveEvidence(QStringLiteral("declared-window"), *windowImage);
     checkStereoResult(*windowImage, Qt::red, Qt::blue);
-    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+    QCOMPARE(kwinApp()->scene()->renderer(Compositor::self()->primaryDevice())->stereoEye(), StereoEye::None);
 
     const auto screenImage = manager.takeScreenShot(workspace()->outputs().front(), {}, std::nullopt);
     QVERIFY(screenImage);
@@ -164,7 +162,7 @@ void ScreenshotStereoTest::testDeclaredWindowOnTwoDimensionalOutput()
     QCOMPARE(screenImage->pixelColor(110, 90), Qt::red);
     QCOMPARE(screenImage->pixelColor(s_outputSize.width() + 110, 90), Qt::blue);
     QCOMPARE(screenImage->pixelColor(10, 10), screenImage->pixelColor(s_outputSize.width() + 10, 10));
-    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+    QCOMPARE(kwinApp()->scene()->renderer(Compositor::self()->primaryDevice())->stereoEye(), StereoEye::None);
 }
 
 void ScreenshotStereoTest::testThreeDimensionalOutputWithoutDeclaredWindow()
@@ -187,7 +185,7 @@ void ScreenshotStereoTest::testThreeDimensionalOutputWithoutDeclaredWindow()
     saveEvidence(QStringLiteral("stereo-output"), *image);
     QCOMPARE(image->size(), QSize(s_outputSize.width() * 2, s_outputSize.height()));
     QCOMPARE(image->pixelColor(10, 10), image->pixelColor(s_outputSize.width() + 10, 10));
-    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+    QCOMPARE(kwinApp()->scene()->renderer(Compositor::self()->primaryDevice())->stereoEye(), StereoEye::None);
 }
 
 void ScreenshotStereoTest::testDeclaredWindowOnFrameSequentialOutput()
@@ -212,7 +210,7 @@ void ScreenshotStereoTest::testDeclaredWindowOnFrameSequentialOutput()
     QVERIFY(image);
     saveEvidence(QStringLiteral("declared-window-frame-sequential"), *image);
     checkStereoResult(*image, Qt::red, Qt::blue);
-    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+    QCOMPARE(kwinApp()->scene()->renderer(Compositor::self()->primaryDevice())->stereoEye(), StereoEye::None);
 }
 
 void ScreenshotStereoTest::testAnaglyphOutputKeepsRawEyes()
@@ -240,7 +238,7 @@ void ScreenshotStereoTest::testAnaglyphOutputKeepsRawEyes()
     QCOMPARE(image->size(), QSize(s_outputSize.width() * 2, s_outputSize.height()));
     QCOMPARE(image->pixelColor(110, 90), QColor(Qt::red));
     QCOMPARE(image->pixelColor(s_outputSize.width() + 110, 90), QColor(Qt::blue));
-    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+    QCOMPARE(kwinApp()->scene()->renderer(Compositor::self()->primaryDevice())->stereoEye(), StereoEye::None);
 }
 
 void ScreenshotStereoTest::testStereoPairOutputsKeepRawEyes()
@@ -298,7 +296,7 @@ void ScreenshotStereoTest::testStereoPairOutputsKeepRawEyes()
         QCOMPARE(image->pixelColor(110, 90), QColor(Qt::red));
         QCOMPARE(image->pixelColor(s_outputSize.width() + 110, 90), QColor(Qt::blue));
     }
-    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+    QCOMPARE(kwinApp()->scene()->renderer(Compositor::self()->primaryDevice())->stereoEye(), StereoEye::None);
 
     OutputConfiguration clearPair;
     for (LogicalOutput *output : outputs) {
@@ -308,7 +306,7 @@ void ScreenshotStereoTest::testStereoPairOutputsKeepRawEyes()
         change->stereoPairRole = StereoPairRole::Left;
         change->stereoPairReflection = StereoPairReflection::None;
     }
-    QCOMPARE(workspace()->applyOutputConfiguration(clearPair), OutputConfigurationError::None);
+    QVERIFY(workspace()->applyOutputConfiguration(clearPair).has_value());
 }
 
 void ScreenshotStereoTest::testOrdinaryCapture()
@@ -323,7 +321,7 @@ void ScreenshotStereoTest::testOrdinaryCapture()
     QVERIFY(image);
     saveEvidence(QStringLiteral("ordinary-screen"), *image);
     QCOMPARE(image->size(), s_outputSize);
-    QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+    QCOMPARE(kwinApp()->scene()->renderer(Compositor::self()->primaryDevice())->stereoEye(), StereoEye::None);
 }
 
 static void configureTwoOutputs(bool leftStereo)
@@ -349,7 +347,8 @@ static void configureTwoOutputs(bool leftStereo)
     QVERIFY(stereoOutput->hasStereoEyes());
 }
 
-struct TestWindow {
+struct TestWindow
+{
     std::unique_ptr<KWayland::Client::Surface> surface;
     std::unique_ptr<Test::XdgToplevel> shellSurface;
     Window *window;
