@@ -349,7 +349,8 @@ static void configureTwoOutputs(bool leftStereo)
     QVERIFY(stereoOutput->hasStereoEyes());
 }
 
-struct TestWindow {
+struct TestWindow
+{
     std::unique_ptr<KWayland::Client::Surface> surface;
     std::unique_ptr<Test::XdgToplevel> shellSurface;
     Window *window;
