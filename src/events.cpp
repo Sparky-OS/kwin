@@ -450,6 +450,19 @@ void X11Window::configureRequestEvent(xcb_configure_request_event_t *e)
 
     if (m_fullscreenMode == FullScreenNormal) { // refuse resizing of fullscreen windows
         // but allow resizing fullscreen hacks in order to let them cancel fullscreen mode
+        if (e->value_mask & (XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT)) {
+            // Stereo keeps its fullscreen placement while the program changes
+            // the rendering size. Remember it even before stereo is declared.
+            if (e->value_mask & XCB_CONFIG_WINDOW_WIDTH) {
+                m_programSize.setWidth(Xcb::fromXNative(e->width));
+            }
+            if (e->value_mask & XCB_CONFIG_WINDOW_HEIGHT) {
+                m_programSize.setHeight(Xcb::fromXNative(e->height));
+            }
+            if (m_stereoClientScale != QSizeF(1, 1)) {
+                configure(Xcb::toXNative(m_bufferGeometry));
+            }
+        }
         sendSyntheticConfigureNotify();
         return;
     }
