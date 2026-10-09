@@ -107,6 +107,8 @@ Each row of the table "Displays decide the format" in [awesome-stereoscopy](http
 - **Text shares its element's depth.** What tires the eyes is 2D text lying over a picture at another depth, not depth as such.
 - **In 2D, the pop is the same scale plus a move up and to the left;** in stereo the move is the eyes' disparity instead. A straight 2D screen shows the left view, and the left eye's own shift would move a popped element the wrong way, so there the up-left move replaces the eye shift.
 
+**Depth as meaning, measured.** Diego González-Zúñiga's doctoral thesis, [Stereoscopic User Interfaces: Creating a Pipeline for Stereo Application Development](https://ddd.uab.cat/record/167810) (Universitat Autònoma de Barcelona, 2016), added depth to ordinary interfaces "to imply importance, rating and hierarchy": nearer for what matters, depth for what is selected, a plane for each group. His measurements back this design. Separating groups by depth made people faster at a memory task. Stereo raised dwell and fixation time and changed the order in which people looked at a page ([Breaking the Pattern: Study on Stereoscopic Web Perception](https://doi.org/10.1007/978-3-319-03176-7_4), 2013), and people chose words like "easy to use" and "clear" for the 2D versions and "attractive" and "fun" for the stereo ones. That is why the active window, where the reading happens, stays at the screen, and depth is spent on everything around it. His tools made one application at a time stereo; here the compositor does it once, for every program.
+
 ## 2D screens beside stereo ones
 
 With mixed screens, stereo is the king and a 2D screen is a place to see or to control.
