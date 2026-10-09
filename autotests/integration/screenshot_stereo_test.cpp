@@ -8,6 +8,7 @@
 
 #include "core/output.h"
 #include "core/outputconfiguration.h"
+#include "effect/effectloader.h"
 #include "plugins/screenshot/screenshot.h"
 #include "scene/itemrenderer.h"
 #include "scene/workspacescene.h"
@@ -16,6 +17,8 @@
 #include "workspace.h"
 
 #include <KWayland/Client/surface.h>
+
+#include <KConfigGroup>
 
 #include <QDir>
 
@@ -96,6 +99,14 @@ void ScreenshotStereoTest::initTestCase()
     }
     qputenv("KWIN_COMPOSE", QByteArrayLiteral("O2"));
     QVERIFY(waylandServer()->init(qAppName()));
+    auto config = KSharedConfig::openConfig(QString(), KConfig::SimpleConfig);
+    KConfigGroup plugins(config, QStringLiteral("Plugins"));
+    const auto builtinNames = EffectLoader().listOfKnownEffects();
+    for (const QString &name : builtinNames) {
+        plugins.writeEntry(name + QStringLiteral("Enabled"), false);
+    }
+    config->sync();
+    kwinApp()->setConfig(config);
     kwinApp()->start();
 }
 
@@ -125,6 +136,7 @@ void ScreenshotStereoTest::init()
 void ScreenshotStereoTest::cleanup()
 {
     Test::destroyWaylandConnection();
+    QTRY_VERIFY(workspace()->windows().isEmpty());
 }
 
 void ScreenshotStereoTest::testDeclaredWindowOnTwoDimensionalOutput()
