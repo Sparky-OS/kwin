@@ -191,6 +191,9 @@ if(KWIN_BUILD_X11)
     integrationTest(NAME testXwaylandServerRestart SRCS xwaylandserver_restart_test.cpp LIBS XCB::ICCCM)
     integrationTest(NAME testWindowRules SRCS window_rules_test.cpp LIBS XCB::ICCCM)
     integrationTest(NAME testX11Window SRCS x11_window_test.cpp LIBS XCB::ICCCM XCB::PRESENT XCB::SHM)
+    # The expanded stereo matrix takes most of the general CI timeout alone;
+    # leave time for Xwayland and the session services to shut down as well.
+    set_tests_properties(kwin-testX11Window PROPERTIES TIMEOUT 180)
     integrationTest(NAME testDontCrashAuroraeDestroyDeco SRCS dont_crash_aurorae_destroy_deco.cpp LIBS KDecoration3::KDecoration LIBS XCB::ICCCM)
 endif()
 

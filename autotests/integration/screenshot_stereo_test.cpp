@@ -8,6 +8,7 @@
 
 #include "core/output.h"
 #include "core/outputconfiguration.h"
+#include "effect/effecthandler.h"
 #include "plugins/screenshot/screenshot.h"
 #include "scene/itemrenderer.h"
 #include "scene/workspacescene.h"
@@ -97,6 +98,10 @@ void ScreenshotStereoTest::initTestCase()
     qputenv("KWIN_COMPOSE", QByteArrayLiteral("O2"));
     QVERIFY(waylandServer()->init(qAppName()));
     kwinApp()->start();
+
+    // Open/close animations change pixel alpha and retain closed stereo
+    // windows, interfering with the next capture's content detection.
+    effects->unloadAllEffects();
 }
 
 void ScreenshotStereoTest::init()

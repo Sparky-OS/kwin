@@ -122,7 +122,10 @@ WaylandTestApplication::~WaylandTestApplication()
     }
     destroyPlugins();
 
-    Compositor::self()->stop();
+    // A DRM test can skip before start() when no KMS device is available.
+    if (Compositor::self()) {
+        Compositor::self()->stop();
+    }
 
 #if KWIN_BUILD_X11
     m_xwayland.reset();
