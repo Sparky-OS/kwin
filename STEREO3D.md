@@ -96,6 +96,8 @@ Each row of the table "Displays decide the format" in [awesome-stereoscopy](http
 
 ## Depth on the desktop
 
+**Windows and elements get real depth instead of clever trickery in 2D.** Desktops have long drawn depth with 2D tricks: a bigger shadow for the focused window, dimmed inactive windows, menus and tooltips lifted by their shadows, dialogs blurring what lies behind them. The meanings stay the same here (higher is more important, lifted is active, behind is waiting); only the cue becomes real: two eyes and a real distance.
+
 **Three places, declared: sunk, screen and popped.** All subtle, a few pixels, with the limits the user's own settings (System Settings, "3D Depth": how far popped comes out and sunk goes back, in pixels at 1920 wide, scaled to each screen). The active window sits at the screen; its menus, tooltips and notifications pop; the wallpaper and the windows behind sink.
 
 **Everything in between is KWin's job, by stacking order.** Several stacked background windows fan out from sunk up through the screen towards popped, always behind the active window, in the same order as in 2D. A window caught in the middle of a pile, its edges out of the stack, then reads as a sheet floating within it, the way a pile of papers looks in real life. No program declares this; it falls out of the order.
