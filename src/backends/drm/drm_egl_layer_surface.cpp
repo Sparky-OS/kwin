@@ -340,7 +340,6 @@ bool EglGbmLayerSurface::drawStereoPattern(const QSize &fboSize, const Region &r
     const int layout = int(m_stereoLayout) - int(StereoLayout::RowsLeftFirst);
     shader->setUniform("pattern", layout / 2);
     shader->setUniform("rightFirst", layout % 2);
-    shader->setUniform("outputHeight", fboSize.height());
     QMatrix4x4 mat;
     mat.scale(1, -1);
     mat.ortho(QRectF(QPointF(), fboSize));
