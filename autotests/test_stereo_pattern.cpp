@@ -53,7 +53,9 @@ private Q_SLOTS:
         auto shader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/stereopattern.frag"));
         QVERIFY(shader);
         ShaderBinder binder(shader.get());
+        // as the DRM layer draws the scanout buffer: its first line at y 0
         QMatrix4x4 projection;
+        projection.scale(1, -1);
         projection.ortho(QRectF(QPointF(), size));
         shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, projection);
         shader->setColorspaceUniforms(ColorDescription::sRGB, ColorDescription::sRGB, RenderingIntent::AbsoluteColorimetricNoAdaptation);
@@ -61,7 +63,6 @@ private Q_SLOTS:
         shader->setUniform("rightEye", 1);
         shader->setUniform("pattern", pattern);
         shader->setUniform("rightFirst", rightFirst);
-        shader->setUniform("outputHeight", size.height());
         const auto target = GLTexture::allocate(GL_RGBA8, size);
         QVERIFY(target);
         GLFramebuffer framebuffer(target.get());
@@ -76,7 +77,7 @@ private Q_SLOTS:
         glActiveTexture(GL_TEXTURE0);
         leftTexture->render(size);
         context->popFramebuffer();
-        const QImage actual = target->toImage().flipped(Qt::Vertical);
+        const QImage actual = target->toImage();
         QCOMPARE(actual.size(), size);
         for (int y = 0; y < size.height(); ++y) {
             for (int x = 0; x < size.width(); ++x) {
