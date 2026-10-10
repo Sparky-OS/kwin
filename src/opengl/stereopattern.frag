@@ -8,12 +8,11 @@ uniform sampler2D leftEye;
 uniform sampler2D rightEye;
 uniform int pattern;
 uniform int rightFirst;
-uniform int outputHeight;
 
 void main()
 {
+    // the scanout buffer is drawn with its first line at y 0
     ivec2 pixel = ivec2(gl_FragCoord.xy);
-    pixel.y = outputHeight - 1 - pixel.y;
     int parity = pattern == 0 ? pixel.y : (pattern == 1 ? pixel.x : pixel.x + pixel.y);
     bool right = ((parity + rightFirst) % 2) != 0;
     vec4 color = right ? texture(rightEye, texcoord0) : texture(leftEye, texcoord0);
