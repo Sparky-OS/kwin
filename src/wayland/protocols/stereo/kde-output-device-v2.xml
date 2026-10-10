@@ -574,8 +574,9 @@
     </event>
     <event name="stereo_formats" since="27">
       <description summary="virtual stereo mode visibility">
-        Two booleans, initially zero. Anaglyph exposes modern-screen and CRT
-        anaglyph twins of 2D modes. Other formats exposes half side by side,
+        Two booleans, initially zero. Anaglyph exposes the anaglyph twins of
+        2D modes: red/cyan for modern screens, red/cyan for CRTs, and red/blue
+        (red on the left eye). Other formats exposes half side by side,
         half top and bottom, and native-resolution rows, columns and checkerboard
         in both eye orders. Enabling does not select a mode. HDMI 3D modes remain
         visible independently. Values and the resulting mode list are atomic at done.
@@ -682,6 +683,7 @@
       <entry name="stereo_checkerboard_left_first" value="0x1000" since="27"/>
       <entry name="stereo_checkerboard_right_first" value="0x2000" since="27"/>
       <entry name="virtual_stereo" value="0x4000" since="27"/>
+      <entry name="stereo_anaglyph_red_blue" value="0x8000" since="27" summary="anaglyph for red/blue glasses, red on the left eye"/>
       <entry name="stereo_sequential_left_first" value="0x40000" since="27"/>
       <entry name="stereo_sequential_right_first" value="0x80000" since="27"/>
 
