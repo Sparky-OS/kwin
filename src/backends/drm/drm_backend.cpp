@@ -332,6 +332,18 @@ BackendOutput *DrmBackend::createVirtualOutput(const QString &name, const QStrin
     return ret;
 }
 
+BackendOutput *DrmBackend::createVirtualOutput(const VirtualOutputProperties &properties)
+{
+    if (!properties.isValid()) {
+        return nullptr;
+    }
+    const auto output = new DrmVirtualOutput(this, properties);
+    m_virtualOutputs.push_back(output);
+    addOutput(output);
+    Q_EMIT outputsQueried();
+    return output;
+}
+
 void DrmBackend::removeVirtualOutput(BackendOutput *output)
 {
     auto virtualOutput = qobject_cast<DrmVirtualOutput *>(output);

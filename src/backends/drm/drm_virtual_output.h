@@ -26,11 +26,13 @@ class DrmVirtualOutput : public DrmAbstractOutput
 
 public:
     explicit DrmVirtualOutput(DrmBackend *backend, const QString &name, const QString &description, const QSize &size, qreal scale);
+    explicit DrmVirtualOutput(DrmBackend *backend, const VirtualOutputProperties &properties);
     ~DrmVirtualOutput() override;
 
     bool testPresentation(const std::shared_ptr<OutputFrame> &frame) override;
     bool present(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame) override;
     void applyChanges(const OutputConfiguration &config) override;
+    bool hasStereoEyes() const override;
 
     DrmOutputLayer *primaryLayer() const;
     void recreateSurface();

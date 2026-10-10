@@ -8,6 +8,10 @@ add_subdirectory(wayland)
 # As the test isn't doing anything platform specific, only run it on Linux
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     add_subdirectory(drm)
+    add_executable(testVirtualOutputProperties test_virtual_output_properties.cpp)
+    target_link_libraries(testVirtualOutputProperties kwin Qt::Test Libdrm::Libdrm)
+    add_test(NAME kwin-testVirtualOutputProperties COMMAND testVirtualOutputProperties)
+    ecm_mark_as_test(testVirtualOutputProperties)
 endif()
 
 ########################################################

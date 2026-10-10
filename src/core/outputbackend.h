@@ -14,6 +14,7 @@
 #include <kwin_export.h>
 
 #include <QObject>
+#include <QSize>
 
 #include <memory>
 #include <optional>
@@ -30,6 +31,19 @@ class EglDisplay;
 class Session;
 class BackendOutput;
 class EglContext;
+
+struct KWIN_EXPORT VirtualOutputProperties
+{
+    QString name;
+    QString description;
+    QSize pixelSize;
+    uint32_t refreshRate = 60000;
+    qreal scale = 1;
+    QSize physicalSize = {0, 0};
+    bool splitEye = false;
+
+    bool isValid() const;
+};
 
 class KWIN_EXPORT OutputBackend : public QObject
 {
@@ -78,6 +92,7 @@ public:
     virtual QString supportInformation() const;
 
     virtual BackendOutput *createVirtualOutput(const QString &name, const QString &description, const QSize &size, qreal scale);
+    virtual BackendOutput *createVirtualOutput(const VirtualOutputProperties &properties);
     virtual void removeVirtualOutput(BackendOutput *output);
 
     /**

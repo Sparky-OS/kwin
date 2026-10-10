@@ -86,6 +86,13 @@ void VirtualOutput::init(const QSize &pixelSize, qreal scale, const QList<Output
     });
 }
 
+void VirtualOutput::init(const VirtualOutputProperties &properties)
+{
+    initializeVirtualOutput(properties);
+    m_renderLoop->setRefreshRate(properties.refreshRate);
+    m_vsyncMonitor->setRefreshRate(properties.refreshRate);
+}
+
 void VirtualOutput::applyChanges(const OutputConfiguration &config)
 {
     auto props = config.constChangeSet(this);
@@ -147,6 +154,7 @@ void VirtualOutput::applyChanges(const OutputConfiguration &config)
     next.uuid = props->uuid.value_or(next.uuid);
 
     setState(next);
+    m_information.initialVirtualMode.reset();
     m_renderLoop->setRefreshRate(next.currentMode->refreshRate());
     m_vsyncMonitor->setRefreshRate(next.currentMode->refreshRate());
 

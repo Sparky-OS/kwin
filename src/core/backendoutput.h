@@ -23,6 +23,7 @@ class OutputChangeSet;
 class BrightnessDevice;
 class OutputFrame;
 class OutputLayer;
+struct VirtualOutputProperties;
 
 class KWIN_EXPORT AutoBrightnessCurve
 {
@@ -193,6 +194,10 @@ public:
     /** Returns the resolution of the output.  */
     QSize pixelSize() const;
     QSize modeSize() const;
+    QSize viewSize() const;
+    QSize viewSizeForMode(const OutputModeline &mode) const;
+    bool isSplitEyeDisplay() const;
+    std::optional<OutputModeline> initialVirtualMode() const;
 
     QString eisaId() const;
 
@@ -453,6 +458,8 @@ protected:
         double minBrightness = 0;
         BpcRange bitsPerColorRange;
         std::optional<uint32_t> minVrrRefreshRateHz;
+        bool splitEyeDisplay = false;
+        std::optional<OutputModeline> initialVirtualMode;
     };
 
     struct State
@@ -526,6 +533,7 @@ protected:
     };
 
     void setInformation(const Information &information);
+    void initializeVirtualOutput(const VirtualOutputProperties &properties);
     void setState(const State &state);
 
     State m_state;

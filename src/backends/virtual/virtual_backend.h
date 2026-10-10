@@ -34,6 +34,7 @@ public:
     std::unique_ptr<EglBackend> createOpenGLBackend() override;
 
     BackendOutput *createVirtualOutput(const QString &name, const QString &description, const QSize &size, qreal scale) override;
+    BackendOutput *createVirtualOutput(const VirtualOutputProperties &properties) override;
     void removeVirtualOutput(BackendOutput *output) override;
 
     struct OutputInfo

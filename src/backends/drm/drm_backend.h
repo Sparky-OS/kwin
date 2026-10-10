@@ -53,6 +53,7 @@ public:
 
     QString supportInformation() const override;
     BackendOutput *createVirtualOutput(const QString &name, const QString &description, const QSize &size, double scale) override;
+    BackendOutput *createVirtualOutput(const VirtualOutputProperties &properties) override;
     void removeVirtualOutput(BackendOutput *output) override;
 
     DrmGpu *primaryGpu() const;

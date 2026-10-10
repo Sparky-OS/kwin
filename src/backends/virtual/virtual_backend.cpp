@@ -126,6 +126,20 @@ BackendOutput *VirtualBackend::createVirtualOutput(const QString &name, const QS
     });
 }
 
+BackendOutput *VirtualBackend::createVirtualOutput(const VirtualOutputProperties &properties)
+{
+    if (!properties.isValid()) {
+        return nullptr;
+    }
+    auto output = new VirtualOutput(this, false, properties.physicalSize, OutputTransform::Normal,
+                                    QByteArray(), std::nullopt, std::nullopt, std::nullopt);
+    output->init(properties);
+    m_outputs.append(output);
+    Q_EMIT outputAdded(output);
+    Q_EMIT outputsQueried();
+    return output;
+}
+
 void VirtualBackend::removeVirtualOutput(BackendOutput *output)
 {
     if (auto virtualOutput = qobject_cast<VirtualOutput *>(output)) {

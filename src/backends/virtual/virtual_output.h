@@ -33,6 +33,7 @@ public:
     bool hasStereoEyes() const override;
 
     void init(const QSize &pixelSize, qreal scale, const QList<OutputModeline> &modes);
+    void init(const VirtualOutputProperties &properties);
 
     void applyChanges(const OutputConfiguration &config) override;
 

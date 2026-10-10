@@ -441,10 +441,10 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             return state.outputIndex == outputIndex;
         });
 
-        std::optional<OutputModeline> effectiveMode;
-        if (state.mode && canRestoreVirtualMode(output, *state.mode, state.anaglyph.value_or(false), state.otherStereoFormats.value_or(false), state.customModes)) {
+        std::optional<OutputModeline> effectiveMode = output->initialVirtualMode();
+        if (!effectiveMode && state.mode && canRestoreVirtualMode(output, *state.mode, state.anaglyph.value_or(false), state.otherStereoFormats.value_or(false), state.customModes)) {
             effectiveMode = state.mode;
-        } else if (state.mode) {
+        } else if (!effectiveMode && state.mode) {
             // Note that a custom mode can potentially have a matching object in the output->modes()
             // list but no matching entry in the state.customModes list.
             if (state.mode->flags() & OutputModeline::Flag::Custom) {
@@ -481,8 +481,8 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
 
         *ret.changeSet(output) = OutputChangeSet{
             .currentMode = effectiveMode,
-            .desiredMode = state.mode,
-            .enabled = setupState.enabled,
+            .desiredMode = output->initialVirtualMode().has_value() ? output->initialVirtualMode() : state.mode,
+            .enabled = output->initialVirtualMode() ? true : setupState.enabled,
             .pos = setupState.position,
             .scale = state.scaleSetting,
             .scaleSetting = state.scaleSetting,
@@ -525,7 +525,7 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .autoBrightnessCurve = state.autoBrightnessCurve,
             .abmLevel = state.abmLevel,
             .anaglyph = state.anaglyph,
-            .otherStereoFormats = state.otherStereoFormats,
+            .otherStereoFormats = output->initialVirtualMode() ? output->isSplitEyeDisplay() : state.otherStereoFormats,
         };
     }
     return ret;
@@ -629,10 +629,10 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
         const bool enable = kscreenChangeSet.enabled.value_or(!isLidClosed || !output->isInternal() || outputs.size() == 1);
         const OutputState existingData = outputIndex ? m_outputs[*outputIndex] : OutputState{};
 
-        std::optional<OutputModeline> modeline;
-        if (existingData.mode && canRestoreVirtualMode(output, *existingData.mode, existingData.anaglyph.value_or(false), existingData.otherStereoFormats.value_or(false), existingData.customModes)) {
+        std::optional<OutputModeline> modeline = output->initialVirtualMode();
+        if (!modeline && existingData.mode && canRestoreVirtualMode(output, *existingData.mode, existingData.anaglyph.value_or(false), existingData.otherStereoFormats.value_or(false), existingData.customModes)) {
             modeline = existingData.mode;
-        } else if (existingData.mode) {
+        } else if (!modeline && existingData.mode) {
             // Note that a custom mode can potentially have a matching object in the output->modes()
             // list but no matching entry in the state.customModes list.
             if (existingData.mode->flags() & OutputModeline::Flag::Custom) {
@@ -676,11 +676,11 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
         *changeset = {
             .currentMode = modeline,
             .desiredMode = modeline,
-            .enabled = setupState ? setupState->enabled : enable,
+            .enabled = output->initialVirtualMode() ? true : (setupState ? setupState->enabled : enable),
             .pos = setupState ? setupState->position : rightMostPosition,
             // kscreen scale is unreliable because it gets overwritten with the value 1 on Xorg,
             // and we don't know if it's from Xorg or the 5.27 Wayland session... so just ignore it
-            .scaleSetting = existingData.scaleSetting.value_or(chooseScale(output, modeline->size())),
+            .scaleSetting = existingData.scaleSetting.value_or(output->initialVirtualMode() ? output->scale() : chooseScale(output, modeline->size())),
             .transform = existingData.transform.value_or(kscreenChangeSet.transform.value_or(output->panelOrientation())),
             .manualTransform = existingData.manualTransform.value_or(kscreenChangeSet.transform.value_or(output->panelOrientation())),
             .overscan = existingData.overscan.value_or(kscreenChangeSet.overscan.value_or(0)),
@@ -708,7 +708,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             .autoBrightnessCurve = existingData.autoBrightnessCurve,
             .abmLevel = existingData.abmLevel.value_or(0),
             .anaglyph = existingData.anaglyph.value_or(false),
-            .otherStereoFormats = existingData.otherStereoFormats.value_or(false),
+            .otherStereoFormats = output->initialVirtualMode() ? output->isSplitEyeDisplay() : existingData.otherStereoFormats.value_or(output->otherStereoFormats()),
         };
         if (setupState) {
             priority = std::max(setupState->priority + 1, priority);
@@ -728,6 +728,11 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
 
 std::shared_ptr<OutputMode> OutputConfigurationStore::chooseMode(BackendOutput *output) const
 {
+    if (const auto requested = output->initialVirtualMode()) {
+        if (const auto mode = requested->match(output->modes())) {
+            return mode;
+        }
+    }
     const auto findBiggestFastest = [](const auto &left, const auto &right) {
         const uint64_t leftPixels = left->size().width() * left->size().height();
         const uint64_t rightPixels = right->size().width() * right->size().height();

@@ -45,6 +45,19 @@ DrmVirtualOutput::DrmVirtualOutput(DrmBackend *backend, const QString &name, con
     recreateSurface();
 }
 
+DrmVirtualOutput::DrmVirtualOutput(DrmBackend *backend, const VirtualOutputProperties &properties)
+    : DrmVirtualOutput(backend, properties.name, properties.description, properties.pixelSize, properties.scale)
+{
+    initializeVirtualOutput(properties);
+    m_renderLoop->setRefreshRate(properties.refreshRate);
+    m_vsyncMonitor->setRefreshRate(properties.refreshRate);
+}
+
+bool DrmVirtualOutput::hasStereoEyes() const
+{
+    return isStereoPair() || currentMode()->flags() & OutputModeline::AllStereo3D;
+}
+
 DrmVirtualOutput::~DrmVirtualOutput()
 {
 }
@@ -89,6 +102,8 @@ void DrmVirtualOutput::applyChanges(const OutputConfiguration &config)
 
     State next = m_state;
     next.enabled = props->enabled.value_or(m_state.enabled);
+    next.anaglyph = props->anaglyph.value_or(m_state.anaglyph);
+    next.otherStereoFormats = props->otherStereoFormats.value_or(m_state.otherStereoFormats);
     next.transform = props->transform.value_or(m_state.transform);
     next.position = props->pos.value_or(m_state.position);
     next.scale = props->scale.value_or(m_state.scale);
@@ -135,6 +150,7 @@ void DrmVirtualOutput::applyChanges(const OutputConfiguration &config)
     }
 
     setState(next);
+    m_information.initialVirtualMode.reset();
     m_renderLoop->setRefreshRate(next.currentMode->refreshRate());
     m_vsyncMonitor->setRefreshRate(next.currentMode->refreshRate());
 

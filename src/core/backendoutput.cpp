@@ -8,6 +8,7 @@
 */
 
 #include "backendoutput.h"
+#include "outputbackend.h"
 #include "brightnessdevice.h"
 #include "iccprofile.h"
 #include "outputconfiguration.h"
@@ -314,6 +315,62 @@ QSize BackendOutput::modeSize() const
 QSize BackendOutput::pixelSize() const
 {
     return orientateSize(modeSize());
+}
+
+bool BackendOutput::isSplitEyeDisplay() const
+{
+    return m_information.splitEyeDisplay;
+}
+
+QSize BackendOutput::viewSize() const
+{
+    return currentMode() ? viewSizeForMode(currentMode()->modeline()) : QSize();
+}
+
+QSize BackendOutput::viewSizeForMode(const OutputModeline &mode) const
+{
+    const QSize size = mode.size();
+    if (isSplitEyeDisplay() && mode.flags().testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf)) {
+        return QSize(size.width() / 2, size.height());
+    }
+    return size;
+}
+
+std::optional<OutputModeline> BackendOutput::initialVirtualMode() const
+{
+    return m_information.initialVirtualMode;
+}
+
+void BackendOutput::initializeVirtualOutput(const VirtualOutputProperties &properties)
+{
+    const OutputModeline modeline(properties.pixelSize, properties.refreshRate,
+                                 properties.splitEye
+                                     ? OutputModeline::Flag::VirtualStereo | OutputModeline::Flag::Stereo3DSideBySideHalf
+                                     : OutputModeline::Flags(OutputModeline::Flag::Preferred));
+    auto information = m_information;
+    information.name = QStringLiteral("Virtual-") + properties.name;
+    information.model = properties.description;
+    information.physicalSize = properties.physicalSize;
+    information.edid = Edid(QByteArrayView(), properties.name.toUtf8());
+    information.splitEyeDisplay = properties.splitEye;
+    information.initialVirtualMode = modeline;
+    if (properties.splitEye) {
+        information.capabilities |= Capability::VirtualStereo;
+    }
+    setInformation(information);
+
+    const auto mode = std::make_shared<OutputMode>(modeline);
+    auto state = m_state;
+    state.scale = properties.scale;
+    state.scaleSetting = properties.scale;
+    state.modes = {mode};
+    if (properties.splitEye) {
+        state.modes.push_back(std::make_shared<OutputMode>(OutputModeline(properties.pixelSize, properties.refreshRate, OutputModeline::Flag::Preferred)));
+    }
+    state.currentMode = mode;
+    state.desiredMode = modeline;
+    state.otherStereoFormats = properties.splitEye;
+    setState(state);
 }
 
 const Edid &BackendOutput::edid() const

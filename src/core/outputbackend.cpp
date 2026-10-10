@@ -16,8 +16,21 @@
 #include "outputconfiguration.h"
 #include "qpainter/qpainterbackend.h"
 
+#include <cmath>
+#include <limits>
+
 namespace KWin
 {
+
+bool VirtualOutputProperties::isValid() const
+{
+    return !name.isEmpty() && pixelSize.width() > 0 && pixelSize.height() > 0
+        && (!splitEye || pixelSize.width() % 2 == 0)
+        && refreshRate > 0 && refreshRate <= std::numeric_limits<int>::max()
+        && std::isfinite(scale) && scale > 0
+        && ((physicalSize.width() == 0 && physicalSize.height() == 0)
+            || (physicalSize.width() > 0 && physicalSize.height() > 0));
+}
 
 OutputBackend::OutputBackend(QObject *parent)
     : QObject(parent)
@@ -85,6 +98,11 @@ BackendOutput *OutputBackend::createVirtualOutput(const QString &name, const QSt
 void OutputBackend::removeVirtualOutput(BackendOutput *output)
 {
     Q_ASSERT(!output);
+}
+
+BackendOutput *OutputBackend::createVirtualOutput(const VirtualOutputProperties &properties)
+{
+    return nullptr;
 }
 
 QString OutputBackend::supportInformation() const
