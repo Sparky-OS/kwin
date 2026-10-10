@@ -126,7 +126,7 @@ private:
 class KWIN_EXPORT OutputDeviceModeV2Interface
 {
 public:
-    OutputDeviceModeV2Interface(std::shared_ptr<OutputMode> handle);
+    OutputDeviceModeV2Interface(std::shared_ptr<OutputMode> handle, const QSize &viewSize = QSize());
     ~OutputDeviceModeV2Interface();
 
     std::weak_ptr<OutputMode> handle() const;

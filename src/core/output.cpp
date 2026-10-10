@@ -606,7 +606,7 @@ void LogicalOutput::setData(const QPoint logicalPosition, const QSize &modeSize,
 
 void LogicalOutput::copyInfoFrom(BackendOutput *output)
 {
-    setData(output->position(), output->modeSize(), output->refreshRate(), output->transform(), output->scale(), output->description());
+    setData(output->position(), output->viewSize(), output->refreshRate(), output->transform(), output->scale(), output->description());
 }
 
 } // namespace KWin

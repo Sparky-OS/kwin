@@ -6,6 +6,7 @@
 #include "backends/virtual/virtual_backend.h"
 #include "core/backendoutput.h"
 #include "core/outputbackend.h"
+#include "core/output.h"
 #include "core/outputconfiguration.h"
 #include "utils/orientationsensor.h"
 #include "core/renderloop.h"
@@ -25,6 +26,13 @@ public:
     std::unique_ptr<DrmPipelineLayer> createDrmPlaneLayer(DrmPlane *) override { return nullptr; }
     std::unique_ptr<DrmPipelineLayer> createDrmPlaneLayer(DrmGpu *, DrmPlane::TypeIndex) override { return nullptr; }
     std::unique_ptr<DrmOutputLayer> createLayer(DrmVirtualOutput *) override { return nullptr; }
+};
+
+class TestLogicalOutput : public LogicalOutput
+{
+public:
+    using LogicalOutput::LogicalOutput;
+    using LogicalOutput::copyInfoFrom;
 };
 
 class VirtualOutputPropertiesTest : public QObject
@@ -134,6 +142,31 @@ private Q_SLOTS:
         QCOMPARE(changes->pos.value(), QPoint(80, 40));
         output->applyChanges(queried->first);
         QVERIFY(output->hasStereoEyes());
+        backend.removeVirtualOutput(output);
+    }
+
+    void nativeViewportGeometry()
+    {
+        VirtualBackend backend;
+        const VirtualOutputProperties properties{.name = QStringLiteral("native-viewport"), .pixelSize = QSize(2400, 1080), .refreshRate = 59940, .scale = 1.25, .splitEye = true};
+        auto output = backend.createVirtualOutput(properties);
+        {
+            TestLogicalOutput logical(output);
+            logical.copyInfoFrom(output);
+            QCOMPARE(logical.pixelSize(), QSize(1200, 1080));
+            QCOMPARE(logical.geometryF().size(), QSizeF(960, 864));
+            QCOMPARE(output->modeSize(), QSize(2400, 1080));
+            OutputConfiguration rotated;
+            rotated.changeSet(output)->transform = OutputTransform::Rotate90;
+            output->applyChanges(rotated);
+            logical.copyInfoFrom(output);
+            QCOMPARE(logical.geometryF().size(), QSizeF(864, 960));
+            OutputConfiguration mono;
+            mono.changeSet(output)->currentMode = output->modes().back()->modeline();
+            output->applyChanges(mono);
+            logical.copyInfoFrom(output);
+            QCOMPARE(logical.geometryF().size(), QSizeF(864, 1920));
+        }
         backend.removeVirtualOutput(output);
     }
 

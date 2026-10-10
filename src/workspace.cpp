@@ -1483,7 +1483,7 @@ void Workspace::updateOutputs()
             m_outputs.push_back(*existing);
         }
         // update geometry
-        m_outputs.back()->setData(output->position() - topLeftMostCoordinates, output->modeSize(),
+        m_outputs.back()->setData(output->position() - topLeftMostCoordinates, output->viewSize(),
                                   output->refreshRate(), output->transform(), output->scale(),
                                   generateDescription(output, newBackendOutputs));
         if (existing != oldLogicalOutputs.end()) {

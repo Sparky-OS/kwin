@@ -153,9 +153,9 @@ void OutputConfigurationStore::applyOrientationReading(OutputConfiguration &conf
 
 static QSize calculatePixelSize(OutputChangeSet *change, BackendOutput *output)
 {
-    const QSize modeSize = change->currentMode.transform([](const auto &modeline) {
-        return modeline.size();
-    }).value_or(output->modeSize());
+    const QSize modeSize = change->currentMode.transform([output](const auto &modeline) {
+        return output->viewSizeForMode(modeline);
+    }).value_or(output->viewSize());
     const auto transform = change->transform.value_or(output->transform());
     return transform.map(modeSize);
 }
@@ -716,7 +716,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             priority++;
         }
         if (*changeset->enabled) {
-            const auto modeSize = changeset->transform->map(modeline->size());
+            const auto modeSize = changeset->transform->map(output->viewSizeForMode(*modeline));
             const QPoint topRight = QPoint(std::ceil(changeset->pos->x() + modeSize.width() / *changeset->scaleSetting), changeset->pos->y());
             if (topRight.x() > rightMostPosition.x() || (topRight.x() == rightMostPosition.x() && topRight.y() < rightMostPosition.y())) {
                 rightMostPosition = topRight;

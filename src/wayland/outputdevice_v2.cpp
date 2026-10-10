@@ -19,7 +19,7 @@
 namespace KWin
 {
 
-static const quint32 s_version = 24;
+static const quint32 s_version = kde_output_device_registry_v2_interface.version;
 
 class OutputDeviceRegistryV2Private : public QtWaylandServer::kde_output_device_registry_v2
 {
@@ -289,7 +289,7 @@ public:
         OutputDeviceV2InterfacePrivate::Resource *output;
     };
 
-    OutputDeviceModeV2InterfacePrivate(OutputDeviceModeV2Interface *q, std::shared_ptr<OutputMode> handle);
+    OutputDeviceModeV2InterfacePrivate(OutputDeviceModeV2Interface *q, std::shared_ptr<OutputMode> handle, const QSize &viewSize);
     ~OutputDeviceModeV2InterfacePrivate() override;
 
     Resource *createResource(OutputDeviceV2InterfacePrivate::Resource *output);
@@ -305,6 +305,7 @@ public:
     OutputDeviceModeV2Interface *q;
     std::weak_ptr<OutputMode> m_handle;
     QSize m_size;
+    QSize m_viewSize;
     int m_refreshRate = 60000;
     OutputModeline::Flags m_flags;
 
@@ -873,7 +874,7 @@ void OutputDeviceV2Interface::updateModes()
     const auto nativeModes = d->m_handle->modes();
 
     for (const std::shared_ptr<OutputMode> &mode : nativeModes) {
-        d->m_modes.push_back(std::make_unique<OutputDeviceModeV2Interface>(mode));
+        d->m_modes.push_back(std::make_unique<OutputDeviceModeV2Interface>(mode, d->m_handle->viewSizeForMode(mode->modeline())));
         OutputDeviceModeV2Interface *deviceMode = d->m_modes.back().get();
 
         if (d->m_handle->currentMode() == mode) {
@@ -1350,18 +1351,19 @@ OutputDeviceV2Interface *OutputDeviceV2Interface::get(wl_resource *native)
     return nullptr;
 }
 
-OutputDeviceModeV2InterfacePrivate::OutputDeviceModeV2InterfacePrivate(OutputDeviceModeV2Interface *q, std::shared_ptr<OutputMode> handle)
+OutputDeviceModeV2InterfacePrivate::OutputDeviceModeV2InterfacePrivate(OutputDeviceModeV2Interface *q, std::shared_ptr<OutputMode> handle, const QSize &viewSize)
     : QtWaylandServer::kde_output_device_mode_v2()
     , q(q)
     , m_handle(handle)
     , m_size(handle->size())
+    , m_viewSize(viewSize.isValid() ? viewSize : handle->size())
     , m_refreshRate(handle->refreshRate())
     , m_flags(handle->flags())
 {
 }
 
-OutputDeviceModeV2Interface::OutputDeviceModeV2Interface(std::shared_ptr<OutputMode> handle)
-    : d(new OutputDeviceModeV2InterfacePrivate(this, handle))
+OutputDeviceModeV2Interface::OutputDeviceModeV2Interface(std::shared_ptr<OutputMode> handle, const QSize &viewSize)
+    : d(new OutputDeviceModeV2InterfacePrivate(this, handle, viewSize))
 {
 }
 
@@ -1408,6 +1410,11 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
 {
     send_size(resource->handle, m_size.width(), m_size.height());
     send_refresh(resource->handle, m_refreshRate);
+#ifdef KDE_OUTPUT_DEVICE_MODE_V2_VIEW_SIZE_SINCE_VERSION
+    if (resource->version() >= KDE_OUTPUT_DEVICE_MODE_V2_VIEW_SIZE_SINCE_VERSION) {
+        send_view_size(resource->handle, m_viewSize.width(), m_viewSize.height());
+    }
+#endif
 
     if (m_flags & OutputModeline::Flag::Preferred) {
         send_preferred(resource->handle);

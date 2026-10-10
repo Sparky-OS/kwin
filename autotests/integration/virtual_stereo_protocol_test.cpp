@@ -19,7 +19,13 @@ public:
         : QtWayland::kde_output_device_mode_v2(mode) {}
     ~RecordedMode() override { kde_output_device_mode_v2_destroy(object()); }
     uint32_t flags = 0;
+    QSize panelSize;
+    QSize viewSize;
 protected:
+    void kde_output_device_mode_v2_size(int32_t width, int32_t height) override { panelSize = QSize(width, height); }
+#ifdef KDE_OUTPUT_DEVICE_MODE_V2_VIEW_SIZE_SINCE_VERSION
+    void kde_output_device_mode_v2_view_size(int32_t width, int32_t height) override { viewSize = QSize(width, height); }
+#endif
     void kde_output_device_mode_v2_flags(uint32_t value) override { flags = value; }
 };
 
@@ -79,12 +85,60 @@ private Q_SLOTS:
     }
     void init() { QVERIFY(Test::setupWaylandConnection()); }
     void cleanup() { Test::destroyWaylandConnection(); }
+#ifdef KDE_OUTPUT_DEVICE_MODE_V2_VIEW_SIZE_SINCE_VERSION
+    void nativeViewport()
+    {
+        auto backend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+        backend->setVirtualOutputs({});
+        const VirtualOutputProperties properties{.name = QStringLiteral("protocol-phone"), .pixelSize = QSize(2400, 1080), .refreshRate = 59940, .scale = 1.25, .splitEye = true};
+        auto output = backend->createVirtualOutput(properties);
+        QVERIFY(output);
+        auto logical = workspace()->findOutput(output);
+        QVERIFY(logical);
+        QCOMPARE(logical->geometryF().size(), QSizeF(960, 864));
+        QCOMPARE(output->modeSize(), QSize(2400, 1080));
+        QCOMPARE(output->refreshRate(), 59940);
+
+        KWayland::Client::EventQueue queue;
+        queue.setup(Test::waylandConnection());
+        KWayland::Client::Registry registry;
+        registry.setEventQueue(&queue);
+        RecordedRegistry devices;
+        connect(&registry, &KWayland::Client::Registry::interfaceAnnounced, &registry, [&](const QByteArray &interface, uint32_t name, uint32_t advertised) {
+            if (interface == kde_output_device_registry_v2_interface.name) {
+                QCOMPARE(advertised, 25u);
+                devices.init(registry, name, 25);
+            }
+        });
+        QSignalSpy announced(&registry, &KWayland::Client::Registry::interfacesAnnounced);
+        registry.create(Test::waylandConnection());
+        registry.setup();
+        QVERIFY(announced.wait());
+        QVERIFY(Test::waylandSync());
+        QTRY_COMPARE(devices.outputs.size(), 1u);
+        auto &device = *devices.outputs.front();
+        QTRY_VERIFY(device.doneCount > 0);
+        QCOMPARE(device.modes.size(), 2u);
+        const auto current = std::ranges::find_if(device.modes, [&](const auto &mode) { return mode->object() == device.current; });
+        QVERIFY(current != device.modes.end());
+        QCOMPARE((*current)->panelSize, QSize(2400, 1080));
+        QCOMPARE((*current)->viewSize, QSize(1200, 1080));
+        for (const auto &mode : device.modes) {
+            QCOMPARE(mode->viewSize, QSize(mode->flags & 4 ? 1200 : 2400, 1080));
+        }
+        devices.stop();
+        backend->removeVirtualOutput(output);
+    }
+#endif
     void protocol_data()
     {
         QTest::addColumn<int>("version");
         QTest::newRow("older-21") << 21;
         QTest::newRow("older-23") << 23;
         QTest::newRow("stereo-24") << 24;
+#ifdef KDE_OUTPUT_DEVICE_MODE_V2_VIEW_SIZE_SINCE_VERSION
+        QTest::newRow("viewport-25") << 25;
+#endif
     }
     void protocol()
     {
