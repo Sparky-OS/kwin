@@ -8,6 +8,9 @@
 */
 #include "compositor.h"
 #include "core/output.h"
+#include "core/outputbackend.h"
+#include "core/backendoutput.h"
+#include "wayland-client/viewporter.h"
 #include "generic_scene_opengl_test.h"
 #include "opengl/glplatform.h"
 #include "pointer_input.h"
@@ -21,6 +24,9 @@
 #include <KWayland/Client/surface.h>
 #include <PipeWireSourceStream>
 #include <QPainter>
+#include <QDir>
+#include <QTemporaryDir>
+#include <QScopeGuard>
 #include <QScreen>
 
 #define QCOMPAREIMG(actual, expected, id)                                                        \
@@ -81,6 +87,10 @@ private Q_SLOTS:
     void testWindowWithPopup();
     void testWindowWithPopupDynamic();
     void testOutputCasting();
+#ifdef ZKDE_SCREENCAST_UNSTABLE_V1_STREAM_VIRTUAL_OUTPUT_WITH_PROPERTIES_SINCE_VERSION
+    void testNativePanel_data();
+    void testNativePanel();
+#endif
 
 private:
     std::optional<QImage> oneFrameAndClose(Test::ScreencastingStreamV1 *stream);
@@ -92,7 +102,7 @@ void ScreencastingTest::init()
         QSKIP("CI has pipewire 1.2 that has known process callback issues"); // TODO: Remove it later when CI ships pipewire 1.2 with the fix
     }
 
-    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::ScreencastingV1 | Test::AdditionalWaylandInterface::PresentationTime));
+    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::ScreencastingV1 | Test::AdditionalWaylandInterface::PresentationTime | Test::AdditionalWaylandInterface::StereoContentV1 | Test::AdditionalWaylandInterface::Viewporter));
     QVERIFY(KWin::Test::screencasting());
     Cursors::self()->hideCursor();
 }
@@ -235,13 +245,97 @@ void ScreencastingTest::testWindowWithPopupDynamic()
     QCOMPAREIMG(image, expectedImage, "dynamic_popup_closed");
 }
 
+#ifdef ZKDE_SCREENCAST_UNSTABLE_V1_STREAM_VIRTUAL_OUTPUT_WITH_PROPERTIES_SINCE_VERSION
+void ScreencastingTest::testNativePanel_data()
+{
+    QTest::addColumn<bool>("stereo");
+    QTest::newRow("mono-duplicated") << false;
+    QTest::newRow("declared-full-sbs") << true;
+}
+
+void ScreencastingTest::testNativePanel()
+{
+    QFETCH(bool, stereo);
+    const QSize panelSize(2400, 1080);
+    const QSize eyeSize(1200, 1080);
+    const auto outputCount = workspace()->outputs().size();
+    auto stream = std::make_unique<Test::ScreencastingStreamV1>(nullptr);
+    stream->init(Test::screencasting()->stream_virtual_output_with_properties(QStringLiteral("native-phone"), QStringLiteral("Native phone panel"),
+        panelSize.width(), panelSize.height(), 59940, wl_fixed_from_double(1), 150, 68, 1, QtWayland::zkde_screencast_unstable_v1::pointer_hidden));
+    QSignalSpy created(stream.get(), &Test::ScreencastingStreamV1::created);
+    QSignalSpy failed(stream.get(), &Test::ScreencastingStreamV1::failed);
+    QVERIFY(created.wait());
+    QCOMPARE(failed.count(), 0);
+    QTRY_COMPARE(workspace()->outputs().size(), outputCount + 1);
+    auto backendOutput = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-native-phone"));
+    QVERIFY(backendOutput);
+    auto output = workspace()->findOutput(backendOutput);
+    QVERIFY(output);
+    QCOMPARE(output->pixelSize(), eyeSize);
+    QCOMPARE(backendOutput->modeSize(), panelSize);
+    QCOMPARE(output->refreshRate(), 59940);
+    QVERIFY(output->hasStereoEyes());
+    QCOMPARE(backendOutput->edid().identifier(), QByteArray("native-phone"));
+
+    QImage expected(panelSize, QImage::Format_RGBA8888_Premultiplied);
+    for (int y = 0; y < eyeSize.height(); ++y) {
+        for (int x = 0; x < eyeSize.width(); ++x) {
+            expected.setPixelColor(x, y, QColor((x % 32) * 8, (y % 32) * 8, 32));
+            expected.setPixelColor(x + eyeSize.width(), y, QColor((x % 32) * 8, (y % 32) * 8, stereo ? 224 : 32));
+        }
+    }
+    QTemporaryDir fixtureDirectory;
+    QVERIFY(fixtureDirectory.isValid());
+    const auto fixturePath = fixtureDirectory.filePath(QStringLiteral("fixture.png"));
+    QVERIFY((stereo ? expected : expected.copy(QRect(QPoint(), eyeSize))).save(fixturePath));
+    QProcess producer;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("WAYLAND_DISPLAY"), waylandServer()->socketName());
+    producer.setProcessEnvironment(environment);
+    producer.setProgram(QCoreApplication::applicationDirPath() + QStringLiteral("/capturefixture"));
+    producer.setArguments({fixturePath, QString::number(eyeSize.width()), QString::number(eyeSize.height()), stereo ? QStringLiteral("stereo") : QStringLiteral("mono")});
+    const auto stopProducer = qScopeGuard([&] {
+        producer.terminate();
+        producer.waitForFinished();
+    });
+    producer.start();
+    Window *window = Test::waitForWaylandWindowShown();
+    QVERIFY2(window, producer.readAllStandardError().constData());
+    QVERIFY(window->pid() != QCoreApplication::applicationPid());
+    window->move(output->geometry().topLeft());
+    QCOMPARE(window->frameGeometry().size(), QSizeF(eyeSize));
+
+    PipeWireSourceStream receiver;
+    std::optional<QImage> image;
+    connect(&receiver, &PipeWireSourceStream::frameReceived, this, [&](const PipeWireFrame &frame) {
+        if (frame.dataFrame) {
+            image = frame.dataFrame->toImage().convertedTo(expected.format());
+        }
+    });
+    receiver.createStream(stream->nodeId(), 0);
+    QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
+    const auto rate = receiver.framerate();
+    QVERIFY(rate.denominator != 0);
+    QCOMPARE(quint64(rate.numerator) * 1000, quint64(rate.denominator) * 59940);
+    QCOMPAREIMG(*image, expected, stereo ? QLatin1StringView("native_stereo") : QLatin1StringView("native_mono"));
+    const QString proofDirectory = qEnvironmentVariable("KWIN_PHONE_PROOF_DIR");
+    if (!proofDirectory.isEmpty()) {
+        QVERIFY(QDir().mkpath(proofDirectory));
+        QVERIFY(image->save(proofDirectory + (stereo ? QStringLiteral("/native-stereo.png") : QStringLiteral("/native-mono.png"))));
+    }
+    receiver.stopStreaming();
+    stream.reset();
+    QTRY_COMPARE(workspace()->outputs().size(), outputCount);
+    QVERIFY(!kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-native-phone")));
+}
+#endif
+
 void ScreencastingTest::testOutputCasting()
 {
-    auto theOutput = KWin::Test::waylandOutputs().constFirst();
-
-    Test::XdgToplevelWindow window{[theOutput](Test::XdgToplevel *toplevel) {
-        toplevel->set_fullscreen(theOutput->output());
-    }};
+    QVERIFY(Test::waylandSync());
+    auto theOutput = Test::waylandOutput(workspace()->activeOutput()->name());
+    QVERIFY(theOutput);
+    QTRY_VERIFY(!theOutput->pixelSize().isEmpty());
 
     QImage sourceImage(theOutput->pixelSize(), QImage::Format_RGBA8888_Premultiplied);
     sourceImage.fill(Qt::green);
@@ -250,11 +344,26 @@ void ScreencastingTest::testOutputCasting()
         p.drawRect(100, 100, 100, 100);
     }
 
-    QVERIFY(window.show(sourceImage));
-    QVERIFY(window.m_window->isFullScreen());
-    QCOMPARE(window.m_window->frameGeometry(), RectF(window.m_window->output()->geometry()));
-
-    QVERIFY(window.presentWait());
+    QTemporaryDir fixtureDirectory;
+    QVERIFY(fixtureDirectory.isValid());
+    const auto fixturePath = fixtureDirectory.filePath(QStringLiteral("fixture.png"));
+    QVERIFY(sourceImage.save(fixturePath));
+    QProcess producer;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("WAYLAND_DISPLAY"), waylandServer()->socketName());
+    producer.setProcessEnvironment(environment);
+    producer.setProgram(QCoreApplication::applicationDirPath() + QStringLiteral("/capturefixture"));
+    producer.setArguments({fixturePath, QString::number(sourceImage.width()), QString::number(sourceImage.height()), QStringLiteral("fullscreen")});
+    const auto stopProducer = qScopeGuard([&] {
+        producer.terminate();
+        producer.waitForFinished();
+    });
+    producer.start();
+    Window *window = Test::waitForWaylandWindowShown();
+    QVERIFY2(window, producer.readAllStandardError().constData());
+    QVERIFY(window->pid() != QCoreApplication::applicationPid());
+    QTRY_VERIFY(window->isFullScreen());
+    QCOMPARE(window->frameGeometry(), RectF(window->output()->geometry()));
 
     auto stream = KWin::Test::screencasting()->createOutputStream(theOutput->output(), QtWayland::zkde_screencast_unstable_v1::pointer_hidden);
 

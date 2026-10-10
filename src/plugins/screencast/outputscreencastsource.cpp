@@ -16,9 +16,13 @@
 #include "cursor.h"
 #include "opengl/eglbackend.h"
 #include "opengl/egldisplay.h"
+#include "opengl/eglcontext.h"
 #include "opengl/glframebuffer.h"
 #include "opengl/gltexture.h"
 #include "scene/workspacescene.h"
+#include "scene/itemrenderer.h"
+
+#include <QScopeGuard>
 #include "workspace.h"
 
 #include <drm_fourcc.h>
@@ -48,9 +52,15 @@ quint32 OutputScreenCastSource::drmFormat() const
     return DRM_FORMAT_ARGB8888;
 }
 
+static bool isSplitEyeCapture(LogicalOutput *output)
+{
+    return output->backendOutput()->isSplitEyeDisplay()
+        && output->backendOutput()->currentMode()->flags().testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf);
+}
+
 QSize OutputScreenCastSource::textureSize() const
 {
-    return m_output->pixelSize();
+    return isSplitEyeCapture(m_output) ? m_output->backendOutput()->modeSize() : m_output->pixelSize();
 }
 
 qreal OutputScreenCastSource::devicePixelRatio() const
@@ -80,6 +90,9 @@ Region OutputScreenCastSource::render(QImage *target, const Region &bufferRepair
 
 Region OutputScreenCastSource::render(GLFramebuffer *target, const Region &bufferRepair)
 {
+    if (isSplitEyeCapture(m_output)) {
+        return renderStereo(target);
+    }
     m_layer->setFramebuffer(target, bufferRepair & Rect(QPoint(), target->size()));
     if (!m_layer->preparePresentationTest()) {
         return Region{};
@@ -98,6 +111,57 @@ Region OutputScreenCastSource::render(GLFramebuffer *target, const Region &buffe
         return Region{};
     }
     return bufferDamage;
+}
+
+Region OutputScreenCastSource::renderStereo(GLFramebuffer *target)
+{
+    const QSize eyeSize = m_output->backendOutput()->viewSize();
+    if (target->size() != textureSize()) {
+        return Region{};
+    }
+    if (!m_eyeTexture || m_eyeTexture->size() != eyeSize) {
+        m_eyeFramebuffer.reset();
+        m_eyeTexture = GLTexture::allocate(GL_RGBA8, eyeSize);
+        if (!m_eyeTexture) {
+            return Region{};
+        }
+        m_eyeFramebuffer = std::make_unique<GLFramebuffer>(m_eyeTexture.get());
+    }
+    if (!m_eyeFramebuffer->valid()) {
+        return Region{};
+    }
+    m_eyeTexture->setContentTransform(m_output->transform());
+    const Region eyeDamage(Rect(QPoint(), m_output->pixelSize()));
+    m_layer->setFramebuffer(m_eyeFramebuffer.get(), eyeDamage);
+    if (!m_layer->preparePresentationTest()) {
+        return Region{};
+    }
+    const auto beginInfo = m_layer->beginFrame();
+    if (!beginInfo) {
+        return Region{};
+    }
+    auto renderer = kwinApp()->scene()->renderer();
+    const auto previousEye = renderer->stereoEye();
+    const bool previousCapture = renderer->stereoCapture();
+    const auto restoreRenderer = qScopeGuard([&] {
+        renderer->setStereoEye(previousEye);
+        renderer->setStereoCapture(previousCapture);
+    });
+    renderer->setStereoCapture(true);
+    m_sceneView->prePaint();
+    m_layer->resetRepaints();
+    for (int eye = 0; eye < 2; ++eye) {
+        renderer->setStereoEye(eye == 0 ? StereoEye::Left : StereoEye::Right);
+        m_sceneView->paint(beginInfo->renderTarget, QPoint(), eyeDamage);
+        GLFramebuffer::pushFramebuffer(m_eyeFramebuffer.get());
+        target->blitFromFramebuffer(Rect(QPoint(), eyeSize), Rect(QPoint(eye * eyeSize.width(), 0), eyeSize), GL_NEAREST);
+        GLFramebuffer::popFramebuffer();
+    }
+    m_sceneView->postPaint();
+    if (!m_layer->endFrame(eyeDamage, eyeDamage, nullptr)) {
+        return Region{};
+    }
+    return Rect(QPoint(), target->size());
 }
 
 std::chrono::nanoseconds OutputScreenCastSource::clock() const
@@ -148,6 +212,11 @@ void OutputScreenCastSource::pause()
     m_cursorView.reset();
     m_sceneView.reset();
     m_layer.reset();
+    if (m_eyeFramebuffer) {
+        static_cast<EglBackend *>(Compositor::self()->backend())->openglContext()->makeCurrent();
+    }
+    m_eyeFramebuffer.reset();
+    m_eyeTexture.reset();
 
     m_active = false;
 }

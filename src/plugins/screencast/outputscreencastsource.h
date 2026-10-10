@@ -45,11 +45,15 @@ public:
     RectF mapFromGlobal(const RectF &rect) const override;
 
 private:
+    Region renderStereo(GLFramebuffer *target);
+
     QPointer<LogicalOutput> m_output;
     std::optional<pid_t> m_pidToHide;
     std::unique_ptr<ScreencastLayer> m_layer;
     std::unique_ptr<FilteredSceneView> m_sceneView;
     std::unique_ptr<ItemTreeView> m_cursorView;
+    std::unique_ptr<GLTexture> m_eyeTexture;
+    std::unique_ptr<GLFramebuffer> m_eyeFramebuffer;
     bool m_active = false;
     bool m_renderCursor = false;
 };

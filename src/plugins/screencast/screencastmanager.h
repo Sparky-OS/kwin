@@ -41,6 +41,7 @@ private:
                              const QSize &size,
                              double scale,
                              ScreencastV1Interface::CursorMode mode);
+    void streamVirtualPanel(ScreencastStreamV1Interface *stream, const VirtualOutputProperties &properties, ScreencastV1Interface::CursorMode mode);
     void streamRegion(ScreencastStreamV1Interface *stream,
                       const Rect &geometry,
                       qreal scale,

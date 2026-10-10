@@ -350,7 +350,8 @@ ScreenCastStream::ScreenCastStream(ScreenCastSource *source, std::shared_ptr<Pip
     };
 
     m_pendingFrame.setSingleShot(true);
-    connect(&m_pendingFrame, &QTimer::timeout, this, [this] {
+    m_pendingFrame.setTimerType(Qt::PreciseTimer);
+    connect(&m_pendingFrame, &QChronoTimer::timeout, this, [this] {
         record(m_pendingContents);
         m_pendingContents = Contents();
     });
@@ -389,13 +390,13 @@ bool ScreenCastStream::init()
     return true;
 }
 
-uint ScreenCastStream::framerate()
+spa_fraction ScreenCastStream::framerate() const
 {
     if (m_pwStream) {
-        return m_videoFormat.max_framerate.num / m_videoFormat.max_framerate.denom;
+        return m_videoFormat.max_framerate;
     }
 
-    return 0;
+    return SPA_FRACTION(0, 1);
 }
 
 uint ScreenCastStream::nodeId()
@@ -510,16 +511,17 @@ void ScreenCastStream::scheduleRecord(Contents contents)
     if (m_pendingFrame.isActive()) {
         return;
     }
-    std::chrono::milliseconds waitInterval{0};
+    std::chrono::nanoseconds waitInterval{0};
     if (m_videoFormat.max_framerate.num != 0 && m_lastSent.has_value()) {
         const auto now = std::chrono::steady_clock::now();
-        const auto frameInterval = std::chrono::milliseconds(1000 * m_videoFormat.max_framerate.denom / m_videoFormat.max_framerate.num);
-        const auto lastSentAgo = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastSent.value());
+        const auto frameInterval = std::chrono::nanoseconds(1'000'000'000ull * m_videoFormat.max_framerate.denom / m_videoFormat.max_framerate.num);
+        const auto lastSentAgo = std::chrono::duration_cast<std::chrono::nanoseconds>(now - m_lastSent.value());
         if (lastSentAgo < frameInterval) {
             waitInterval = frameInterval - lastSentAgo;
         }
     }
-    m_pendingFrame.start(waitInterval);
+    m_pendingFrame.setInterval(waitInterval);
+    m_pendingFrame.start();
 }
 
 pw_buffer *ScreenCastStream::dequeueBuffer()
@@ -753,7 +755,7 @@ QList<const spa_pod *> ScreenCastStream::buildFormats(bool fixate, char buffer[2
     spa_pod_builder podBuilder = SPA_POD_BUILDER_INIT(buffer, 2048);
     spa_fraction defFramerate = SPA_FRACTION(0, 1);
     spa_fraction minFramerate = SPA_FRACTION(0, 1);
-    spa_fraction maxFramerate = SPA_FRACTION(m_source->refreshRate() / 1000, 1);
+    spa_fraction maxFramerate = SPA_FRACTION(m_source->refreshRate(), 1000);
 
     spa_rectangle resolution = SPA_RECTANGLE(uint32_t(m_resolution.width()), uint32_t(m_resolution.height()));
 

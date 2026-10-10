@@ -14,7 +14,7 @@
 
 #include <QHash>
 #include <QObject>
-#include <QTimer>
+#include <QChronoTimer>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -60,7 +60,7 @@ public:
     Q_DECLARE_FLAGS(Contents, Content)
 
     bool init();
-    uint framerate();
+    spa_fraction framerate() const;
     uint nodeId();
     uint64_t objectSerial() const;
     QString error() const
@@ -137,7 +137,7 @@ private:
     quint32 m_drmFormat = 0;
 
     std::optional<std::chrono::steady_clock::time_point> m_lastSent;
-    QTimer m_pendingFrame;
+    QChronoTimer m_pendingFrame;
     Contents m_pendingContents = Content::None;
     QList<pw_buffer *> m_dequeuedBuffers;
 

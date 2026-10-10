@@ -37,6 +37,7 @@ ScreencastManager::ScreencastManager()
     connect(m_screencast, &ScreencastV1Interface::windowScreencastRequested, this, &ScreencastManager::streamWindow);
     connect(m_screencast, &ScreencastV1Interface::outputScreencastRequested, this, &ScreencastManager::streamWaylandOutput);
     connect(m_screencast, &ScreencastV1Interface::virtualOutputScreencastRequested, this, &ScreencastManager::streamVirtualOutput);
+    connect(m_screencast, &ScreencastV1Interface::virtualPanelScreencastRequested, this, &ScreencastManager::streamVirtualPanel);
     connect(m_screencast, &ScreencastV1Interface::regionScreencastRequested, this, &ScreencastManager::streamRegion);
 }
 
@@ -87,6 +88,31 @@ void ScreencastManager::streamVirtualOutput(ScreencastStreamV1Interface *stream,
     connect(stream, &ScreencastStreamV1Interface::finished, output, [output] {
         kwinApp()->outputBackend()->removeVirtualOutput(output);
     });
+}
+
+void ScreencastManager::streamVirtualPanel(ScreencastStreamV1Interface *stream, const VirtualOutputProperties &properties, ScreencastV1Interface::CursorMode mode)
+{
+    if (!isSupportedCompositingType()) {
+        stream->sendFailed(i18n("Unsupported compositing type"));
+        return;
+    }
+    auto backend = kwinApp()->outputBackend();
+    auto output = backend->createVirtualOutput(properties);
+    if (!output) {
+        stream->sendFailed(i18n("Virtual panel properties are not supported"));
+        return;
+    }
+    auto logical = workspace()->findOutput(output);
+    if (!logical || output->modeSize() != properties.pixelSize || output->refreshRate() != int(properties.refreshRate)
+        || output->hasStereoEyes() != properties.splitEye) {
+        backend->removeVirtualOutput(output);
+        stream->sendFailed(i18n("Virtual panel configuration could not be applied"));
+        return;
+    }
+    connect(stream, &ScreencastStreamV1Interface::finished, output, [backend, output] {
+        backend->removeVirtualOutput(output);
+    });
+    streamOutput(stream, logical, mode);
 }
 
 void ScreencastManager::streamWaylandOutput(ScreencastStreamV1Interface *waylandStream,
