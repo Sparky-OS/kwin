@@ -9,6 +9,8 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QThread>
+#include <QScopeGuard>
+#include <limits>
 
 #include <wayland-client.h>
 
@@ -42,7 +44,13 @@ public:
         Q_EMIT created(node);
     }
 
+    void zkde_screencast_stream_unstable_v1_failed(const QString &message) override
+    {
+        Q_EMIT failed(message);
+    }
+
 Q_SIGNALS:
+    void failed(const QString &message);
     void created(quint32 node);
 };
 
@@ -76,6 +84,11 @@ public:
 private Q_SLOTS:
     void initTestCase();
     void testCreate();
+#ifdef ZKDE_SCREENCAST_UNSTABLE_V1_STREAM_VIRTUAL_OUTPUT_WITH_PROPERTIES_SINCE_VERSION
+    void testPanelProperties();
+    void testInvalidPanel_data();
+    void testInvalidPanel();
+#endif
 
 private:
     KWayland::Client::ConnectionThread *m_connection;
@@ -171,6 +184,74 @@ void TestScreencastV1Interface::testCreate()
     stream->close();
     QVERIFY(spyStop.count() || spyStop.wait());
 }
+
+#ifdef ZKDE_SCREENCAST_UNSTABLE_V1_STREAM_VIRTUAL_OUTPUT_WITH_PROPERTIES_SINCE_VERSION
+void TestScreencastV1Interface::testPanelProperties()
+{
+    QCOMPARE(m_screencast->version(), 7);
+    KWin::VirtualOutputProperties received;
+    KWin::ScreencastStreamV1Interface *serverStream = nullptr;
+    int requests = 0;
+    const auto connection = connect(m_screencastInterface, &KWin::ScreencastV1Interface::virtualPanelScreencastRequested, this,
+        [&](KWin::ScreencastStreamV1Interface *stream, const KWin::VirtualOutputProperties &properties, KWin::ScreencastV1Interface::CursorMode cursor) {
+            ++requests;
+            received = properties;
+            serverStream = stream;
+            QCOMPARE(cursor, KWin::ScreencastV1Interface::Hidden);
+            stream->sendCreated(456);
+        });
+    const auto disconnectHandler = qScopeGuard([&] { disconnect(connection); });
+    ScreencastStreamV1 client(m_screencast->stream_virtual_output_with_properties(QStringLiteral("phone-id"), QStringLiteral("Phone panel"),
+        2400, 1080, 59940, wl_fixed_from_double(1.25), 150, 68, 1, 1), this);
+    QSignalSpy created(&client, &ScreencastStreamV1::created);
+    QVERIFY(created.wait());
+    QCOMPARE(requests, 1);
+    QCOMPARE(received.name, QStringLiteral("phone-id"));
+    QCOMPARE(received.description, QStringLiteral("Phone panel"));
+    QCOMPARE(received.pixelSize, QSize(2400, 1080));
+    QCOMPARE(received.refreshRate, 59940u);
+    QCOMPARE(received.scale, 1.25);
+    QCOMPARE(received.physicalSize, QSize(150, 68));
+    QVERIFY(received.splitEye);
+    QSignalSpy closed(serverStream, &KWin::ScreencastStreamV1Interface::finished);
+    client.close();
+    QVERIFY(closed.wait());
+}
+
+void TestScreencastV1Interface::testInvalidPanel_data()
+{
+    QTest::addColumn<int>("width");
+    QTest::addColumn<uint>("refresh");
+    QTest::addColumn<uint>("headset");
+    QTest::addColumn<uint>("physicalWidth");
+    QTest::addColumn<uint>("pointer");
+    QTest::newRow("zero-refresh") << 2400 << 0u << 1u << 150u << 1u;
+    QTest::newRow("odd-headset-width") << 2399 << 59940u << 1u << 150u << 1u;
+    QTest::newRow("unknown-headset") << 2400 << 59940u << 2u << 150u << 1u;
+    QTest::newRow("half-physical-size") << 2400 << 59940u << 1u << 0u << 1u;
+    QTest::newRow("overflow-physical-size") << 2400 << 59940u << 1u << std::numeric_limits<uint>::max() << 1u;
+    QTest::newRow("invalid-pointer") << 2400 << 59940u << 1u << 150u << 3u;
+}
+
+void TestScreencastV1Interface::testInvalidPanel()
+{
+    QFETCH(int, width);
+    QFETCH(uint, refresh);
+    QFETCH(uint, headset);
+    QFETCH(uint, physicalWidth);
+    QFETCH(uint, pointer);
+    int requests = 0;
+    const auto connection = connect(m_screencastInterface, &KWin::ScreencastV1Interface::virtualPanelScreencastRequested, this, [&] { ++requests; });
+    const auto disconnectHandler = qScopeGuard([&] { disconnect(connection); });
+    ScreencastStreamV1 client(m_screencast->stream_virtual_output_with_properties(QStringLiteral("phone-id"), QStringLiteral("Phone panel"),
+        width, 1080, refresh, wl_fixed_from_double(1.25), physicalWidth, 68, headset, pointer), this);
+    QSignalSpy failed(&client, &ScreencastStreamV1::failed);
+    QVERIFY(failed.wait());
+    QCOMPARE(requests, 0);
+    QVERIFY(!failed.first().first().toString().isEmpty());
+    client.close();
+}
+#endif
 
 QTEST_GUILESS_MAIN(TestScreencastV1Interface)
 

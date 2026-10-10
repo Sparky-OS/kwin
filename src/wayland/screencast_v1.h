@@ -9,6 +9,7 @@
 #include "kwin_export.h"
 
 #include "core/rect.h"
+#include "core/outputbackend.h"
 
 #include <QObject>
 #include <memory>
@@ -66,6 +67,7 @@ public:
 Q_SIGNALS:
     void outputScreencastRequested(ScreencastStreamV1Interface *stream, OutputInterface *output, CursorMode mode);
     void virtualOutputScreencastRequested(ScreencastStreamV1Interface *stream, const QString &name, const QString &description, const QSize &size, double scaling, CursorMode mode);
+    void virtualPanelScreencastRequested(ScreencastStreamV1Interface *stream, const VirtualOutputProperties &properties, CursorMode mode);
     void windowScreencastRequested(ScreencastStreamV1Interface *stream, const QString &winid, CursorMode mode);
     void regionScreencastRequested(ScreencastStreamV1Interface *stream, const Rect &geometry, qreal scaling, CursorMode mode);
 

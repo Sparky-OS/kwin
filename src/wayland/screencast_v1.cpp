@@ -10,13 +10,18 @@
 #include "output.h"
 
 #include <QDebug>
+#include <limits>
 
 #include "qwayland-server-zkde-screencast-unstable-v1.h"
 
 namespace KWin
 {
 
-static int s_version = 6;
+#ifdef ZKDE_SCREENCAST_UNSTABLE_V1_STREAM_VIRTUAL_OUTPUT_WITH_PROPERTIES_SINCE_VERSION
+static constexpr int s_version = 7;
+#else
+static constexpr int s_version = 6;
+#endif
 
 class ScreencastStreamV1InterfacePrivate : public QtWaylandServer::zkde_screencast_stream_unstable_v1
 {
@@ -133,6 +138,34 @@ public:
                                                    wl_fixed_to_double(scale),
                                                    ScreencastV1Interface::CursorMode(pointer));
     }
+
+#ifdef ZKDE_SCREENCAST_UNSTABLE_V1_STREAM_VIRTUAL_OUTPUT_WITH_PROPERTIES_SINCE_VERSION
+    void zkde_screencast_unstable_v1_stream_virtual_output_with_properties(Resource *resource, uint32_t streamid,
+        const QString &name, const QString &description, int32_t width, int32_t height, uint32_t refresh,
+        wl_fixed_t scale, uint32_t physicalWidth, uint32_t physicalHeight, uint32_t headset, uint32_t pointer) override
+    {
+        auto stream = createStream(resource, streamid);
+        if (physicalWidth > std::numeric_limits<int>::max() || physicalHeight > std::numeric_limits<int>::max()
+            || headset > 1 || (pointer != ScreencastV1Interface::Hidden && pointer != ScreencastV1Interface::Embedded && pointer != ScreencastV1Interface::Metadata)) {
+            stream->sendFailed(QStringLiteral("Invalid virtual panel properties"));
+            return;
+        }
+        const VirtualOutputProperties properties{
+            .name = name,
+            .description = description,
+            .pixelSize = QSize(width, height),
+            .refreshRate = refresh,
+            .scale = wl_fixed_to_double(scale),
+            .physicalSize = QSize(physicalWidth, physicalHeight),
+            .splitEye = bool(headset),
+        };
+        if (!properties.isValid()) {
+            stream->sendFailed(QStringLiteral("Invalid virtual panel properties"));
+            return;
+        }
+        Q_EMIT q->virtualPanelScreencastRequested(stream, properties, ScreencastV1Interface::CursorMode(pointer));
+    }
+#endif
 
     void zkde_screencast_unstable_v1_stream_region(QtWaylandServer::zkde_screencast_unstable_v1::Resource *resource,
                                                    uint32_t stream,
