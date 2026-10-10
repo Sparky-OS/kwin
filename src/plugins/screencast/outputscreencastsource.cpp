@@ -130,7 +130,7 @@ Region OutputScreenCastSource::renderStereo(GLFramebuffer *target)
     if (!m_eyeFramebuffer->valid()) {
         return Region{};
     }
-    m_eyeTexture->setContentTransform(m_output->transform());
+    m_eyeTexture->setContentTransform(m_output->transform().combine(target->colorAttachment()->contentTransform()));
     const Region eyeDamage(Rect(QPoint(), m_output->pixelSize()));
     m_layer->setFramebuffer(m_eyeFramebuffer.get(), eyeDamage);
     if (!m_layer->preparePresentationTest()) {

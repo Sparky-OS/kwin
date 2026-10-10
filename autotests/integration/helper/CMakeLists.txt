@@ -12,3 +12,9 @@ qt6_generate_wayland_protocol_client_sources(capturefixture
 )
 target_link_libraries(capturefixture Qt::Gui Qt::WaylandClient Wayland::Client)
 ecm_mark_as_test(capturefixture)
+
+if (TARGET K::KPipeWireDmaBuf)
+    add_executable(captureconsumer captureconsumer.cpp)
+    target_link_libraries(captureconsumer Qt::Gui K::KPipeWire K::KPipeWireDmaBuf)
+    ecm_mark_as_test(captureconsumer)
+endif()

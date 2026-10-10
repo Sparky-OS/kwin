@@ -23,6 +23,9 @@
 #include <KWayland/Client/subsurface.h>
 #include <KWayland/Client/surface.h>
 #include <PipeWireSourceStream>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPainter>
 #include <QDir>
 #include <QTemporaryDir>
@@ -249,13 +252,17 @@ void ScreencastingTest::testWindowWithPopupDynamic()
 void ScreencastingTest::testNativePanel_data()
 {
     QTest::addColumn<bool>("stereo");
-    QTest::newRow("mono-duplicated") << false;
-    QTest::newRow("declared-full-sbs") << true;
+    QTest::addColumn<bool>("dmaBuf");
+    QTest::newRow("mono-duplicated") << false << false;
+    QTest::newRow("declared-full-sbs") << true << false;
+    QTest::newRow("mono-dmabuf") << false << true;
+    QTest::newRow("declared-full-sbs-dmabuf") << true << true;
 }
 
 void ScreencastingTest::testNativePanel()
 {
     QFETCH(bool, stereo);
+    QFETCH(bool, dmaBuf);
     const QSize panelSize(2400, 1080);
     const QSize eyeSize(1200, 1080);
     const auto outputCount = workspace()->outputs().size();
@@ -307,16 +314,38 @@ void ScreencastingTest::testNativePanel()
 
     PipeWireSourceStream receiver;
     std::optional<QImage> image;
-    connect(&receiver, &PipeWireSourceStream::frameReceived, this, [&](const PipeWireFrame &frame) {
-        if (frame.dataFrame) {
-            image = frame.dataFrame->toImage().convertedTo(expected.format());
-        }
-    });
-    receiver.createStream(stream->nodeId(), 0);
-    QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
-    const auto rate = receiver.framerate();
-    QVERIFY(rate.denominator != 0);
-    QCOMPARE(quint64(rate.numerator) * 1000, quint64(rate.denominator) * 59940);
+    if (dmaBuf) {
+        QProcess consumer;
+        environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("wayland"));
+        consumer.setProcessEnvironment(environment);
+        consumer.setProgram(QCoreApplication::applicationDirPath() + QStringLiteral("/captureconsumer"));
+        const auto pixelsPath = fixtureDirectory.filePath(QStringLiteral("pixels.png"));
+        const auto ratePath = fixtureDirectory.filePath(QStringLiteral("rate.json"));
+        consumer.setArguments({QString::number(stream->nodeId()), pixelsPath, ratePath});
+        QSignalSpy consumerFinished(&consumer, &QProcess::finished);
+        consumer.start();
+        QVERIFY2(consumerFinished.wait(15000), consumer.readAllStandardError().constData());
+        QCOMPARE(consumer.exitStatus(), QProcess::NormalExit);
+        QVERIFY2(consumer.exitCode() == 0, consumer.readAllStandardError().constData());
+        image = QImage(pixelsPath).convertedTo(expected.format());
+        QFile rateFile(ratePath);
+        QVERIFY(rateFile.open(QIODevice::ReadOnly));
+        const auto rate = QJsonDocument::fromJson(rateFile.readAll()).object();
+        QVERIFY(rate[QStringLiteral("denominator")].toInt() > 0);
+        QCOMPARE(rate[QStringLiteral("numerator")].toInt() * 1000, rate[QStringLiteral("denominator")].toInt() * 59940);
+    } else {
+        receiver.setAllowDmaBuf(false);
+        connect(&receiver, &PipeWireSourceStream::frameReceived, this, [&](const PipeWireFrame &frame) {
+            if (frame.dataFrame) {
+                image = frame.dataFrame->toImage().convertedTo(expected.format());
+            }
+        });
+        receiver.createStream(stream->nodeId(), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
+        const auto rate = receiver.framerate();
+        QVERIFY(rate.denominator != 0);
+        QCOMPARE(quint64(rate.numerator) * 1000, quint64(rate.denominator) * 59940);
+    }
     QCOMPAREIMG(*image, expected, stereo ? QLatin1StringView("native_stereo") : QLatin1StringView("native_mono"));
     const QString proofDirectory = qEnvironmentVariable("KWIN_PHONE_PROOF_DIR");
     if (!proofDirectory.isEmpty()) {

@@ -204,7 +204,7 @@ if (KWIN_BUILD_GLOBALSHORTCUTS)
 endif()
 if (TARGET K::KPipeWire)
     integrationTest(NAME testScreencasting SRCS screencasting_test.cpp LIBS K::KPipeWire)
-    add_dependencies(testScreencasting capturefixture)
+    add_dependencies(testScreencasting capturefixture captureconsumer)
 endif()
 
 if (KWIN_BUILD_ACTIVITIES)
