@@ -17,9 +17,6 @@
 #endif
 
 #include <QDBusConnection>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QTimer>
 
 namespace KWin
@@ -42,34 +39,42 @@ static int logicalForDevicePixel(int devicePixel, qreal scale)
     return nearest;
 }
 
-static QJsonArray publishedRect(const QPoint &deviceOrigin, const QSizeF &logicalSize, const QPoint &outputOrigin, qreal scale)
+// The snapshot is written in the GNOME extension's key order. JSON objects are unordered, but
+// clients read this one with plain string searches: displayxr-common's placement helper finds a
+// window by its "pid" and looks for its rectangles and monitor after it.
+static QString jsonString(const QString &text)
 {
-    return QJsonArray{
-        outputOrigin.x() + logicalForDevicePixel(deviceOrigin.x(), scale),
-        outputOrigin.y() + logicalForDevicePixel(deviceOrigin.y(), scale),
-        logicalForDevicePixel(std::round(logicalSize.width() * scale), scale),
-        logicalForDevicePixel(std::round(logicalSize.height() * scale), scale),
-    };
+    QString escaped = QStringLiteral("\"");
+    for (const QChar c : text) {
+        if (c == u'"' || c == u'\\') {
+            escaped += u'\\';
+            escaped += c;
+        } else if (c.unicode() < 0x20) {
+            escaped += QStringLiteral("\\u%1").arg(uint(c.unicode()), 4, 16, QLatin1Char('0'));
+        } else {
+            escaped += c;
+        }
+    }
+    escaped += u'"';
+    return escaped;
 }
 
-static QJsonObject windowEntry(Window *window)
+static QString jsonBool(bool value)
 {
-    QJsonObject entry{
-        {QStringLiteral("pid"), window->pid()},
-        {QStringLiteral("app_id"), window->resourceClass()},
-        {QStringLiteral("title"), window->caption()},
-        {QStringLiteral("focus"), window->isActive()},
-#if KWIN_BUILD_X11
-        {QStringLiteral("xwayland"), qobject_cast<X11Window *>(window) != nullptr},
-#else
-        {QStringLiteral("xwayland"), false},
-#endif
-        {QStringLiteral("capture_excluded"), window->excludeFromCapture()},
-        {QStringLiteral("lattice_drop"), false},
-        {QStringLiteral("move_sync"), false},
-        {QStringLiteral("moving"), window->isInteractiveMove() || window->isInteractiveResize()},
-    };
+    return value ? QStringLiteral("true") : QStringLiteral("false");
+}
 
+static QString publishedRect(const QPoint &deviceOrigin, const QSizeF &logicalSize, const QPoint &outputOrigin, qreal scale)
+{
+    return QStringLiteral("[%1,%2,%3,%4]")
+        .arg(outputOrigin.x() + logicalForDevicePixel(deviceOrigin.x(), scale))
+        .arg(outputOrigin.y() + logicalForDevicePixel(deviceOrigin.y(), scale))
+        .arg(logicalForDevicePixel(std::round(logicalSize.width() * scale), scale))
+        .arg(logicalForDevicePixel(std::round(logicalSize.height() * scale), scale));
+}
+
+static QString windowEntry(Window *window)
+{
     // KWin paints the window item at the frame's position and the main surface at its offset in
     // the frame, each snapped to the output's pixel grid (WindowItem, Item::mapToView()). The
     // rectangles are published so that the runtime's conversion lands on those device pixels.
@@ -81,24 +86,36 @@ static QJsonObject windowEntry(Window *window)
     const QPoint frameDevice(std::round(frame.x() * scale) - std::round(outputOrigin.x() * scale),
                              std::round(frame.y() * scale) - std::round(outputOrigin.y() * scale));
     const QPoint bufferDevice = frameDevice + QPoint(std::round((buffer.x() - frame.x()) * scale), std::round((buffer.y() - frame.y()) * scale));
-    entry[QStringLiteral("frame")] = publishedRect(frameDevice, frame.size(), outputOrigin, scale);
-    entry[QStringLiteral("buffer")] = publishedRect(bufferDevice, buffer.size(), outputOrigin, scale);
 
+    QString monitor = QStringLiteral("null");
     if (output) {
+        // KWin's layout is logical everywhere, so the output's scale is the device factor.
         const Rect geometry = output->geometry();
-        entry[QStringLiteral("monitor")] = QJsonObject{
-            {QStringLiteral("x"), geometry.x()},
-            {QStringLiteral("y"), geometry.y()},
-            {QStringLiteral("w"), geometry.width()},
-            {QStringLiteral("h"), geometry.height()},
-            {QStringLiteral("scale"), scale},
-            // KWin's layout is logical everywhere, so the output's scale is the device factor.
-            {QStringLiteral("device_scale"), scale},
-        };
-    } else {
-        entry[QStringLiteral("monitor")] = QJsonValue::Null;
+        monitor = QStringLiteral("{\"x\":%1,\"y\":%2,\"w\":%3,\"h\":%4,\"scale\":%5,\"device_scale\":%5}")
+                      .arg(geometry.x())
+                      .arg(geometry.y())
+                      .arg(geometry.width())
+                      .arg(geometry.height())
+                      .arg(QString::number(scale, 'g', QLocale::FloatingPointShortest));
     }
-    return entry;
+#if KWIN_BUILD_X11
+    const bool xwayland = qobject_cast<X11Window *>(window) != nullptr;
+#else
+    const bool xwayland = false;
+#endif
+
+    return QStringLiteral("{\"pid\":") + QString::number(window->pid())
+        + QStringLiteral(",\"app_id\":") + jsonString(window->resourceClass())
+        + QStringLiteral(",\"title\":") + jsonString(window->caption())
+        + QStringLiteral(",\"focus\":") + jsonBool(window->isActive())
+        + QStringLiteral(",\"xwayland\":") + jsonBool(xwayland)
+        + QStringLiteral(",\"frame\":") + publishedRect(frameDevice, frame.size(), outputOrigin, scale)
+        + QStringLiteral(",\"buffer\":") + publishedRect(bufferDevice, buffer.size(), outputOrigin, scale)
+        + QStringLiteral(",\"monitor\":") + monitor
+        + QStringLiteral(",\"capture_excluded\":") + jsonBool(window->excludeFromCapture())
+        + QStringLiteral(",\"lattice_drop\":false,\"move_sync\":false")
+        + QStringLiteral(",\"moving\":") + jsonBool(window->isInteractiveMove() || window->isInteractiveResize())
+        + QStringLiteral("}");
 }
 
 WindowGeometryService::WindowGeometryService()
@@ -178,7 +195,7 @@ void WindowGeometryService::emitChanged()
 
 QString WindowGeometryService::GetWindows() const
 {
-    QJsonArray windows;
+    QStringList windows;
     if (!waylandServer()->isScreenLocked()) {
         const auto stackingOrder = workspace()->stackingOrder();
         for (Window *window : stackingOrder) {
@@ -187,12 +204,7 @@ QString WindowGeometryService::GetWindows() const
             }
         }
     }
-    const QJsonObject snapshot{
-        {QStringLiteral("version"), 1},
-        {QStringLiteral("layout_mode"), QStringLiteral("logical")},
-        {QStringLiteral("windows"), windows},
-    };
-    return QString::fromUtf8(QJsonDocument(snapshot).toJson(QJsonDocument::Compact));
+    return QStringLiteral("{\"version\":1,\"layout_mode\":\"logical\",\"windows\":[") + windows.join(u',') + QStringLiteral("]}");
 }
 
 } // namespace KWin
