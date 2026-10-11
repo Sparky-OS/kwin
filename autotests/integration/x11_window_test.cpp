@@ -61,6 +61,8 @@ private Q_SLOTS:
     void testInteractiveMoveUnmaximizeInitiallyVertical();
     void testConfigureRequestMoveWithPerOutputDesktops();
     void testFullScreen();
+    void testStereoFullScreenResize_data();
+    void testStereoFullScreenResize();
     void testInitiallyFullScreen();
     void testRequestFullScreen();
     void testFullscreenLayerWithActiveWaylandWindow();
@@ -822,6 +824,66 @@ void X11WindowTest::testFullScreen()
         NETWinInfo winInfo(c.get(), window->window(), kwinApp()->x11RootWindow(), NET::WMState, NET::Properties2());
         QVERIFY(!(winInfo.state() & NET::FullScreen));
     }
+}
+
+void X11WindowTest::testStereoFullScreenResize_data()
+{
+    QTest::addColumn<bool>("declareBeforeFullScreen");
+    QTest::newRow("declared before fullscreen") << true;
+    QTest::newRow("declared in fullscreen") << false;
+}
+
+void X11WindowTest::testStereoFullScreenResize()
+{
+    // This test verifies that a fullscreen window declaring full side by side stereo
+    // keeps its frame on the screen while the program changes its rendering size,
+    // and that its drawable holds both views at the size the program asked for last.
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+    QFETCH(bool, declareBeforeFullScreen);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 320, 240), [&](xcb_window_t windowId) {
+        if (declareBeforeFullScreen) {
+            xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
+                                XCB_ATOM_CARDINAL, 32, 1, &stereo);
+        }
+    });
+    QVERIFY(window);
+    window->setFullScreen(true);
+    const RectF screenArea = workspace()->clientArea(ScreenArea, window);
+    QCOMPARE(window->frameGeometry(), screenArea);
+
+    const auto drawableSize = [&]() {
+        UniqueCPtr<xcb_get_geometry_reply_t> geometry(xcb_get_geometry_reply(c.get(), xcb_get_geometry(c.get(), window->window()), nullptr));
+        return geometry ? QSize(geometry->width, geometry->height) : QSize();
+    };
+    QTRY_COMPARE(drawableSize(), declareBeforeFullScreen ? QSize(320 * 2, 240) : Xcb::toXNative(screenArea.size()));
+
+    // a move and a resize: the fullscreen frame stays, the drawable takes the size
+    const uint32_t geometry[] = {100, 100, 800, 600};
+    xcb_configure_window(c.get(), window->window(), XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, geometry);
+    xcb_flush(c.get());
+    if (!declareBeforeFullScreen) {
+        // without stereo the window keeps its fullscreen size; the declaration then uses the size asked for last
+        QTRY_COMPARE(drawableSize(), Xcb::toXNative(screenArea.size()));
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &stereo);
+        xcb_flush(c.get());
+    }
+    QTRY_COMPARE(drawableSize(), QSize(800 * 2, 600));
+
+    const uint32_t width = 640;
+    xcb_configure_window(c.get(), window->window(), XCB_CONFIG_WINDOW_WIDTH, &width);
+    xcb_flush(c.get());
+    QTRY_COMPARE(drawableSize(), QSize(640 * 2, 600));
+
+    const uint32_t height = 480;
+    xcb_configure_window(c.get(), window->window(), XCB_CONFIG_WINDOW_HEIGHT, &height);
+    xcb_flush(c.get());
+    QTRY_COMPARE(drawableSize(), QSize(640 * 2, 480));
+
+    QVERIFY(window->isFullScreen());
+    QCOMPARE(window->frameGeometry(), screenArea);
 }
 
 void X11WindowTest::testInitiallyFullScreen()
