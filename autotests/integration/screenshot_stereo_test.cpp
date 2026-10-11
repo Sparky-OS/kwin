@@ -8,6 +8,7 @@
 
 #include "core/output.h"
 #include "core/outputconfiguration.h"
+#include "effect/effectloader.h"
 #include "plugins/screenshot/screenshot.h"
 #include "scene/itemrenderer.h"
 #include "scene/workspacescene.h"
@@ -15,6 +16,7 @@
 #include "window.h"
 #include "workspace.h"
 
+#include <KConfigGroup>
 #include <KWayland/Client/surface.h>
 
 #include <QDir>
@@ -96,6 +98,18 @@ void ScreenshotStereoTest::initTestCase()
     }
     qputenv("KWIN_COMPOSE", QByteArrayLiteral("O2"));
     QVERIFY(waylandServer()->init(qAppName()));
+
+    // disable all effects: an open animation fades a window in and a close animation
+    // keeps it on the screen, and the captures must hold exactly what the windows drew
+    auto config = KSharedConfig::openConfig(QString(), KConfig::SimpleConfig);
+    KConfigGroup plugins(config, QStringLiteral("Plugins"));
+    const auto builtinNames = EffectLoader().listOfKnownEffects();
+    for (const QString &name : builtinNames) {
+        plugins.writeEntry(name + QStringLiteral("Enabled"), false);
+    }
+    config->sync();
+    kwinApp()->setConfig(config);
+
     kwinApp()->start();
 }
 
