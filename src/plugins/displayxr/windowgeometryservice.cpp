@@ -9,6 +9,7 @@
 #include "wayland_server.h"
 #include "window.h"
 #include "windowgeometry1adaptor.h"
+#include "windowplacement.h"
 #include "workspace.h"
 #if KWIN_BUILD_X11
 #include "x11window.h"
@@ -103,6 +104,7 @@ WindowGeometryService::WindowGeometryService()
 {
     new WindowGeometry1Adaptor(this);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/displayxr/WindowGeometry"), this);
+    m_placement = std::make_unique<WindowPlacement>();
 
     const auto windows = workspace()->windows();
     for (Window *window : windows) {
@@ -125,7 +127,7 @@ WindowGeometryService::WindowGeometryService()
     // The lock screen hides every window, so the published list is empty while it is up.
     connect(waylandServer(), &WaylandServer::lockStateChanged, this, &WindowGeometryService::scheduleChanged);
 
-    // The object is on the bus before the name, so a client that sees the name can call it.
+    // Both objects are on the bus before the name, so a client that sees the name can call them.
     QDBusConnection::sessionBus().registerService(s_serviceName);
 }
 

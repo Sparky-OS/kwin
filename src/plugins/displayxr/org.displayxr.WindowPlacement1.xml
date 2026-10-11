@@ -1,0 +1,81 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <!--
+      Moves the caller's own window. GetPlacementCapabilities says which of the other methods are
+      implemented; the ones it does not list refuse (false) or do nothing.
+  -->
+  <interface name="org.displayxr.WindowPlacement1">
+    <method name="MoveWindow">
+      <arg type="u" direction="in" name="pid"/>
+      <arg type="i" direction="in" name="x"/>
+      <arg type="i" direction="in" name="y"/>
+      <arg type="b" direction="out" name="moved"/>
+    </method>
+    <method name="GetPlacementCapabilities">
+      <arg type="u" direction="out" name="caps"/>
+    </method>
+    <method name="SetDragLattice">
+      <arg type="u" direction="in" name="pid"/>
+      <arg type="b" direction="in" name="extend"/>
+      <arg type="i" direction="in" name="cell"/>
+      <arg type="i" direction="in" name="minDx"/>
+      <arg type="i" direction="in" name="minDy"/>
+      <arg type="i" direction="in" name="maxDx"/>
+      <arg type="i" direction="in" name="maxDy"/>
+      <arg type="ai" direction="in" name="dx"/>
+      <arg type="ai" direction="in" name="dy"/>
+      <arg type="b" direction="out" name="accepted"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In7" value="QList&lt;int&gt;"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In8" value="QList&lt;int&gt;"/>
+      <arg type="i" direction="out" name="startX"/>
+      <arg type="i" direction="out" name="startY"/>
+    </method>
+    <method name="SetDragLatticeAt">
+      <arg type="u" direction="in" name="pid"/>
+      <arg type="i" direction="in" name="startX"/>
+      <arg type="i" direction="in" name="startY"/>
+      <arg type="b" direction="in" name="extend"/>
+      <arg type="i" direction="in" name="cell"/>
+      <arg type="i" direction="in" name="minDx"/>
+      <arg type="i" direction="in" name="minDy"/>
+      <arg type="i" direction="in" name="maxDx"/>
+      <arg type="i" direction="in" name="maxDy"/>
+      <arg type="ai" direction="in" name="dx"/>
+      <arg type="ai" direction="in" name="dy"/>
+      <arg type="b" direction="out" name="accepted"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In9" value="QList&lt;int&gt;"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In10" value="QList&lt;int&gt;"/>
+      <arg type="i" direction="out" name="startX"/>
+      <arg type="i" direction="out" name="startY"/>
+    </method>
+    <method name="ClearDragLattice">
+      <arg type="u" direction="in" name="pid"/>
+    </method>
+    <method name="EnableMoveSync">
+      <arg type="u" direction="in" name="pid"/>
+      <arg type="b" direction="out" name="ok"/>
+    </method>
+    <method name="BeginPointerDrag">
+      <arg type="u" direction="in" name="pid"/>
+      <arg type="u" direction="in" name="button"/>
+      <arg type="b" direction="out" name="started"/>
+    </method>
+    <method name="EndPointerDrag">
+      <arg type="u" direction="in" name="pid"/>
+    </method>
+    <signal name="DragLatticeNeeded">
+      <arg type="u" name="pid"/>
+      <arg type="i" name="dx"/>
+      <arg type="i" name="dy"/>
+    </signal>
+    <signal name="DragLatticeDone">
+      <arg type="u" name="pid"/>
+      <arg type="u" name="moves"/>
+      <arg type="u" name="corrected"/>
+      <arg type="u" name="misses"/>
+      <arg type="u" name="maxCorrection"/>
+      <arg type="u" name="tables"/>
+      <arg type="b" name="landedOnTable"/>
+    </signal>
+  </interface>
+</node>

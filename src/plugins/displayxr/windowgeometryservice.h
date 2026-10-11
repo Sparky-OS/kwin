@@ -13,6 +13,7 @@ namespace KWin
 
 class LogicalOutput;
 class Window;
+class WindowPlacement;
 
 /**
  * Serves DisplayXR's window-geometry service, org.displayxr.WindowGeometry, to spatial display
@@ -40,6 +41,7 @@ private:
     void scheduleChanged();
     void emitChanged();
 
+    std::unique_ptr<WindowPlacement> m_placement;
     bool m_changeScheduled = false;
 };
 
