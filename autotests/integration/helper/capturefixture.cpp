@@ -6,6 +6,10 @@
 #include <QCoreApplication>
 #include <QImage>
 #include <QTemporaryFile>
+#include <QSocketNotifier>
+#include <time.h>
+#include <unistd.h>
+#include <cstdio>
 #include <wayland-client.h>
 #include <sys/mman.h>
 #include <cstring>
@@ -20,6 +24,8 @@ struct Client
     wl_surface *surface = nullptr;
     wl_buffer *buffer = nullptr;
     bool closed = false;
+    wl_buffer *buffers[2] = {};
+    bool available[2] = {true, true};
 };
 
 static void global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version)
@@ -41,11 +47,21 @@ static void global(void *data, wl_registry *registry, uint32_t name, const char 
 static void removed(void *, wl_registry *, uint32_t) {}
 static void ping(void *, xdg_wm_base *shell, uint32_t serial) { xdg_wm_base_pong(shell, serial); }
 static void configure(void *, xdg_toplevel *, int32_t, int32_t, wl_array *) {}
-static void close(void *data, xdg_toplevel *) { static_cast<Client *>(data)->closed = true; }
+static void close(void *data, xdg_toplevel *) { static_cast<Client *>(data)->closed = true; QCoreApplication::quit(); }
+static void released(void *data, wl_buffer *buffer)
+{
+    auto client = static_cast<Client *>(data);
+    for (int i = 0; i < 2; ++i) {
+        if (client->buffers[i] == buffer) {
+            client->available[i] = true;
+        }
+    }
+}
 
 static void surfaceConfigure(void *data, xdg_surface *surface, uint32_t serial)
 {
     auto client = static_cast<Client *>(data);
+    client->available[0] = false;
     xdg_surface_ack_configure(surface, serial);
     wl_surface_attach(client->surface, client->buffer, 0, 0);
     wl_surface_damage_buffer(client->surface, 0, 0, INT32_MAX, INT32_MAX);
@@ -76,16 +92,21 @@ int main(int argc, char **argv)
         return 5;
     }
     QTemporaryFile storage;
-    if (!storage.open() || !storage.resize(image.sizeInBytes())) {
+    if (!storage.open() || !storage.resize(image.sizeInBytes() * 2)) {
         return 6;
     }
-    void *pixels = mmap(nullptr, image.sizeInBytes(), PROT_READ | PROT_WRITE, MAP_SHARED, storage.handle(), 0);
+    void *pixels = mmap(nullptr, image.sizeInBytes() * 2, PROT_READ | PROT_WRITE, MAP_SHARED, storage.handle(), 0);
     if (pixels == MAP_FAILED) {
         return 7;
     }
     std::memcpy(pixels, image.constBits(), image.sizeInBytes());
-    auto pool = wl_shm_create_pool(client.shm, storage.handle(), image.sizeInBytes());
-    client.buffer = wl_shm_pool_create_buffer(pool, 0, image.width(), image.height(), image.bytesPerLine(), WL_SHM_FORMAT_ARGB8888);
+    auto pool = wl_shm_create_pool(client.shm, storage.handle(), image.sizeInBytes() * 2);
+    const wl_buffer_listener bufferListener{released};
+    for (int i = 0; i < 2; ++i) {
+        client.buffers[i] = wl_shm_pool_create_buffer(pool, i * image.sizeInBytes(), image.width(), image.height(), image.bytesPerLine(), WL_SHM_FORMAT_ARGB8888);
+        wl_buffer_add_listener(client.buffers[i], &bufferListener, &client);
+    }
+    client.buffer = client.buffers[0];
     client.surface = wl_compositor_create_surface(client.compositor);
     auto viewport = wp_viewporter_get_viewport(client.viewporter, client.surface);
     wp_viewport_set_destination(viewport, viewportSize.width(), viewportSize.height());
@@ -106,9 +127,42 @@ int main(int argc, char **argv)
         xdg_toplevel_set_fullscreen(toplevel, nullptr);
     }
     wl_surface_commit(client.surface);
-    while (!client.closed && wl_display_dispatch(display) >= 0) {
+    QSocketNotifier wayland(wl_display_get_fd(display), QSocketNotifier::Read);
+    QObject::connect(&wayland, &QSocketNotifier::activated, &app, [&] {
+        if (wl_display_dispatch(display) < 0) app.quit();
+        wl_display_flush(display);
+    });
+    std::unique_ptr<QSocketNotifier> input;
+    if (qEnvironmentVariableIsSet("KWIN_CAPTURE_LATENCY_PROOF")) {
+        input = std::make_unique<QSocketNotifier>(STDIN_FILENO, QSocketNotifier::Read);
+        QObject::connect(input.get(), &QSocketNotifier::activated, &app, [&] {
+            char marker;
+            if (::read(STDIN_FILENO, &marker, 1) != 1) { input->setEnabled(false); return; }
+            const int index = client.available[0] ? 0 : client.available[1] ? 1 : -1;
+            if (marker < 'A' || marker > 'O' || index < 0) {
+                return;
+            }
+            const int value = marker - 'A' + 1;
+            auto imagePixels = reinterpret_cast<QRgb *>(static_cast<char *>(pixels) + index * image.sizeInBytes());
+            for (int y = 0; y < image.height(); ++y) {
+                auto row = reinterpret_cast<QRgb *>(reinterpret_cast<char *>(imagePixels) + y * image.bytesPerLine());
+                for (int x = 0; x < image.width(); ++x) row[x] = qRgb(value * 16, 96, x < image.width() / 2 ? 32 : 224);
+            }
+            timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            client.available[index] = false;
+            client.buffer = client.buffers[index];
+            wl_surface_attach(client.surface, client.buffer, 0, 0);
+            wl_surface_damage_buffer(client.surface, 0, 0, INT32_MAX, INT32_MAX);
+            wl_surface_commit(client.surface);
+            wl_display_flush(display);
+            std::printf("%d %lld\n", value, static_cast<long long>(now.tv_sec) * 1000000000LL + now.tv_nsec);
+            std::fflush(stdout);
+        });
     }
+    wl_display_flush(display);
+    app.exec();
     wl_display_disconnect(display);
-    munmap(pixels, image.sizeInBytes());
+    munmap(pixels, image.sizeInBytes() * 2);
     return 0;
 }
