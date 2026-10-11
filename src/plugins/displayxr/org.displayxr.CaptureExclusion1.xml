@@ -1,0 +1,19 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <!--
+      Excludes the caller's own windows from screenshots and screen casts while they stay on the
+      screen, for as long as the caller stays on the bus.
+  -->
+  <interface name="org.displayxr.CaptureExclusion1">
+    <method name="Exclude">
+      <arg type="u" direction="in" name="pid"/>
+      <arg type="u" direction="out" name="windows"/>
+    </method>
+    <method name="Release">
+      <arg type="u" direction="in" name="pid"/>
+    </method>
+    <method name="GetState">
+      <arg type="s" direction="out" name="json"/>
+    </method>
+  </interface>
+</node>

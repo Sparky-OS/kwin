@@ -11,6 +11,7 @@
 namespace KWin
 {
 
+class CaptureExclusion;
 class LogicalOutput;
 class Window;
 class WindowPlacement;
@@ -42,6 +43,7 @@ private:
     void emitChanged();
 
     std::unique_ptr<WindowPlacement> m_placement;
+    std::unique_ptr<CaptureExclusion> m_captureExclusion;
     bool m_changeScheduled = false;
 };
 

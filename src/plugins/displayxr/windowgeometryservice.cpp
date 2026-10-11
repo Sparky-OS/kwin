@@ -5,6 +5,7 @@
 */
 
 #include "windowgeometryservice.h"
+#include "captureexclusion.h"
 #include "core/output.h"
 #include "wayland_server.h"
 #include "window.h"
@@ -105,6 +106,7 @@ WindowGeometryService::WindowGeometryService()
     new WindowGeometry1Adaptor(this);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/displayxr/WindowGeometry"), this);
     m_placement = std::make_unique<WindowPlacement>();
+    m_captureExclusion = std::make_unique<CaptureExclusion>();
 
     const auto windows = workspace()->windows();
     for (Window *window : windows) {
@@ -127,7 +129,7 @@ WindowGeometryService::WindowGeometryService()
     // The lock screen hides every window, so the published list is empty while it is up.
     connect(waylandServer(), &WaylandServer::lockStateChanged, this, &WindowGeometryService::scheduleChanged);
 
-    // Both objects are on the bus before the name, so a client that sees the name can call them.
+    // Every object is on the bus before the name, so a client that sees the name can call them.
     QDBusConnection::sessionBus().registerService(s_serviceName);
 }
 
