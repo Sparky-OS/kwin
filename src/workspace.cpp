@@ -2725,6 +2725,16 @@ static bool canSnap(const Window *window, const Window *other)
     return !(other->isUnmanaged() || other->isDesktop() || other->isSplash() || other->isNotification() || other->isCriticalNotification() || other->isOnScreenDisplay() || other->isAppletPopup() || other->isDock());
 }
 
+void Workspace::setInteractiveMoveConstraint(std::function<QPointF(const Window *, const QPointF &)> constraint)
+{
+    m_interactiveMoveConstraint = std::move(constraint);
+}
+
+QPointF Workspace::constrainInteractiveMove(const Window *window, const QPointF &pos) const
+{
+    return m_interactiveMoveConstraint ? m_interactiveMoveConstraint(window, pos) : pos;
+}
+
 /**
  * \a window is moved around to position \a pos. This gives the
  * workspace the opportunity to interveniate and to implement

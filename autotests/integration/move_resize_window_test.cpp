@@ -24,6 +24,8 @@
 #include <KWayland/Client/seat.h>
 #include <KWayland/Client/surface.h>
 
+#include <QScopeGuard>
+
 #include <linux/input.h>
 
 Q_DECLARE_METATYPE(KWin::QuickTileMode)
@@ -50,6 +52,7 @@ private Q_SLOTS:
     void testPointerMoveEnd_data();
     void testPointerMoveEnd();
     void testClientSideMove();
+    void testInteractiveMoveConstraint();
     void testResizeForVirtualKeyboard_data();
     void testResizeForVirtualKeyboard();
     void testResizeForVirtualKeyboardWithMaximize();
@@ -539,6 +542,46 @@ void MoveResizeWindowTest::testClientSideMove()
     QCOMPARE(window->isInteractiveMove(), false);
     QCOMPARE(window->frameGeometry(), startGeometry.translated(QPoint(dragDistance, dragDistance) + QPoint(6, 6)));
     QCOMPARE(pointerEnteredSpy.last().last().toPoint(), QPoint(50, 25));
+}
+
+void MoveResizeWindowTest::testInteractiveMoveConstraint()
+{
+    // A constraint gets each position an interactive move proposes, after snapping, and may replace it.
+    QPointF proposed;
+    workspace()->setInteractiveMoveConstraint([&proposed](const Window *, const QPointF &pos) {
+        proposed = pos;
+        return QPointF(std::floor(pos.x() / 10) * 10, std::floor(pos.y() / 10) * 10);
+    });
+    const auto removeConstraint = qScopeGuard([] {
+        workspace()->setInteractiveMoveConstraint({});
+    });
+
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
+    auto window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
+    QVERIFY(window);
+    QCOMPARE(window->frameGeometry(), RectF(0, 0, 100, 50));
+
+    workspace()->slotWindowMove();
+    QCOMPARE(workspace()->moveResizeWindow(), window);
+    window->keyPressEvent(Qt::Key_Right);
+    window->updateInteractiveMoveResize(Cursors::self()->mouse()->pos(), Qt::KeyboardModifiers());
+    window->keyPressEvent(Qt::Key_Right);
+    window->updateInteractiveMoveResize(Cursors::self()->mouse()->pos(), Qt::KeyboardModifiers());
+    window->keyPressEvent(Qt::Key_Down | Qt::ALT);
+    window->updateInteractiveMoveResize(Cursors::self()->mouse()->pos(), Qt::KeyboardModifiers());
+    QCOMPARE(proposed, QPointF(16, 32));
+    QCOMPARE(window->frameGeometry(), RectF(10, 30, 100, 50));
+
+    // Without a constraint the window goes where the move proposes.
+    workspace()->setInteractiveMoveConstraint({});
+    window->keyPressEvent(Qt::Key_Right);
+    window->updateInteractiveMoveResize(Cursors::self()->mouse()->pos(), Qt::KeyboardModifiers());
+    QCOMPARE(window->frameGeometry(), RectF(24, 32, 100, 50));
+    window->keyPressEvent(Qt::Key_Enter);
+    QCOMPARE(window->isInteractiveMove(), false);
+    surface.reset();
+    QVERIFY(Test::waitForWindowClosed(window));
 }
 
 void MoveResizeWindowTest::testResizeForVirtualKeyboard_data()

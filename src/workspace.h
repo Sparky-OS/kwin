@@ -184,6 +184,12 @@ public:
 
     RectF adjustClientArea(Window *window, const RectF &area) const;
     QPointF adjustWindowPosition(const Window *window, QPointF pos, bool unrestricted, double snapAdjust = 1.0) const;
+    /**
+     * Sets a function that may replace each position an interactive move proposes for a window,
+     * after snapping and confinement. An empty function removes it.
+     */
+    void setInteractiveMoveConstraint(std::function<QPointF(const Window *window, const QPointF &pos)> constraint);
+    QPointF constrainInteractiveMove(const Window *window, const QPointF &pos) const;
     RectF adjustWindowSize(const Window *window, RectF moveResizeGeom, Gravity gravity) const;
     void raiseWindow(Window *window, bool nogroup = false);
     void lowerWindow(Window *window, bool nogroup = false);
@@ -656,6 +662,7 @@ private:
 
     Window *m_activeWindow;
     Window *m_moveResizeWindow;
+    std::function<QPointF(const Window *, const QPointF &)> m_interactiveMoveConstraint;
 
     // Delay(ed) window focus timer and window
     QTimer *delayFocusTimer;

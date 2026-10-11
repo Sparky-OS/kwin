@@ -1655,6 +1655,7 @@ RectF Window::nextInteractiveMoveGeometry(const RectF &rect) const
             nextMoveResizeGeom.moveTopLeft(anchor.value());
         }
     }
+    nextMoveResizeGeom.moveTopLeft(workspace()->constrainInteractiveMove(this, nextMoveResizeGeom.topLeft()));
 
     return nextMoveResizeGeom;
 }
