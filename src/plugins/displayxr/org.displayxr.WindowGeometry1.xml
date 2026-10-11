@@ -1,0 +1,16 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <!--
+      Window geometry for spatial display runtimes: every normal window's frame and buffer
+      rectangles, its output and that output's scale, as a JSON snapshot in logical coordinates.
+      The names, paths and the JSON schema are DisplayXR's window-geometry service (version 1).
+  -->
+  <interface name="org.displayxr.WindowGeometry1">
+    <method name="GetWindows">
+      <arg type="s" direction="out" name="json"/>
+    </method>
+    <signal name="WindowsChanged">
+      <arg type="s" name="json"/>
+    </signal>
+  </interface>
+</node>
