@@ -1,9 +1,17 @@
 kcoreaddons_add_plugin(displayxr INSTALL_NAMESPACE "kwin/plugins")
 target_sources(displayxr PRIVATE
     captureexclusion.cpp
+    draglattice.cpp
     main.cpp
     windowgeometryservice.cpp
     windowplacement.cpp
+)
+
+ecm_qt_declare_logging_category(displayxr
+    HEADER displayxrlogging.h
+    IDENTIFIER KWIN_DISPLAYXR
+    CATEGORY_NAME kwin_displayxr
+    DEFAULT_SEVERITY Warning
 )
 
 set(displayxr_xml_SOURCES)

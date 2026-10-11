@@ -36,21 +36,41 @@ static Window *windowOfPid(pid_t pid)
     return best;
 }
 
+// GetPlacementCapabilities() bits.
+static constexpr uint s_dragLattice = 1 << 0;
+static constexpr uint s_dragLatticeAt = 1 << 1;
+
 WindowPlacement::WindowPlacement()
 {
+    connect(&m_lattice, &DragLattice::needed, this, &WindowPlacement::DragLatticeNeeded);
+    connect(&m_lattice, &DragLattice::done, this, &WindowPlacement::DragLatticeDone);
     new WindowPlacement1Adaptor(this);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/displayxr/WindowPlacement"), this);
 }
 
-bool WindowPlacement::MoveWindow(uint pid, int x, int y)
+bool WindowPlacement::latticeDrop(const Window *window) const
 {
-    // A client moves only its own window: the process is the bus connection's, the argument must
-    // name it or be 0.
+    return m_lattice.landedOnTable(window);
+}
+
+std::optional<pid_t> WindowPlacement::callerPid(uint pid) const
+{
+    // A client acts only on its own windows: the process is the bus connection's, the argument
+    // must name it or be 0.
     const QDBusReply<uint> caller = connection().interface()->servicePid(message().service());
     if (!caller.isValid() || (pid != 0 && pid != caller.value())) {
+        return std::nullopt;
+    }
+    return caller.value();
+}
+
+bool WindowPlacement::MoveWindow(uint pid, int x, int y)
+{
+    const std::optional<pid_t> caller = callerPid(pid);
+    if (!caller) {
         return false;
     }
-    Window *window = windowOfPid(caller.value());
+    Window *window = windowOfPid(*caller);
     // Never against the user: while they drag or resize the window, its position is theirs.
     if (!window || window->isInteractiveMove() || window->isInteractiveResize() || window->isFullScreen() || !window->isMovable()) {
         return false;
@@ -61,25 +81,45 @@ bool WindowPlacement::MoveWindow(uint pid, int x, int y)
 
 uint WindowPlacement::GetPlacementCapabilities() const
 {
-    return 0;
+    return s_dragLattice | s_dragLatticeAt;
 }
 
-bool WindowPlacement::SetDragLattice(uint, bool, int, int, int, int, int, const QList<int> &, const QList<int> &, int &startX, int &startY)
+bool WindowPlacement::SetDragLattice(uint pid, bool extend, int cell, int minDx, int minDy, int maxDx, int maxDy, const QList<int> &dx, const QList<int> &dy, int &startX, int &startY)
+{
+    return setDragLattice(pid, std::nullopt, extend, cell, QRect(QPoint(minDx, minDy), QPoint(maxDx, maxDy)), dx, dy, startX, startY);
+}
+
+bool WindowPlacement::SetDragLatticeAt(uint pid, int startX, int startY, bool extend, int cell, int minDx, int minDy, int maxDx, int maxDy, const QList<int> &dx, const QList<int> &dy, int &acceptedStartX, int &acceptedStartY)
+{
+    return setDragLattice(pid, QPoint(startX, startY), extend, cell, QRect(QPoint(minDx, minDy), QPoint(maxDx, maxDy)), dx, dy, acceptedStartX, acceptedStartY);
+}
+
+bool WindowPlacement::setDragLattice(uint pid, std::optional<QPoint> start, bool extend, int cell, const QRect &bounds, const QList<int> &dx, const QList<int> &dy, int &startX, int &startY)
 {
     startX = 0;
     startY = 0;
-    return false;
+    const std::optional<pid_t> caller = callerPid(pid);
+    if (!caller) {
+        return false;
+    }
+    Window *window = windowOfPid(*caller);
+    if (!window || !m_lattice.set(window, *caller, extend, cell, bounds, dx, dy, start)) {
+        return false;
+    }
+    // The start the table was recorded for, so the client can check it against its own.
+    const QPoint recorded = m_lattice.startOf(window).value();
+    startX = recorded.x();
+    startY = recorded.y();
+    return true;
 }
 
-bool WindowPlacement::SetDragLatticeAt(uint, int, int, bool, int, int, int, int, int, const QList<int> &, const QList<int> &, int &acceptedStartX, int &acceptedStartY)
+void WindowPlacement::ClearDragLattice(uint pid)
 {
-    acceptedStartX = 0;
-    acceptedStartY = 0;
-    return false;
-}
-
-void WindowPlacement::ClearDragLattice(uint)
-{
+    if (const std::optional<pid_t> caller = callerPid(pid)) {
+        if (const Window *window = windowOfPid(*caller)) {
+            m_lattice.clear(window);
+        }
+    }
 }
 
 bool WindowPlacement::EnableMoveSync(uint)

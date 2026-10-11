@@ -7,6 +7,7 @@
 #include "windowgeometryservice.h"
 #include "captureexclusion.h"
 #include "core/output.h"
+#include "publishedgeometry.h"
 #include "wayland_server.h"
 #include "window.h"
 #include "windowgeometry1adaptor.h"
@@ -23,21 +24,6 @@ namespace KWin
 {
 
 static const QString s_serviceName = QStringLiteral("org.displayxr.WindowGeometry");
-
-/**
- * The whole logical value that the runtime's conversion, round(value * scale), maps onto
- * @p devicePixel; the nearest one when only a fractional position reaches that pixel.
- */
-static int logicalForDevicePixel(int devicePixel, qreal scale)
-{
-    const int nearest = std::round(devicePixel / scale);
-    for (const int candidate : {nearest, nearest - 1, nearest + 1}) {
-        if (std::round(candidate * scale) == devicePixel) {
-            return candidate;
-        }
-    }
-    return nearest;
-}
 
 // The snapshot is written in the GNOME extension's key order. JSON objects are unordered, but
 // clients read this one with plain string searches: displayxr-common's placement helper finds a
@@ -73,19 +59,17 @@ static QString publishedRect(const QPoint &deviceOrigin, const QSizeF &logicalSi
         .arg(logicalForDevicePixel(std::round(logicalSize.height() * scale), scale));
 }
 
-static QString windowEntry(Window *window)
+static QString windowEntry(Window *window, bool latticeDrop)
 {
-    // KWin paints the window item at the frame's position and the main surface at its offset in
-    // the frame, each snapped to the output's pixel grid (WindowItem, Item::mapToView()). The
-    // rectangles are published so that the runtime's conversion lands on those device pixels.
+    // The rectangles are published so that the runtime's conversion lands on the device pixels
+    // KWin paints the frame and the main surface at.
     const LogicalOutput *output = window->output();
     const qreal scale = output ? output->scale() : 1.0;
     const QPoint outputOrigin = output ? output->geometry().topLeft() : QPoint();
     const RectF frame = window->frameGeometry();
     const RectF buffer = window->bufferGeometry();
-    const QPoint frameDevice(std::round(frame.x() * scale) - std::round(outputOrigin.x() * scale),
-                             std::round(frame.y() * scale) - std::round(outputOrigin.y() * scale));
-    const QPoint bufferDevice = frameDevice + QPoint(std::round((buffer.x() - frame.x()) * scale), std::round((buffer.y() - frame.y()) * scale));
+    const QPoint frameDevice = paintedFramePosition(window, frame.topLeft());
+    const QPoint bufferDevice = paintedSurfacePosition(window, frame.topLeft());
 
     QString monitor = QStringLiteral("null");
     if (output) {
@@ -113,7 +97,8 @@ static QString windowEntry(Window *window)
         + QStringLiteral(",\"buffer\":") + publishedRect(bufferDevice, buffer.size(), outputOrigin, scale)
         + QStringLiteral(",\"monitor\":") + monitor
         + QStringLiteral(",\"capture_excluded\":") + jsonBool(window->excludeFromCapture())
-        + QStringLiteral(",\"lattice_drop\":false,\"move_sync\":false")
+        + QStringLiteral(",\"lattice_drop\":") + jsonBool(latticeDrop)
+        + QStringLiteral(",\"move_sync\":false")
         + QStringLiteral(",\"moving\":") + jsonBool(window->isInteractiveMove() || window->isInteractiveResize())
         + QStringLiteral("}");
 }
@@ -200,7 +185,7 @@ QString WindowGeometryService::GetWindows() const
         const auto stackingOrder = workspace()->stackingOrder();
         for (Window *window : stackingOrder) {
             if (window->isClient() && !window->isDeleted() && window->isNormalWindow()) {
-                windows.append(windowEntry(window));
+                windows.append(windowEntry(window, m_placement->latticeDrop(window)));
             }
         }
     }
