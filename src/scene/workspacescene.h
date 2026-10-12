@@ -12,6 +12,8 @@
 #include "core/renderviewport.h"
 #include "scene/scene.h"
 
+#include <QHash>
+
 namespace KWin
 {
 
@@ -19,6 +21,7 @@ class DragAndDropIconItem;
 class EffectWindow;
 class EglContext;
 class Item;
+class Window;
 class WindowItem;
 class WindowPaintData;
 class CursorItem;
@@ -115,10 +118,17 @@ protected:
     QList<WindowItem *> stacking_order;
 
 private:
+    void paintOverlay(const RenderTarget &renderTarget, const RenderViewport &viewport, const Region &deviceRegion);
+    void repaintStereoDepth();
+    bool stereoDepthPainted(const Window *window) const;
+    int stereoParallax(const Window *window) const;
+    void drawStereoShadow(const RenderTarget &renderTarget, const RenderViewport &viewport, WindowItem *caster, int mask, const Region &deviceRegion, const WindowPaintData &data);
     void createDndIconItem();
     void destroyDndIconItem();
     void updateCursor();
 
+    const Window *m_depthWindow = nullptr;
+    QHash<LogicalOutput *, int> m_pointerParallax;
     PaintContext m_paintContext;
     std::unique_ptr<Item> m_containerItem;
     std::unique_ptr<Item> m_overlayItem;
