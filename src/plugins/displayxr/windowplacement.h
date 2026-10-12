@@ -32,6 +32,7 @@ public:
 
     bool latticeDrop(const Window *window) const;
     bool moveSynced(const Window *window) const;
+    bool moveSyncHolding(Window *window) const;
 
 public Q_SLOTS:
     bool MoveWindow(uint pid, int x, int y);

@@ -59,10 +59,10 @@ static QString publishedRect(const QPoint &deviceOrigin, const QSizeF &logicalSi
         .arg(logicalForDevicePixel(std::round(logicalSize.height() * scale), scale));
 }
 
-static QString windowEntry(Window *window, bool latticeDrop, bool moveSync)
+static QString windowEntry(Window *window, bool latticeDrop, bool moveSync, bool moveSyncHeld)
 {
     // The rectangles are published so that the runtime's conversion lands on the device pixels
-    // KWin paints the frame and the main surface at.
+    // KWin paints the frame and the main surface at, where a whole logical value names them.
     const LogicalOutput *output = window->output();
     const qreal scale = output ? output->scale() : 1.0;
     const QPoint outputOrigin = output ? output->geometry().topLeft() : QPoint();
@@ -70,6 +70,16 @@ static QString windowEntry(Window *window, bool latticeDrop, bool moveSync)
     const RectF buffer = window->bufferGeometry();
     const QPoint frameDevice = paintedFramePosition(window, frame.topLeft());
     const QPoint bufferDevice = paintedSurfacePosition(window, frame.topLeft());
+    // buffer_device names the pixels themselves, relative to the output: where KWin paints the main
+    // surface, or, while move sync holds the window, where it paints the frame woven for this
+    // position.
+    const QString publishedBuffer = publishedRect(bufferDevice, buffer.size(), outputOrigin, scale);
+    const QPoint paintedBuffer = moveSyncHeld ? convertedPosition(window, publishedSurfacePosition(window)) : bufferDevice;
+    const QString bufferDeviceRect = QStringLiteral("[%1,%2,%3,%4]")
+                                         .arg(paintedBuffer.x())
+                                         .arg(paintedBuffer.y())
+                                         .arg(std::lround(buffer.width() * scale))
+                                         .arg(std::lround(buffer.height() * scale));
 
     QString monitor = QStringLiteral("null");
     if (output) {
@@ -94,7 +104,8 @@ static QString windowEntry(Window *window, bool latticeDrop, bool moveSync)
         + QStringLiteral(",\"focus\":") + jsonBool(window->isActive())
         + QStringLiteral(",\"xwayland\":") + jsonBool(xwayland)
         + QStringLiteral(",\"frame\":") + publishedRect(frameDevice, frame.size(), outputOrigin, scale)
-        + QStringLiteral(",\"buffer\":") + publishedRect(bufferDevice, buffer.size(), outputOrigin, scale)
+        + QStringLiteral(",\"buffer\":") + publishedBuffer
+        + QStringLiteral(",\"buffer_device\":") + bufferDeviceRect
         + QStringLiteral(",\"monitor\":") + monitor
         + QStringLiteral(",\"capture_excluded\":") + jsonBool(window->excludeFromCapture())
         + QStringLiteral(",\"lattice_drop\":") + jsonBool(latticeDrop)
@@ -186,7 +197,7 @@ QString WindowGeometryService::GetWindows() const
         const auto stackingOrder = workspace()->stackingOrder();
         for (Window *window : stackingOrder) {
             if (window->isClient() && !window->isDeleted() && window->isNormalWindow()) {
-                windows.append(windowEntry(window, m_placement->latticeDrop(window), m_placement->moveSynced(window)));
+                windows.append(windowEntry(window, m_placement->latticeDrop(window), m_placement->moveSynced(window), m_placement->moveSyncHolding(window)));
             }
         }
     }

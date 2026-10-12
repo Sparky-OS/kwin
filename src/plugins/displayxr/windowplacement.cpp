@@ -61,6 +61,11 @@ bool WindowPlacement::moveSynced(const Window *window) const
     return m_moveSync.isEnabled(window->pid());
 }
 
+bool WindowPlacement::moveSyncHolding(Window *window) const
+{
+    return m_moveSync.isHeld(window);
+}
+
 std::optional<pid_t> WindowPlacement::callerPid(uint pid) const
 {
     // A client acts only on its own windows: the process is the bus connection's, the argument

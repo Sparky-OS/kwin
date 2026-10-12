@@ -48,6 +48,10 @@ public:
 
     void enable(const QString &service, pid_t pid);
     bool isEnabled(pid_t pid) const;
+    /**
+     * Whether the window item is held back where the frame on screen was woven for.
+     */
+    bool isHeld(Window *window) const;
 
 Q_SIGNALS:
     void clientsChanged();

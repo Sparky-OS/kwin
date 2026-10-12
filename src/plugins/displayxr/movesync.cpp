@@ -41,25 +41,10 @@ static int tagCoordinate(int value)
     return ((value % s_tagModulus) + s_tagModulus) % s_tagModulus;
 }
 
-// The main surface's top-left as the snapshot publishes it.
-static QPoint publishedSurfacePosition(const Window *window)
-{
-    return publishedPosition(window, paintedSurfacePosition(window, window->pos()));
-}
-
 // The clock of the debug lines, CLOCK_MONOTONIC in microseconds.
 static qlonglong microseconds(std::chrono::steady_clock::time_point time)
 {
     return std::chrono::duration_cast<std::chrono::microseconds>(time.time_since_epoch()).count();
-}
-
-// Where the runtime weaves for @p published: the device pixel it converts it to on the output.
-static QPoint wovenPixel(const Window *window, const QPoint &published)
-{
-    const LogicalOutput *output = window->output();
-    const qreal scale = output ? output->scale() : 1.0;
-    const QPoint relative = published - (output ? output->geometry().topLeft() : QPoint());
-    return QPoint(std::round(relative.x() * scale), std::round(relative.y() * scale));
 }
 
 MoveSync::MoveSync()
@@ -109,6 +94,12 @@ void MoveSync::enable(const QString &service, pid_t pid)
     m_clients[service].insert(pid);
     qCDebug(KWIN_DISPLAYXR) << "move sync enabled for pid" << pid;
     Q_EMIT clientsChanged();
+}
+
+bool MoveSync::isHeld(Window *window) const
+{
+    const auto it = m_holds.constFind(window);
+    return it != m_holds.constEnd() && it->held;
 }
 
 bool MoveSync::isEnabled(pid_t pid) const
@@ -348,7 +339,7 @@ void MoveSync::frame(const LogicalOutput *output)
         if (m_debug) {
             // What this frame painted against the position its buffer was woven for.
             const QPoint painted = paintedSurfacePosition(window, window->windowItem()->position());
-            const QPoint shown = wovenPixel(window, hold.shown.published);
+            const QPoint shown = convertedPosition(window, hold.shown.published);
             const std::optional<QPoint> tag = tagOf(window);
             (painted == shown && !hold.followingSince ? statistics.paintedWoven : statistics.paintedStale)++;
             qCDebug(KWIN_DISPLAYXR, "move sync frame t=%lld tag=%d,%d shown=%d,%d cur=%d,%d painted=%d,%d woven=%d,%d", microseconds(now),
