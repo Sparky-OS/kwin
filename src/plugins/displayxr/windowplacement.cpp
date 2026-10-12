@@ -5,6 +5,7 @@
 */
 
 #include "windowplacement.h"
+#include "publishedgeometry.h"
 #include "window.h"
 #include "windowplacement1adaptor.h"
 #include "workspace.h"
@@ -88,7 +89,11 @@ bool WindowPlacement::MoveWindow(uint pid, int x, int y)
     if (!window || window->isInteractiveMove() || window->isInteractiveResize() || window->isFullScreen() || !window->isMovable()) {
         return false;
     }
-    window->move(QPointF(x, y));
+    // The runtime moves the frame by the move it chose for the buffer and judges the drop by where
+    // the buffer is painted: the frame goes where KWin paints the buffer on
+    // round((buffer + move - monitor) * scale).
+    const QPoint move = QPoint(x, y) - publishedFramePosition(window);
+    window->move(framePositionForSurface(window, publishedSurfacePosition(window) + move, QPointF(x, y)));
     return true;
 }
 
