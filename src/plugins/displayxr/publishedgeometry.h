@@ -32,6 +32,16 @@ inline int logicalForDevicePixel(int devicePixel, qreal scale)
 }
 
 /**
+ * The device pixel the scene's item renderer snaps the logical coordinate @p logical to: in single
+ * precision, as ItemRendererOpenGL::createRenderNode() does, which differs from double precision
+ * where the product is a half.
+ */
+inline int paintedPixel(qreal logical, qreal scale)
+{
+    return std::round(float(logical) * float(scale));
+}
+
+/**
  * The device pixel, relative to the window's output, at which KWin paints the window's frame when
  * the frame is at @p framePosition.
  */
@@ -40,8 +50,8 @@ inline QPoint paintedFramePosition(const Window *window, const QPointF &framePos
     const LogicalOutput *output = window->output();
     const qreal scale = output ? output->scale() : 1.0;
     const QPoint outputOrigin = output ? output->geometry().topLeft() : QPoint();
-    return QPoint(std::round(framePosition.x() * scale) - std::round(outputOrigin.x() * scale),
-                  std::round(framePosition.y() * scale) - std::round(outputOrigin.y() * scale));
+    return QPoint(paintedPixel(framePosition.x(), scale) - std::round(outputOrigin.x() * scale),
+                  paintedPixel(framePosition.y(), scale) - std::round(outputOrigin.y() * scale));
 }
 
 /**
@@ -54,7 +64,7 @@ inline QPoint paintedSurfacePosition(const Window *window, const QPointF &frameP
 {
     const qreal scale = window->output() ? window->output()->scale() : 1.0;
     const QPointF offset = window->bufferGeometry().topLeft() - window->frameGeometry().topLeft();
-    return paintedFramePosition(window, framePosition) + QPoint(std::round(offset.x() * scale), std::round(offset.y() * scale));
+    return paintedFramePosition(window, framePosition) + QPoint(paintedPixel(offset.x(), scale), paintedPixel(offset.y(), scale));
 }
 
 /**
@@ -92,7 +102,7 @@ inline QPointF framePositionForSurface(const Window *window, const QPoint &surfa
     // With the frame at 0, the main surface is painted at its own offset in the frame.
     const QPoint frame = convertedPosition(window, surface) - paintedSurfacePosition(window, QPointF());
     const auto axis = [scale](int frame, qreal preferred) -> qreal {
-        return std::round(preferred * scale) == frame ? preferred : frame / scale;
+        return paintedPixel(preferred, scale) == frame ? preferred : frame / scale;
     };
     return QPointF(axis(frame.x(), preferred.x()), axis(frame.y(), preferred.y()));
 }
