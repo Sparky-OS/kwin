@@ -17,3 +17,18 @@ suse_tumbleweed_qt611_reduced_featureset:
   script:
     - git config --global --add safe.directory $CI_PROJECT_DIR
     - python3 -u ci-utilities/run-ci-build.py --project $CI_PROJECT_NAME --branch $CI_COMMIT_REF_NAME --platform Linux --extra-cmake-args="-DKWIN_BUILD_KCMS=OFF -DKWIN_BUILD_SCREENLOCKER=OFF -DKWIN_BUILD_TABBOX=OFF -DKWIN_BUILD_ACTIVITIES=OFF -DKWIN_BUILD_RUNNERS=OFF -DKWIN_BUILD_NOTIFICATIONS=OFF -DKWIN_BUILD_GLOBALSHORTCUTS=OFF -DKWIN_BUILD_X11=OFF -DKWIN_BUILD_EIS=OFF -DKWIN_BUILD_QACCESSIBILITYCLIENT=OFF" --skip-publishing --only-build
+
+# CI only, not for upstream: build against our stack (.stack-ci/), not only KDE's packages.
+suse_tumbleweed_qt611:
+  script:
+    - git config --global --add safe.directory $CI_PROJECT_DIR
+    - python3 -u .stack-ci/stack-ci prepare --use plasma-wayland-protocols
+    - export KDE_CI_STACK_PREFIX=${STACK_CI_OUT:-${STACK_CI_WORK:-/tmp/stack-ci}/prefix}
+    - python3 -u .stack-ci/stack-run-ci-build ci-utilities/run-ci-build.py --project $CI_PROJECT_NAME --branch $CI_COMMIT_REF_NAME --platform Linux/Qt6/Shared --extra-cmake-args=-DBUILD_WITH_QT6=ON --extra-cmake-args=-DQT_MAJOR_VERSION=6
+    - |-
+      if [ -d "$INSTALLED_DOC_PATH" ]; then
+        git clone https://invent.kde.org/websites/docs-kde-org.git --depth=1
+        python3 ci-utilities/generate-documentation.py --project $CI_PROJECT_NAME --output-folder "generated_documentation" --format html pdf --branch $CI_COMMIT_REF_NAME --publish --doc-dir $INSTALLED_DOC_PATH
+        mkdir -p public/
+        mv generated_documentation/ public/documentation/
+      fi

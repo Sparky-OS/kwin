@@ -1,0 +1,34 @@
+# Our patched stack on Plasma 6.7: the forks that other projects build against.
+#
+# A member is built once into the stack prefix and keyed by its commit and the keys of
+# the members it needs.  A project job overlays the prefix after KDE's own packages.
+# To move the stack to Plasma 6.8, change the branches below (and ci-name, which is the
+# name the branch has on invent); the steps stay the same.
+name: plasma-6.7
+platform: suse-qt6.11
+job: suse_tumbleweed_qt611
+# where a published stack lives: the generic package registry of this existing project
+registry-project: danielcamposramos/plasma-wayland-protocols
+repos: /K3D/GitHub/driver_stereodisplay
+members:
+  plasma-wayland-protocols:
+    repo: plasma-wayland-protocols
+    branch: stereo3d
+    ci-name: stereo3d-6.7
+  libkscreen:
+    repo: libkscreen
+    branch: invent-push
+    ci-name: stereo3d-6.7
+    needs: [plasma-wayland-protocols]
+  kimageformats:
+    repo: kimageformats
+    branch: stereo3d
+    ci-name: stereo3d
+  mpvqt:
+    repo: mpvqt
+    branch: stereo3d
+    ci-name: stereo3d
+  kfilemetadata:
+    repo: kfilemetadata
+    branch: stereo3d
+    ci-name: stereo3d

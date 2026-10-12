@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Run KDE's run-ci-build.py with our stack laid over KDE's dependencies.
+
+    stack-run-ci-build PATH/TO/ci-utilities/run-ci-build.py [run-ci-build arguments]
+
+KDE's script is run unchanged, in this process.  Two calls of its own modules
+are wrapped:
+
+  * Package.Registry.retrieveDependencies: the packages KDE's registry has of
+    the projects in our stack are dropped before they are unpacked, so nothing
+    of KDE's version of them reaches _install, directly or through another
+    package's recorded dependencies;
+  * EnvironmentHandler.generateFor: our stack prefix is copied over _install
+    before the build environment is made from it (it is called again after the
+    runtime dependencies are unpacked, and the copy is repeated).
+
+KDE_CI_STACK_PREFIX names the folder that holds stack.json and files/ (the
+composed stack prefix, see kdecistack.py).
+"""
+import json
+import os
+import runpy
+import sys
+
+
+def overlay(src, dst):
+    """Copy the tree src over dst; a file of src replaces what dst has at that path."""
+    count = 0
+    for root, dirs, files in os.walk(src):
+        rel = os.path.relpath(root, src)
+        out = dst if rel == "." else os.path.join(dst, rel)
+        os.makedirs(out, exist_ok=True)
+        for name in dirs + files:
+            s = os.path.join(root, name)
+            d = os.path.join(out, name)
+            if os.path.isdir(s) and not os.path.islink(s):
+                continue
+            if os.path.lexists(d):
+                if os.path.isdir(d) and not os.path.islink(d):
+                    continue
+                os.remove(d)
+            if os.path.islink(s):
+                os.symlink(os.readlink(s), d)
+            else:
+                with open(s, "rb") as a, open(d, "wb") as b:
+                    while True:
+                        chunk = a.read(1 << 20)
+                        if not chunk:
+                            break
+                        b.write(chunk)
+                os.chmod(d, os.stat(s).st_mode & 0o7777)
+                count += 1
+    return count
+
+
+def main():
+    script = os.path.abspath(sys.argv[1])
+    prefix = os.environ["KDE_CI_STACK_PREFIX"]
+    with open(os.path.join(prefix, "stack.json")) as f:
+        stack = json.load(f)
+    members = stack["members"]
+    sys.path.insert(0, os.path.dirname(script))
+    sys.argv = sys.argv[1:]
+    from components import EnvironmentHandler, Package
+
+    retrieve = Package.Registry.retrieveDependencies
+
+    def retrieveDependencies(self, *args, **kwargs):
+        kept = []
+        for contents, metadata in retrieve(self, *args, **kwargs):
+            ident = metadata["identifier"]
+            if ident in {m["package"] for m in members.values()}:
+                print("## STACK: not unpacking KDE's {0} - {1} ({2})".format(
+                    ident, metadata["branch"], metadata["gitRevision"]))
+                continue
+            kept.append((contents, metadata))
+        return kept
+
+    Package.Registry.retrieveDependencies = retrieveDependencies
+
+    generate = EnvironmentHandler.generateFor
+
+    def generateFor(installPrefix, *args, **kwargs):
+        count = overlay(os.path.join(prefix, "files"), installPrefix)
+        print("## STACK {0}: {1} files laid over {2}".format(stack["key"], count, installPrefix))
+        for name, m in members.items():
+            print("##    {0} - {1} ({2}, key {3})".format(name, m["branch"], m["commit"], m["key"]))
+        return generate(installPrefix, *args, **kwargs)
+
+    EnvironmentHandler.generateFor = generateFor
+    runpy.run_path(script, run_name="__main__")
+
+
+if __name__ == "__main__":
+    main()
