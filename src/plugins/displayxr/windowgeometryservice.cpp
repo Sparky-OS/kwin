@@ -59,7 +59,7 @@ static QString publishedRect(const QPoint &deviceOrigin, const QSizeF &logicalSi
         .arg(logicalForDevicePixel(std::round(logicalSize.height() * scale), scale));
 }
 
-static QString windowEntry(Window *window, bool latticeDrop)
+static QString windowEntry(Window *window, bool latticeDrop, bool moveSync)
 {
     // The rectangles are published so that the runtime's conversion lands on the device pixels
     // KWin paints the frame and the main surface at.
@@ -98,7 +98,7 @@ static QString windowEntry(Window *window, bool latticeDrop)
         + QStringLiteral(",\"monitor\":") + monitor
         + QStringLiteral(",\"capture_excluded\":") + jsonBool(window->excludeFromCapture())
         + QStringLiteral(",\"lattice_drop\":") + jsonBool(latticeDrop)
-        + QStringLiteral(",\"move_sync\":false")
+        + QStringLiteral(",\"move_sync\":") + jsonBool(moveSync)
         + QStringLiteral(",\"moving\":") + jsonBool(window->isInteractiveMove() || window->isInteractiveResize())
         + QStringLiteral("}");
 }
@@ -108,6 +108,7 @@ WindowGeometryService::WindowGeometryService()
     new WindowGeometry1Adaptor(this);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/displayxr/WindowGeometry"), this);
     m_placement = std::make_unique<WindowPlacement>();
+    connect(m_placement.get(), &WindowPlacement::moveSyncChanged, this, &WindowGeometryService::scheduleChanged);
     m_captureExclusion = std::make_unique<CaptureExclusion>();
 
     const auto windows = workspace()->windows();
@@ -185,7 +186,7 @@ QString WindowGeometryService::GetWindows() const
         const auto stackingOrder = workspace()->stackingOrder();
         for (Window *window : stackingOrder) {
             if (window->isClient() && !window->isDeleted() && window->isNormalWindow()) {
-                windows.append(windowEntry(window, m_placement->latticeDrop(window)));
+                windows.append(windowEntry(window, m_placement->latticeDrop(window), m_placement->moveSynced(window)));
             }
         }
     }

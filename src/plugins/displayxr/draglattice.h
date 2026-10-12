@@ -108,7 +108,7 @@ private:
 
     QPointF constrain(const Window *window, const QPointF &position);
     QPoint surfaceAt(const Window *window, const QPoint &start) const;
-    QPointF positionOf(const Table &table, const Window *window, const QPoint &entry) const;
+    static QPointF positionOf(const Table &table, const Window *window, const QPoint &entry);
     std::optional<QPoint> entryAt(const Table &table, const Window *window, const QPointF &position) const;
     QList<QPoint> candidates(const Table &table, const QPointF &displacement) const;
     bool covers(const Table &table, const QPointF &displacement) const;

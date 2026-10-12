@@ -70,6 +70,25 @@ inline QPoint publishedPosition(const Window *window, const QPoint &devicePositi
 }
 
 /**
+ * The frame position at which KWin paints the window's main surface on the device pixel that the
+ * runtime converts the published surface position @p surface onto: @p preferred when it does,
+ * else the logical position of the device pixel the frame then needs.
+ */
+inline QPointF framePositionForSurface(const Window *window, const QPoint &surface, const QPointF &preferred)
+{
+    const LogicalOutput *output = window->output();
+    const qreal scale = output ? output->scale() : 1.0;
+    const QPoint outputOrigin = output ? output->geometry().topLeft() : QPoint();
+    const QPoint surfaceShift = paintedSurfacePosition(window, QPointF());
+    const auto axis = [scale](int surface, qreal preferred, int shift) -> qreal {
+        const qreal frame = std::round(surface * scale) - shift;
+        return std::round(preferred * scale) == frame ? preferred : frame / scale;
+    };
+    const QPoint relative = surface - outputOrigin;
+    return QPointF(axis(relative.x(), preferred.x(), surfaceShift.x()), axis(relative.y(), preferred.y(), surfaceShift.y()));
+}
+
+/**
  * The top-left of the window's frame as it is published.
  */
 inline QPoint publishedFramePosition(const Window *window)

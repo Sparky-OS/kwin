@@ -39,11 +39,14 @@ static Window *windowOfPid(pid_t pid)
 // GetPlacementCapabilities() bits.
 static constexpr uint s_dragLattice = 1 << 0;
 static constexpr uint s_dragLatticeAt = 1 << 1;
+static constexpr uint s_moveSync = 1 << 3;
+static constexpr uint s_moveSyncTagGated = 1 << 4;
 
 WindowPlacement::WindowPlacement()
 {
     connect(&m_lattice, &DragLattice::needed, this, &WindowPlacement::DragLatticeNeeded);
     connect(&m_lattice, &DragLattice::done, this, &WindowPlacement::DragLatticeDone);
+    connect(&m_moveSync, &MoveSync::clientsChanged, this, &WindowPlacement::moveSyncChanged);
     new WindowPlacement1Adaptor(this);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/displayxr/WindowPlacement"), this);
 }
@@ -51,6 +54,11 @@ WindowPlacement::WindowPlacement()
 bool WindowPlacement::latticeDrop(const Window *window) const
 {
     return m_lattice.landedOnTable(window);
+}
+
+bool WindowPlacement::moveSynced(const Window *window) const
+{
+    return m_moveSync.isEnabled(window->pid());
 }
 
 std::optional<pid_t> WindowPlacement::callerPid(uint pid) const
@@ -81,7 +89,7 @@ bool WindowPlacement::MoveWindow(uint pid, int x, int y)
 
 uint WindowPlacement::GetPlacementCapabilities() const
 {
-    return s_dragLattice | s_dragLatticeAt;
+    return s_dragLattice | s_dragLatticeAt | s_moveSync | s_moveSyncTagGated;
 }
 
 bool WindowPlacement::SetDragLattice(uint pid, bool extend, int cell, int minDx, int minDy, int maxDx, int maxDy, const QList<int> &dx, const QList<int> &dy, int &startX, int &startY)
@@ -99,7 +107,8 @@ bool WindowPlacement::setDragLattice(uint pid, std::optional<QPoint> start, bool
     startX = 0;
     startY = 0;
     const std::optional<pid_t> caller = callerPid(pid);
-    if (!caller) {
+    // A move-synced process needs no table: every frame is painted where it was woven for.
+    if (!caller || m_moveSync.isEnabled(*caller)) {
         return false;
     }
     Window *window = windowOfPid(*caller);
@@ -122,9 +131,14 @@ void WindowPlacement::ClearDragLattice(uint pid)
     }
 }
 
-bool WindowPlacement::EnableMoveSync(uint)
+bool WindowPlacement::EnableMoveSync(uint pid)
 {
-    return false;
+    const std::optional<pid_t> caller = callerPid(pid);
+    if (!caller) {
+        return false;
+    }
+    m_moveSync.enable(message().service(), *caller);
+    return true;
 }
 
 bool WindowPlacement::BeginPointerDrag(uint, uint)

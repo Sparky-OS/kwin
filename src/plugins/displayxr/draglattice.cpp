@@ -253,22 +253,12 @@ QPoint DragLattice::surfaceAt(const Window *window, const QPoint &start) const
     return publishedPosition(window, paintedSurfacePosition(window, start));
 }
 
-QPointF DragLattice::positionOf(const Table &table, const Window *window, const QPoint &entry) const
+QPointF DragLattice::positionOf(const Table &table, const Window *window, const QPoint &entry)
 {
     // The client's pixel for the entry is its table's surface position plus the entry, converted as
-    // the runtime converts it. The frame goes where KWin paints the main surface on that pixel: at
-    // the whole position the entry names when that does it, else on the pixel the frame needs.
-    const LogicalOutput *output = window->output();
-    const qreal scale = output ? output->scale() : 1.0;
-    const QPoint outputOrigin = output ? output->geometry().topLeft() : QPoint();
-    const QPoint surfaceShift = paintedSurfacePosition(window, QPointF());
-    const auto axis = [scale](int surface, int whole, int shift) -> qreal {
-        const qreal frame = std::round(surface * scale) - shift;
-        return std::round(whole * scale) == frame ? whole : frame / scale;
-    };
-    const QPoint surface = table.surface + entry - outputOrigin;
-    const QPoint whole = table.start + entry;
-    return QPointF(axis(surface.x(), whole.x(), surfaceShift.x()), axis(surface.y(), whole.y(), surfaceShift.y()));
+    // the runtime converts it; the frame goes on the whole position the entry names when that
+    // paints the main surface there.
+    return framePositionForSurface(window, table.surface + entry, table.start + entry);
 }
 
 std::optional<QPoint> DragLattice::entryAt(const Table &table, const Window *window, const QPointF &position) const

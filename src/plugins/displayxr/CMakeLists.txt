@@ -3,6 +3,7 @@ target_sources(displayxr PRIVATE
     captureexclusion.cpp
     draglattice.cpp
     main.cpp
+    movesync.cpp
     windowgeometryservice.cpp
     windowplacement.cpp
 )
