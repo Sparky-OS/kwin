@@ -100,7 +100,7 @@ std::optional<std::pair<OutputConfiguration, OutputConfigurationStore::ConfigTyp
     }
     // assigns uuids, if the outputs don't have one yet
     registerOutputs(outputs);
-    if (const auto opt = findSetup(relevantOutputs, isLidClosed)) {
+    if (const auto opt = isLidClosed ? std::nullopt : findSetup(relevantOutputs, false)) {
         const auto &[setup, outputStates] = *opt;
         auto config = setupToConfig(setup, outputStates);
         applyOrientationReading(config, relevantOutputs, orientation, isTabletMode);
@@ -540,58 +540,8 @@ std::optional<OutputConfiguration> OutputConfigurationStore::generateLidClosedCo
         return std::nullopt;
     }
     const auto setup = findSetup(outputs, false);
-    if (!setup) {
-        return std::nullopt;
-    }
-    BackendOutput *const internalOutput = *internalIt;
-    auto config = setupToConfig(setup->setup, setup->globalOutputIndices);
-    auto internalChangeset = config.changeSet(internalOutput);
-    if (!internalChangeset->enabled.value_or(internalOutput->isEnabled())) {
-        return config;
-    }
-
-    internalChangeset->enabled = false;
-
-    const bool anyEnabled = std::any_of(outputs.begin(), outputs.end(), [&config = config](BackendOutput *output) {
-        return config.changeSet(output)->enabled.value_or(output->isEnabled());
-    });
-    if (!anyEnabled) {
-        return std::nullopt;
-    }
-
-    const auto getSize = [](OutputChangeSet *changeset, BackendOutput *output) {
-        const QSize modeSize = changeset->currentMode.transform([](const auto &modeline) {
-            return modeline.size();
-        }).value_or(output->modeSize());
-
-        const auto scale = changeset->scale.value_or(output->scale());
-        return QSize(std::ceil(modeSize.width() / scale), std::ceil(modeSize.height() / scale));
-    };
-    const QPoint internalPos = internalChangeset->pos.value_or(internalOutput->position());
-    const QSize internalSize = getSize(internalChangeset.get(), internalOutput);
-    for (BackendOutput *otherOutput : outputs) {
-        auto changeset = config.changeSet(otherOutput);
-        QPoint otherPos = changeset->pos.value_or(otherOutput->position());
-        if (otherPos.x() >= internalPos.x() + internalSize.width()) {
-            otherPos.rx() -= std::floor(internalSize.width());
-        }
-        if (otherPos.y() >= internalPos.y() + internalSize.height()) {
-            otherPos.ry() -= std::floor(internalSize.height());
-        }
-        // make sure this doesn't make outputs overlap, which is neither supported nor expected by users
-        const QSize otherSize = getSize(changeset.get(), otherOutput);
-        const bool overlap = std::any_of(outputs.begin(), outputs.end(), [&, &config = config](BackendOutput *output) {
-            if (otherOutput == output) {
-                return false;
-            }
-            const auto changeset = config.changeSet(output);
-            const QPoint pos = changeset->pos.value_or(output->position());
-            return Rect(pos, otherSize).intersects(Rect(otherPos, getSize(changeset.get(), output)));
-        });
-        if (!overlap) {
-            changeset->pos = otherPos;
-        }
-    }
+    auto config = setup ? setupToConfig(setup->setup, setup->globalOutputIndices) : generateConfig(outputs, false);
+    config.changeSet(*internalIt)->dpmsMode = BackendOutput::DpmsMode::Off;
     return config;
 }
 

@@ -129,6 +129,7 @@ private Q_SLOTS:
     void testXwaylandScaleChange();
 
     void testWindowNotRestoredAfterMovingWindowAndEnablingOutput();
+    void testLaptopLidClosed_data();
     void testLaptopLidClosed();
     void testGenerateConfigs_data();
     void testGenerateConfigs();
@@ -1207,43 +1208,104 @@ void OutputChangesTest::testMaximizedWindowDoesntDisappear()
     QCOMPARE(window->requestedMaximizeMode(), maximizeMode);
 }
 
+void OutputChangesTest::testLaptopLidClosed_data()
+{
+    QTest::addColumn<bool>("externalPresent");
+    QTest::addRow("with external") << true;
+    QTest::addRow("internal only") << false;
+}
+
 void OutputChangesTest::testLaptopLidClosed()
 {
-    Test::setOutputConfig({
-        Test::OutputInfo{
-            .geometry = Rect(0, 0, 1280, 1024),
-            .internal = true,
-        },
-        Test::OutputInfo{
-            .geometry = Rect(1280, 0, 1280, 1024),
-            .internal = false,
-        },
-    });
+    QFETCH(bool, externalPresent);
+    QList<Test::OutputInfo> outputInfo{
+        Test::OutputInfo{.geometry = Rect(0, 0, 1280, 1024), .internal = true},
+    };
+    if (externalPresent) {
+        outputInfo.append(Test::OutputInfo{.geometry = Rect(1280, 0, 1280, 1024), .internal = false});
+    }
+    Test::setOutputConfig(outputInfo);
     const auto outputs = kwinApp()->outputBackend()->outputs();
     const auto internal = outputs.front();
     QVERIFY(internal->isInternal());
-    const auto external = outputs.back();
-    QVERIFY(!external->isInternal());
+    const auto originalGeometry = workspace()->geometry();
+    const auto originalInternal = workspace()->findOutput(internal)->geometryF();
+    const auto originalExternal = externalPresent ? workspace()->findOutput(outputs.back())->geometryF() : RectF();
+
+    workspace()->setActiveOutput(workspace()->findOutput(internal));
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
+    auto window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
+    QVERIFY(window);
+    window->move(QPointF(42, 67));
+    const auto originalWindow = window->frameGeometry();
+    input()->pointer()->warp(QPointF(100, 100));
 
     auto lidSwitch = std::make_unique<Test::VirtualInputDevice>();
     lidSwitch->setLidSwitch(true);
     lidSwitch->setName("virtual lid switch");
     input()->addInputDevice(lidSwitch.get());
-
+    const auto guard = qScopeGuard([&] {
+        input()->removeInputDevice(lidSwitch.get());
+    });
     auto timestamp = 1ms;
+    Q_EMIT lidSwitch->switchToggle(SwitchState::On, timestamp++, lidSwitch.get());
+    QVERIFY(internal->isEnabled());
+    QCOMPARE(internal->dpmsMode(), BackendOutput::DpmsMode::Off);
+    QCOMPARE(workspace()->outputs().size(), outputInfo.size());
+    QCOMPARE(workspace()->geometry(), originalGeometry);
+    QCOMPARE(workspace()->findOutput(internal)->geometryF(), originalInternal);
+    QCOMPARE(window->frameGeometry(), originalWindow);
+    QCOMPARE(window->output()->backendOutput(), internal);
+    if (externalPresent) {
+        const auto external = outputs.back();
+        QVERIFY(external->isEnabled());
+        QCOMPARE(external->dpmsMode(), BackendOutput::DpmsMode::On);
+        QCOMPARE(workspace()->findOutput(external)->geometryF(), originalExternal);
+        QVERIFY(originalExternal.contains(input()->pointer()->pos()));
+        input()->pointer()->warp(QPointF(100, 100));
+        QVERIFY(originalExternal.contains(input()->pointer()->pos()));
+        workspace()->setActiveOutput(workspace()->findOutput(internal));
+        std::unique_ptr<KWayland::Client::Surface> newSurface(Test::createSurface());
+        std::unique_ptr<Test::XdgToplevel> newShellSurface(Test::createXdgToplevelSurface(newSurface.get()));
+        const auto newWindow = Test::renderAndWaitForShown(newSurface.get(), QSize(100, 50), Qt::red);
+        QVERIFY(newWindow);
+        QVERIFY(originalExternal.contains(newWindow->frameGeometry()));
+        QCOMPARE(window->frameGeometry(), originalWindow);
+
+        std::unique_ptr<KWayland::Client::Surface> transientSurface(Test::createSurface());
+        std::unique_ptr<Test::XdgToplevel> transientShellSurface(Test::createXdgToplevelSurface(transientSurface.get()));
+        transientShellSurface->set_parent(shellSurface->object());
+        const auto transientWindow = Test::renderAndWaitForShown(transientSurface.get(), QSize(80, 40), Qt::green);
+        QVERIFY(transientWindow);
+        QCOMPARE(transientWindow->transientFor(), window);
+        QVERIFY(originalExternal.contains(transientWindow->frameGeometry()));
+        QCOMPARE(window->frameGeometry(), originalWindow);
+    } else {
+        input()->pointer()->warp(QPointF(200, 200));
+        QCOMPARE(input()->pointer()->pos(), QPointF(100, 100));
+    }
+
+    workspace()->requestDpmsState(Workspace::DpmsState::Off);
+    QTRY_COMPARE(workspace()->dpmsState(), Workspace::DpmsState::Off);
+    workspace()->requestDpmsState(Workspace::DpmsState::On);
+    QCOMPARE(internal->dpmsMode(), BackendOutput::DpmsMode::Off);
     Q_EMIT lidSwitch->switchToggle(SwitchState::Off, timestamp++, lidSwitch.get());
     QVERIFY(internal->isEnabled());
-    QVERIFY(external->isEnabled());
+    QCOMPARE(internal->dpmsMode(), BackendOutput::DpmsMode::On);
+    QCOMPARE(workspace()->geometry(), originalGeometry);
+    QCOMPARE(window->frameGeometry(), originalWindow);
+    input()->pointer()->warp(QPointF(100, 100));
+    QCOMPARE(input()->pointer()->pos(), QPointF(100, 100));
 
     Q_EMIT lidSwitch->switchToggle(SwitchState::On, timestamp++, lidSwitch.get());
-    QVERIFY(!internal->isEnabled());
-    QVERIFY(external->isEnabled());
-
+    workspace()->requestDpmsState(Workspace::DpmsState::Off);
+    QTRY_COMPARE(workspace()->dpmsState(), Workspace::DpmsState::Off);
     Q_EMIT lidSwitch->switchToggle(SwitchState::Off, timestamp++, lidSwitch.get());
-    QVERIFY(internal->isEnabled());
-    QVERIFY(external->isEnabled());
-
-    input()->removeInputDevice(lidSwitch.get());
+    QTRY_COMPARE(workspace()->dpmsState(), Workspace::DpmsState::On);
+    QCOMPARE(internal->dpmsMode(), BackendOutput::DpmsMode::On);
+    QCOMPARE(workspace()->geometry(), originalGeometry);
+    QCOMPARE(window->frameGeometry(), originalWindow);
 }
 
 #if KWIN_BUILD_X11
@@ -2462,9 +2524,12 @@ void OutputChangesTest::testMirroring()
 
     auto timestamp = 1ms;
     Q_EMIT lidSwitch.switchToggle(SwitchState::On, timestamp++, &lidSwitch);
-    QVERIFY(!internal->isEnabled());
+    QVERIFY(internal->isEnabled());
+    QCOMPARE(internal->dpmsMode(), BackendOutput::DpmsMode::Off);
     QVERIFY(external->isEnabled());
-    QCOMPARE(external->deviceOffset(), QPoint());
+    QCOMPARE(external->deviceOffset(), deviceOffset);
+    QCOMPARE(workspace()->outputs().size(), 1);
+    QVERIFY(workspace()->isOutputInteractive(workspace()->outputs().front()));
 
     Q_EMIT lidSwitch.switchToggle(SwitchState::Off, timestamp++, &lidSwitch);
     QVERIFY(internal->isEnabled());

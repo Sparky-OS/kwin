@@ -63,7 +63,7 @@ static bool screenContainsPos(const QPointF &pos)
 {
     const auto outputs = workspace()->outputs();
     for (const LogicalOutput *output : outputs) {
-        if (output->geometry().contains(flooredPoint(pos))) {
+        if (workspace()->isOutputInteractive(output) && output->geometry().contains(flooredPoint(pos))) {
             return true;
         }
     }
@@ -939,7 +939,10 @@ void PointerInputRedirection::updatePosition(const QPointF &pos, const QPointF &
         return;
     }
     // verify that at least one screen contains the pointer position
-    const LogicalOutput *currentOutput = workspace()->outputAt(pos);
+    const LogicalOutput *currentOutput = workspace()->interactiveOutputAt(pos);
+    if (!currentOutput) {
+        return;
+    }
     QPointF p = confineToBoundingBox(pos, currentOutput->geometry());
     p = applyEdgeBarrier(p, relativeMotion, currentOutput, time);
     p = applyPointerConfinement(p);
@@ -1008,9 +1011,12 @@ void PointerInputRedirection::updateAfterScreenChange()
         }
 
         // pointer no longer on a screen, reposition to closes screen
-        output = workspace()->outputAt(m_pos);
+        output = workspace()->interactiveOutputAt(m_pos);
     }
 
+    if (!output) {
+        return;
+    }
     m_lastOutputWasPlaceholder = output->isPlaceholder();
     warp(output->geometry().center());
 }

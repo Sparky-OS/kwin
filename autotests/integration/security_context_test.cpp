@@ -104,7 +104,7 @@ void SecurityContextTest::testSecurityContext()
     QVERIFY(connectedSpy.wait());
 
     // verify that our new restricted client is seen by kwin with the right security context
-    QVERIFY(clientConnectedspy.count());
+    QTRY_VERIFY(clientConnectedspy.count());
     QCOMPARE(clientConnectedspy.first().first().value<KWin::ClientConnection *>()->securityContextAppId(), "kde.unittest.app_id");
 
     // verify that the globals for the restricted client does not contain the security context

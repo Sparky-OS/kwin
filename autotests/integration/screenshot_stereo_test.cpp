@@ -139,6 +139,7 @@ void ScreenshotStereoTest::init()
 void ScreenshotStereoTest::cleanup()
 {
     Test::destroyWaylandConnection();
+    QTRY_VERIFY(workspace()->windows().isEmpty());
 }
 
 void ScreenshotStereoTest::testDeclaredWindowOnTwoDimensionalOutput()
@@ -351,7 +352,8 @@ static void configureTwoOutputs(bool leftStereo)
     QVERIFY(stereoOutput->hasStereoEyes());
 }
 
-struct TestWindow {
+struct TestWindow
+{
     std::unique_ptr<KWayland::Client::Surface> surface;
     std::unique_ptr<Test::XdgToplevel> shellSurface;
     Window *window;
