@@ -23,7 +23,9 @@ class Window;
  * window is at the screen's level and what pops up over it (menus, dialogs, tooltips) is popped,
  * the inactive windows share the sunk range evenly in their stacking order, the wallpaper is at
  * the sunk limit, panels are at the screen's level, and a popped thing that touches the edge of
- * its output stays at the screen's level. Fullscreen windows and windows that are not part of
+ * its output stays at the screen's level. A window the user or a rule pinned above the others
+ * (Keep Above) stays at the popped limit and one pinned below (Keep Below) at the sunk limit,
+ * whatever is active. Fullscreen windows and windows that are not part of
  * the desktop's own elements stay at the screen's level.
  */
 class StereoDepth

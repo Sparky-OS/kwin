@@ -26,6 +26,8 @@ enum class Role {
     Active,
     Popped,
     Sunk,
+    Above, // pinned above the others by the user or a rule: at the popped limit
+    Below, // pinned below the others by the user or a rule: at the sunk limit
 };
 
 static const Window *mainWindow(const Window *window)
@@ -64,10 +66,15 @@ static Role roleOf(const Window *window)
     const Window *main = mainWindow(window);
     if (main != window) {
         // what is transient for a window follows it when it is sunk, and pops over everything else
-        return roleOf(main) == Role::Sunk ? Role::Sunk : Role::Popped;
+        const Role mainRole = roleOf(main);
+        return mainRole == Role::Sunk || mainRole == Role::Below ? mainRole : Role::Popped;
     }
     if (isPopup(window)) {
         return Role::Popped;
+    }
+    // a window pinned above or below stays at its limit whatever is active
+    if (window->keepAbove() != window->keepBelow()) {
+        return window->keepAbove() ? Role::Above : Role::Below;
     }
     const Window *active = workspace()->activeWindow();
     return active && mainWindow(active) == window ? Role::Active : Role::Sunk;
@@ -104,6 +111,10 @@ qreal StereoDepth::level(const Window *window)
     case Role::Active:
         return 0;
     case Role::Desktop:
+        return -1;
+    case Role::Above:
+        return touchesEdge(window) ? 0 : 1;
+    case Role::Below:
         return -1;
     case Role::Popped: {
         if (touchesEdge(window)) {

@@ -112,6 +112,8 @@ WorkspaceScene::WorkspaceScene()
         connect(window, &Window::minimizedChanged, this, &WorkspaceScene::repaintStereoDepth);
         connect(window, &Window::transientChanged, this, &WorkspaceScene::repaintStereoDepth);
         connect(window, &Window::fullScreenChanged, this, &WorkspaceScene::repaintStereoDepth);
+        connect(window, &Window::keepAboveChanged, this, &WorkspaceScene::repaintStereoDepth);
+        connect(window, &Window::keepBelowChanged, this, &WorkspaceScene::repaintStereoDepth);
     });
 
     connect(waylandServer()->seat(), &SeatInterface::dragStarted, this, &WorkspaceScene::createDndIconItem);
