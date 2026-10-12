@@ -19,4 +19,5 @@ target_link_libraries(kcm_kwinstereodepth PRIVATE
     KF6::KCMUtils
     KF6::KCMUtilsQuick
     Qt::DBus
+    Qt::Qml
 )
