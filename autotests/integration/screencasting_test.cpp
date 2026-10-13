@@ -20,6 +20,7 @@
 #include "window.h"
 #include "workspace.h"
 #include "wayland/display.h"
+#include <KScreenLocker/KsldApp>
 
 #include <KWayland/Client/output.h>
 #include <KWayland/Client/subsurface.h>
@@ -590,6 +591,8 @@ void ScreencastingTest::testNativePanelRefresh()
         QSKIP("Opt-in VAAPI/RDP endurance proof needs the isolated GPU rig");
     }
     const QString directory = qEnvironmentVariable("KWIN_PHONE_REFRESH_PROOF");
+    ScreenLocker::KSldApp::self()->inhibit();
+    const auto restoreIdleLock = qScopeGuard([] { ScreenLocker::KSldApp::self()->uninhibit(); });
     const QSize sourceSize(1920, 1080);
     const OutputModeline framePacking(sourceSize, 30000, OutputModeline::Flag::Stereo3DFramePacking);
     Test::setOutputConfig({Test::OutputInfo{.geometry = Rect(QPoint(), sourceSize), .modes = {framePacking}}});
@@ -671,7 +674,15 @@ void ScreencastingTest::testNativePanelRefresh()
     note("connected-independent");
     QTest::qWait(5000);
     mirror(true);
-    QTest::qWait(20000);
+    QTest::qWait(5000);
+    if (qEnvironmentVariableIsSet("KWIN_PHONE_LOCK_CYCLE")) {
+        note("private-rig-lock");
+        ScreenLocker::KSldApp::self()->lock(ScreenLocker::EstablishLock::Immediate);
+        QTest::qWait(1000);
+        ScreenLocker::KSldApp::self()->unlock();
+        note("private-rig-unlock");
+    }
+    QTest::qWait(15000);
     mirror(false);
     QTest::qWait(5000);
     mirror(true);
