@@ -51,7 +51,8 @@ private Q_SLOTS:
         QCOMPARE(stereo_declare_wayland(*surface, static_cast<stereo_layout>(1), STEREO_CLASS_SCIENTIFIC, STEREO_SCIENTIFIC_VR), -EINVAL);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
         QVERIFY(committed.wait());
-        QCOMPARE(window->surface()->contentType(), ContentType::None);
+        QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
+        QCOMPARE(window->surface()->contentType(), ContentType::Game);
 
         QCOMPARE(stereo_remove_wayland(*surface), 0);
         surface->commit(KWayland::Client::Surface::CommitFlag::None);
@@ -80,15 +81,15 @@ private Q_SLOTS:
         QTRY_VERIFY(future.isFinished());
         std::unique_ptr<::Display, decltype(&XCloseDisplay)> display(future.result(), XCloseDisplay);
         QVERIFY(display);
-        QCOMPARE(stereo_supported_x11(display.get()), 2u);
+        QCOMPARE(stereo_supported_x11(display.get()), 3u);
         const auto support = XInternAtom(display.get(), "_KDE_NET_WM_STEREO_CONTENT_SUPPORTED", False);
-        const unsigned long version = 2;
+        const unsigned long version = 3;
         XDeleteProperty(display.get(), DefaultRootWindow(display.get()), support);
         QCOMPARE(stereo_supported_x11(display.get()), 0u);
         QCOMPARE(stereo_declare_x11(display.get(), DefaultRootWindow(display.get()), STEREO_SBS_FULL, STEREO_CLASS_GAME, 0), -ENOTSUP);
         XChangeProperty(display.get(), DefaultRootWindow(display.get()), support, XA_CARDINAL, 32,
                         PropModeReplace, reinterpret_cast<const unsigned char *>(&version), 1);
-        QCOMPARE(stereo_supported_x11(display.get()), 2u);
+        QCOMPARE(stereo_supported_x11(display.get()), 3u);
         const auto id = XCreateSimpleWindow(display.get(), DefaultRootWindow(display.get()), 0, 0, 200, 100, 0, 0, 0);
         QCOMPARE(stereo_declare_x11(display.get(), id, STEREO_SBS_FULL, STEREO_CLASS_GAME, STEREO_GAME_3D), 0);
         QSignalSpy added(workspace(), &Workspace::windowAdded);
