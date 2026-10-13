@@ -19,6 +19,7 @@
 #include "wayland_server.h"
 #include "window.h"
 #include "workspace.h"
+#include "wayland/display.h"
 
 #include <KWayland/Client/output.h>
 #include <KWayland/Client/subsurface.h>
@@ -96,6 +97,7 @@ private Q_SLOTS:
     void testNativePanel();
     void testNativePanelMirror_data();
     void testNativePanelMirror();
+    void testNativePanelRefresh();
 #endif
 
 private:
@@ -581,6 +583,112 @@ void ScreencastingTest::testNativePanelMirror()
     QTRY_VERIFY(!kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-mirror-phone")));
 }
 #endif
+
+void ScreencastingTest::testNativePanelRefresh()
+{
+    if (!qEnvironmentVariableIsSet("KWIN_PHONE_REFRESH_PROOF")) {
+        QSKIP("Opt-in VAAPI/RDP endurance proof needs the isolated GPU rig");
+    }
+    const QString directory = qEnvironmentVariable("KWIN_PHONE_REFRESH_PROOF");
+    const QSize sourceSize(1920, 1080);
+    const OutputModeline framePacking(sourceSize, 30000, OutputModeline::Flag::Stereo3DFramePacking);
+    Test::setOutputConfig({Test::OutputInfo{.geometry = Rect(QPoint(), sourceSize), .modes = {framePacking}}});
+    LogicalOutput *source = workspace()->outputs().front();
+    QVERIFY(source->hasStereoEyes());
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("WAYLAND_DISPLAY"), waylandServer()->socketName());
+    environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("wayland"));
+    environment.insert(QStringLiteral("KWIN_CAPTURE_LATENCY_PROOF"), QStringLiteral("1"));
+    QProcess producer, server, client, xvfb;
+    for (auto process : {&producer, &server, &client, &xvfb}) {
+        process->setProcessEnvironment(environment);
+    }
+    const auto cleanup = qScopeGuard([&] {
+        for (auto process : {&client, &server, &producer, &xvfb}) {
+            process->terminate();
+            if (!process->waitForFinished(5000)) {
+                process->kill();
+                process->waitForFinished();
+            }
+        }
+    });
+    producer.setStandardErrorFile(directory + QStringLiteral("/fixture.log"));
+    producer.setStandardOutputFile(directory + QStringLiteral("/markers.log"));
+    producer.start(QCoreApplication::applicationDirPath() + QStringLiteral("/capturefixture"),
+                   {directory + QStringLiteral("/chart.png"), QStringLiteral("1920"), QStringLiteral("1080"), QStringLiteral("stereo")});
+    Window *window = Test::waitForWaylandWindowShown();
+    QVERIFY(window);
+    window->move(source->geometry().topLeft());
+    QTimer animation;
+    int marker = 0;
+    connect(&animation, &QTimer::timeout, this, [&] {
+        producer.write(QByteArray(1, 'A' + ((marker++) % 15)));
+        waylandServer()->display()->flush();
+    });
+    animation.start(50);
+    xvfb.setStandardErrorFile(directory + QStringLiteral("/xvfb.log"));
+    xvfb.start(QStringLiteral("Xvfb"), {QStringLiteral(":7"), QStringLiteral("-screen"), QStringLiteral("0"), QStringLiteral("2400x1200x24"), QStringLiteral("-nolisten"), QStringLiteral("tcp")});
+    QVERIFY(xvfb.waitForStarted());
+    server.setStandardOutputFile(directory + QStringLiteral("/server.log"));
+    server.setProcessChannelMode(QProcess::MergedChannels);
+    server.start(QStringLiteral("krdpserver"), {QStringLiteral("--plasma"), QStringLiteral("--panel-descriptor"), directory + QStringLiteral("/panel.json"),
+        QStringLiteral("-u"), QStringLiteral("bench"), QStringLiteral("-p"), QStringLiteral("bench-pass"), QStringLiteral("--port"), QStringLiteral("3391"),
+        QStringLiteral("--certificate"), directory + QStringLiteral("/cert.pem"), QStringLiteral("--certificate-key"), directory + QStringLiteral("/key.pem")});
+    QVERIFY(server.waitForStarted());
+    environment.insert(QStringLiteral("DISPLAY"), QStringLiteral(":7"));
+    client.setProcessEnvironment(environment);
+    client.setStandardOutputFile(directory + QStringLiteral("/client.log"));
+    client.setProcessChannelMode(QProcess::MergedChannels);
+    const auto connectPhone = [&] {
+        client.start(QStringLiteral("xfreerdp3"), {QStringLiteral("/v:127.0.0.1:3391"), QStringLiteral("/u:bench"), QStringLiteral("/p:bench-pass"),
+            QStringLiteral("/cert:ignore"), QStringLiteral("/gfx:AVC420"), QStringLiteral("/size:2340x1080"), QStringLiteral("/bpp:32"),
+            QStringLiteral("/network:lan"), QStringLiteral("-grab-keyboard")});
+    };
+    QTest::qWait(2500);
+    connectPhone();
+    BackendOutput *panel = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT((panel = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-refresh-phone"))), 30000);
+    window->move(workspace()->findOutput(panel)->geometry().topLeft());
+    QFile steps(directory + QStringLiteral("/steps.log"));
+    QVERIFY(steps.open(QIODevice::WriteOnly));
+    QElapsedTimer elapsed;
+    elapsed.start();
+    const auto note = [&](const char *message) {
+        steps.write(QByteArray::number(elapsed.elapsed()) + ' ' + message + '\n');
+        steps.flush();
+    };
+    const auto mirror = [&](bool enabled) {
+        window->move(source->geometry().topLeft());
+        OutputConfiguration configuration;
+        configuration.changeSet(panel)->replicationSource = enabled ? source->backendOutput()->uuid() : QString();
+        QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+        QCOMPARE(workspace()->findOutput(panel) == source, enabled);
+        if (!enabled) {
+            window->move(workspace()->findOutput(panel)->geometry().topLeft());
+        }
+        note(enabled ? "mirror" : "independent");
+    };
+    note("connected-independent");
+    QTest::qWait(5000);
+    mirror(true);
+    QTest::qWait(20000);
+    mirror(false);
+    QTest::qWait(5000);
+    mirror(true);
+    QTest::qWait(5000);
+    note("disconnect");
+    client.terminate();
+    QVERIFY(client.waitForFinished(5000));
+    QTRY_VERIFY(!kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-refresh-phone")));
+    connectPhone();
+    QTRY_VERIFY_WITH_TIMEOUT((panel = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-refresh-phone"))), 30000);
+    mirror(true);
+    note("reconnected");
+    QTest::qWait(qEnvironmentVariableIntValue("KWIN_PHONE_REFRESH_SECONDS") * 1000);
+    note("complete");
+    QCOMPARE(server.state(), QProcess::Running);
+    QCOMPARE(client.state(), QProcess::Running);
+}
 
 void ScreencastingTest::testOutputCasting()
 {
