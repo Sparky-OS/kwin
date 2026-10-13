@@ -302,7 +302,7 @@ void OutputScreenCastSource::pause()
 
 bool OutputScreenCastSource::includesCursor(Cursor *cursor) const
 {
-    return cursor->isOnOutput(m_output);
+    return m_output && cursor->isOnOutput(m_output);
 }
 
 QPointF OutputScreenCastSource::mapFromGlobal(const QPointF &point) const

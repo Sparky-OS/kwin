@@ -113,7 +113,9 @@ void ScreencastingTest::init()
 
     QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::ScreencastingV1 | Test::AdditionalWaylandInterface::PresentationTime | Test::AdditionalWaylandInterface::StereoContentV1 | Test::AdditionalWaylandInterface::Viewporter));
     QVERIFY(KWin::Test::screencasting());
-    Cursors::self()->hideCursor();
+    if (!qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
+        Cursors::self()->hideCursor();
+    }
 }
 
 std::optional<QImage> ScreencastingTest::oneFrameAndClose(Test::ScreencastingStreamV1 *stream)
@@ -673,6 +675,10 @@ void ScreencastingTest::testNativePanelRefresh()
     };
     note("connected-independent");
     QTest::qWait(5000);
+    if (qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
+        const auto geometry = workspace()->findOutput(panel)->geometry();
+        Test::pointerMotion(QPointF(geometry.right() - 1, geometry.bottom() - 1), 1);
+    }
     mirror(true);
     QTest::qWait(5000);
     if (qEnvironmentVariableIsSet("KWIN_PHONE_LOCK_CYCLE")) {
