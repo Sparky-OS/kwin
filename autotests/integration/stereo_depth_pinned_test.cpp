@@ -188,7 +188,7 @@ void StereoDepthPinnedTest::init()
     QVERIFY(stereoOutput(true));
     options->setStereoSunkLimit(s_sunkLimit);
     options->setStereoPoppedLimit(s_poppedLimit);
-    s_background = createWindow(Qt::black, QPoint(), QString(), s_outputSize);
+    s_background = createWindow(Qt::black, QPoint(-32, -32), QString(), s_outputSize + QSize(64, 64));
     QVERIFY(s_background->window);
     s_background->window->setKeepBelow(true);
 }
@@ -235,6 +235,12 @@ void StereoDepthPinnedTest::testCursorFollowsWindowDepth()
         const int right = firstX(*image, s_outputSize.width(), 40, Qt::green);
         QVERIFY(left >= 0 && right >= 0);
         QCOMPARE(left - right, expected);
+        for (int y = 0; y < image->height(); ++y) {
+            for (int x = 0; x < image->width(); ++x) {
+                const QColor pixel = image->pixelColor(x, y);
+                QVERIFY(pixel == Qt::black || pixel == Qt::red || pixel == Qt::blue || pixel == Qt::green);
+            }
+        }
         const QString directory = qEnvironmentVariable("KWIN_CURSOR_DEPTH_PROOF");
         if (!directory.isEmpty()) {
             QVERIFY(image->save(directory + (above ? QStringLiteral("/cursor-popped.png") : QStringLiteral("/cursor-sunk.png"))));
