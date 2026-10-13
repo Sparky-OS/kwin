@@ -90,6 +90,15 @@ void ScreencastManager::streamVirtualOutput(ScreencastStreamV1Interface *stream,
     });
 }
 
+static std::optional<pid_t> getPid(ScreencastStreamV1Interface *waylandStream)
+{
+    if (waylandStream->connection()->executablePath().contains("xdg-desktop-portal-kde")) {
+        // HACK to avoid the portal's windows being hidden
+        return std::nullopt;
+    }
+    return waylandStream->connection()->processId();
+}
+
 void ScreencastManager::streamVirtualPanel(ScreencastStreamV1Interface *stream, const VirtualOutputProperties &properties, ScreencastV1Interface::CursorMode mode)
 {
     if (!isSupportedCompositingType()) {
@@ -112,7 +121,13 @@ void ScreencastManager::streamVirtualPanel(ScreencastStreamV1Interface *stream, 
     connect(stream, &ScreencastStreamV1Interface::finished, output, [backend, output] {
         backend->removeVirtualOutput(output);
     });
-    streamOutput(stream, logical, mode);
+
+    // the cast follows the panel, so it keeps streaming when the panel replicates another output
+    auto castStream = new ScreenCastStream(new OutputScreenCastSource(output, getPid(stream)), getPipewireConnection(), this);
+    castStream->setObjectName(output->name());
+    castStream->setCursorMode(mode);
+
+    integrateStreams(stream, castStream);
 }
 
 void ScreencastManager::streamWaylandOutput(ScreencastStreamV1Interface *waylandStream,
@@ -125,15 +140,6 @@ void ScreencastManager::streamWaylandOutput(ScreencastStreamV1Interface *wayland
     }
 
     streamOutput(waylandStream, output->handle(), mode);
-}
-
-static std::optional<pid_t> getPid(ScreencastStreamV1Interface *waylandStream)
-{
-    if (waylandStream->connection()->executablePath().contains("xdg-desktop-portal-kde")) {
-        // HACK to avoid the portal's windows being hidden
-        return std::nullopt;
-    }
-    return waylandStream->connection()->processId();
 }
 
 void ScreencastManager::streamOutput(ScreencastStreamV1Interface *waylandStream,

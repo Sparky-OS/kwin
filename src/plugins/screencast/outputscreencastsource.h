@@ -13,6 +13,7 @@
 namespace KWin
 {
 
+class BackendOutput;
 class FilteredSceneView;
 class ItemTreeView;
 class LogicalOutput;
@@ -24,6 +25,7 @@ class OutputScreenCastSource : public ScreenCastSource
 
 public:
     explicit OutputScreenCastSource(LogicalOutput *output, std::optional<pid_t> pidToHide);
+    explicit OutputScreenCastSource(BackendOutput *panel, std::optional<pid_t> pidToHide);
     ~OutputScreenCastSource() override;
 
     uint refreshRate() const override;
@@ -46,8 +48,14 @@ public:
 
 private:
     Region renderStereo(GLFramebuffer *target);
+    BackendOutput *backendOutput() const;
+    qreal renderScale() const;
+    QPoint renderOffset() const;
+    void updateView();
+    void followPanel();
 
     QPointer<LogicalOutput> m_output;
+    QPointer<BackendOutput> m_panel;
     std::optional<pid_t> m_pidToHide;
     std::unique_ptr<ScreencastLayer> m_layer;
     std::unique_ptr<FilteredSceneView> m_sceneView;
@@ -55,6 +63,7 @@ private:
     std::unique_ptr<GLTexture> m_eyeTexture;
     std::unique_ptr<GLFramebuffer> m_eyeFramebuffer;
     bool m_active = false;
+    bool m_resumeOnRebind = false;
     bool m_renderCursor = false;
 };
 

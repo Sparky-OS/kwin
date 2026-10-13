@@ -10,6 +10,7 @@
 #include "core/output.h"
 #include "core/outputbackend.h"
 #include "core/backendoutput.h"
+#include "core/outputconfiguration.h"
 #include "wayland-client/viewporter.h"
 #include "generic_scene_opengl_test.h"
 #include "opengl/glplatform.h"
@@ -93,6 +94,8 @@ private Q_SLOTS:
 #ifdef ZKDE_SCREENCAST_UNSTABLE_V1_STREAM_VIRTUAL_OUTPUT_WITH_PROPERTIES_SINCE_VERSION
     void testNativePanel_data();
     void testNativePanel();
+    void testNativePanelMirror_data();
+    void testNativePanelMirror();
 #endif
 
 private:
@@ -356,6 +359,226 @@ void ScreencastingTest::testNativePanel()
     stream.reset();
     QTRY_COMPARE(workspace()->outputs().size(), outputCount);
     QVERIFY(!kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-native-phone")));
+}
+
+void ScreencastingTest::testNativePanelMirror_data()
+{
+    QTest::addColumn<bool>("stereo");
+    QTest::newRow("mono-duplicated") << false;
+    QTest::newRow("declared-full-sbs") << true;
+}
+
+static QRect boundsOf(const QImage &image, const QRect &area, const std::function<bool(const QColor &)> &match)
+{
+    QRect bounds;
+    for (int y = area.top(); y <= area.bottom(); ++y) {
+        for (int x = area.left(); x <= area.right(); ++x) {
+            if (match(image.pixelColor(x, y))) {
+                bounds |= QRect(x, y, 1, 1);
+            }
+        }
+    }
+    return bounds;
+}
+
+static bool within(const QRect &measured, const QRect &expected, int tolerance)
+{
+    return std::abs(measured.left() - expected.left()) <= tolerance && std::abs(measured.top() - expected.top()) <= tolerance
+        && std::abs(measured.right() - expected.right()) <= tolerance && std::abs(measured.bottom() - expected.bottom()) <= tolerance;
+}
+
+static QString describe(const QRect &rect)
+{
+    return QStringLiteral("%1,%2 to %3,%4").arg(rect.left()).arg(rect.top()).arg(rect.right()).arg(rect.bottom());
+}
+
+void ScreencastingTest::testNativePanelMirror()
+{
+    // a split-eye panel that replicates a 3D monitor shows each eye's view of the monitor,
+    // scaled to fit the eye's viewport and centred, and keeps streaming across the change
+    QFETCH(bool, stereo);
+    const QSize sourceSize(1920, 1080);
+    const OutputModeline plainMode(sourceSize, 30000, OutputModeline::Flag::Preferred);
+    const OutputModeline framePacking(sourceSize, 30000, OutputModeline::Flag::Stereo3DFramePacking);
+    Test::setOutputConfig({Test::OutputInfo{
+        .geometry = Rect(QPoint(), sourceSize),
+        .modes = {plainMode, framePacking},
+    }});
+    const auto restoreOutputs = qScopeGuard([] {
+        Test::setOutputConfig({
+            Rect(0, 0, 1280, 1024),
+            Rect(1280, 0, 1280, 1024),
+        });
+    });
+    LogicalOutput *source = workspace()->outputs().front();
+    {
+        OutputConfiguration configuration;
+        configuration.changeSet(source->backendOutput())->currentMode = framePacking;
+        QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+    }
+    QVERIFY(source->hasStereoEyes());
+
+    // the monitor's content: red with a white block for the left eye, blue with the same block
+    // for the right eye; a 2D window gives the left picture to both eyes
+    const QRect block(896, 486, 128, 108);
+    QImage fixture(stereo ? QSize(sourceSize.width() * 2, sourceSize.height()) : sourceSize, QImage::Format_RGBA8888_Premultiplied);
+    fixture.fill(Qt::red);
+    {
+        QPainter painter(&fixture);
+        if (stereo) {
+            painter.fillRect(QRect(QPoint(sourceSize.width(), 0), sourceSize), Qt::blue);
+            painter.fillRect(block.translated(sourceSize.width(), 0), Qt::white);
+        }
+        painter.fillRect(block, Qt::white);
+    }
+    QTemporaryDir fixtureDirectory;
+    QVERIFY(fixtureDirectory.isValid());
+    const auto fixturePath = fixtureDirectory.filePath(QStringLiteral("fixture.png"));
+    QVERIFY(fixture.save(fixturePath));
+    QProcess producer;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("WAYLAND_DISPLAY"), waylandServer()->socketName());
+    producer.setProcessEnvironment(environment);
+    producer.setProgram(QCoreApplication::applicationDirPath() + QStringLiteral("/capturefixture"));
+    producer.setArguments({fixturePath, QString::number(sourceSize.width()), QString::number(sourceSize.height()), stereo ? QStringLiteral("stereo") : QStringLiteral("mono")});
+    const auto stopProducer = qScopeGuard([&] {
+        producer.terminate();
+        producer.waitForFinished();
+    });
+    producer.start();
+    Window *window = Test::waitForWaylandWindowShown();
+    QVERIFY2(window, producer.readAllStandardError().constData());
+    window->move(source->geometry().topLeft());
+    QCOMPARE(window->frameGeometry(), RectF(source->geometry()));
+
+    const QSize panelSize(2340, 1080);
+    const QSize eyeSize(1170, 1080);
+    const auto connectPanel = [&]() {
+        auto stream = std::make_unique<Test::ScreencastingStreamV1>(nullptr);
+        stream->init(Test::screencasting()->stream_virtual_output_with_properties(QStringLiteral("mirror-phone"), QStringLiteral("Mirror phone panel"),
+            panelSize.width(), panelSize.height(), 60000, wl_fixed_from_double(1), 150, 68, 1, QtWayland::zkde_screencast_unstable_v1::pointer_hidden));
+        return stream;
+    };
+    auto stream = connectPanel();
+    QSignalSpy created(stream.get(), &Test::ScreencastingStreamV1::created);
+    QSignalSpy failed(stream.get(), &Test::ScreencastingStreamV1::failed);
+    QSignalSpy closed(stream.get(), &Test::ScreencastingStreamV1::closed);
+    QVERIFY(created.wait());
+    BackendOutput *panel = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-mirror-phone"));
+    QVERIFY(panel);
+    QVERIFY(workspace()->findOutput(panel) != source);
+
+    {
+        OutputConfiguration configuration;
+        configuration.changeSet(panel)->replicationSource = source->backendOutput()->uuid();
+        QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+    }
+    QCOMPARE(workspace()->findOutput(panel), source);
+    // fit 1920x1080 into one eye's 1170x1080: scale 1170 / 1920, 658 rows, centred
+    const qreal scale = 1170.0 / 1920.0;
+    QCOMPARE(panel->scale(), scale);
+    QCOMPARE(panel->deviceOffset(), QPoint(0, 211));
+
+    auto receiver = std::make_unique<PipeWireSourceStream>();
+    std::optional<QImage> image;
+    const auto receive = [&](quint32 nodeId) {
+        receiver = std::make_unique<PipeWireSourceStream>();
+        receiver->setAllowDmaBuf(false);
+        connect(receiver.get(), &PipeWireSourceStream::frameReceived, this, [&](const PipeWireFrame &frame) {
+            if (frame.dataFrame) {
+                image = frame.dataFrame->toImage().convertedTo(QImage::Format_RGB32);
+            }
+        });
+        image.reset();
+        receiver->createStream(nodeId, 0);
+    };
+    receive(stream->nodeId());
+    QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
+    QCOMPARE(failed.count(), 0);
+    QCOMPARE(closed.count(), 0);
+    QCOMPARE(image->size(), panelSize);
+
+    const auto isBlack = [](const QColor &c) {
+        return c.red() < 8 && c.green() < 8 && c.blue() < 8;
+    };
+    const auto isWhite = [](const QColor &c) {
+        return c.red() > 247 && c.green() > 247 && c.blue() > 247;
+    };
+    const auto isRed = [](const QColor &c) {
+        return c.red() > 247 && c.green() < 8 && c.blue() < 8;
+    };
+    const auto isBlue = [](const QColor &c) {
+        return c.red() < 8 && c.green() < 8 && c.blue() > 247;
+    };
+    // the prediction: the picture at 0,211 and 1170x658 in each eye, the block scaled into it
+    const QRect picture(0, 211, 1170, 658);
+    const QRect whiteBlock(QPoint(std::ceil(block.left() * scale), 211 + std::ceil(block.top() * scale)),
+                           QPoint(std::ceil((block.right() + 1) * scale) - 1, 211 + std::ceil((block.bottom() + 1) * scale) - 1));
+    const auto checkMirror = [&](const QString &when) {
+        for (int eye = 0; eye < 2; ++eye) {
+            const QRect eyeArea(QPoint(eye * eyeSize.width(), 0), eyeSize);
+            const QRect content = boundsOf(*image, eyeArea, [&](const QColor &c) {
+                return !isBlack(c);
+            });
+            QVERIFY2(within(content, picture.translated(eyeArea.topLeft()), 1), qPrintable(QStringLiteral("%1 eye %2 picture %3").arg(when).arg(eye).arg(describe(content))));
+            const auto viewColour = eye == 0 || !stereo ? isRed : isBlue;
+            const QRect view = boundsOf(*image, eyeArea, viewColour);
+            QVERIFY2(within(view, picture.translated(eyeArea.topLeft()), 1), qPrintable(QStringLiteral("%1 eye %2 view %3").arg(when).arg(eye).arg(describe(view))));
+            const QRect white = boundsOf(*image, eyeArea, isWhite);
+            QVERIFY2(within(white, whiteBlock.translated(eyeArea.topLeft()), 1), qPrintable(QStringLiteral("%1 eye %2 block %3").arg(when).arg(eye).arg(describe(white))));
+            const auto otherColour = eye == 0 || !stereo ? isBlue : isRed;
+            QCOMPARE(boundsOf(*image, eyeArea, otherColour), QRect());
+            qInfo() << when << "eye" << eye << "picture" << describe(content) << "view" << describe(view) << "block" << describe(white)
+                    << "predicted picture" << describe(picture.translated(eyeArea.topLeft())) << "block" << describe(whiteBlock.translated(eyeArea.topLeft()));
+        }
+    };
+    checkMirror(QStringLiteral("mirrored"));
+    if (QTest::currentTestFailed()) {
+        return;
+    }
+    const QString proofDirectory = qEnvironmentVariable("KWIN_PHONE_PROOF_DIR");
+    if (!proofDirectory.isEmpty()) {
+        QVERIFY(QDir().mkpath(proofDirectory));
+        QVERIFY(image->save(proofDirectory + (stereo ? QStringLiteral("/mirror-stereo.png") : QStringLiteral("/mirror-mono.png"))));
+    }
+
+    // the phone reconnects: the panel comes back replicating, as it was left, and streams the same picture
+    receiver->stopStreaming();
+    stream.reset();
+    QTRY_VERIFY(!kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-mirror-phone")));
+    stream = connectPanel();
+    QSignalSpy recreated(stream.get(), &Test::ScreencastingStreamV1::created);
+    QSignalSpy reclosed(stream.get(), &Test::ScreencastingStreamV1::closed);
+    QVERIFY(recreated.wait());
+    panel = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-mirror-phone"));
+    QVERIFY(panel);
+    QCOMPARE(workspace()->findOutput(panel), source);
+    QCOMPARE(panel->deviceOffset(), QPoint(0, 211));
+    receive(stream->nodeId());
+    QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
+    QCOMPARE(image->size(), panelSize);
+    checkMirror(QStringLiteral("reconnected"));
+    if (QTest::currentTestFailed()) {
+        return;
+    }
+
+    // ending the replication gives the panel its own desktop again, on the same stream
+    {
+        OutputConfiguration configuration;
+        configuration.changeSet(panel)->replicationSource = QString();
+        QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+    }
+    QVERIFY(workspace()->findOutput(panel) != source);
+    QCOMPARE(panel->deviceOffset(), QPoint());
+    image.reset();
+    QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
+    QCOMPARE(image->size(), panelSize);
+    QCOMPARE(reclosed.count(), 0);
+    QCOMPARE(boundsOf(*image, QRect(QPoint(), panelSize), isRed), QRect());
+
+    receiver->stopStreaming();
+    stream.reset();
+    QTRY_VERIFY(!kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-mirror-phone")));
 }
 #endif
 
