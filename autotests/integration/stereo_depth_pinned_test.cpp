@@ -7,11 +7,13 @@
 #include "kwin_wayland_test.h"
 
 #include "core/output.h"
+#include "cursor.h"
 #include "core/outputconfiguration.h"
 #include "effect/effectloader.h"
 #include "options.h"
 #include "plugins/screenshot/screenshot.h"
 #include "rules.h"
+#include "scene/workspacescene.h"
 #include "wayland_server.h"
 #include "window.h"
 #include "workspace.h"
@@ -19,6 +21,9 @@
 #include <KConfigGroup>
 #include <KSharedConfig>
 #include <KWayland/Client/surface.h>
+#include <KWayland/Client/pointer.h>
+#include <KWayland/Client/seat.h>
+#include <KWayland/Client/shm_pool.h>
 
 #include <QDir>
 
@@ -41,6 +46,7 @@ private Q_SLOTS:
     void cleanup();
 
     void testNothingPinned();
+    void testCursorFollowsWindowDepth();
     void testKeepAboveStaysPopped();
     void testKeepBelowStaysSunk();
     void testUnpinReturnsToTheNormalRule();
@@ -76,7 +82,9 @@ struct TestWindow
     QPoint position;
 };
 
-static TestWindow createWindow(const QColor &color, const QPoint &position, const QString &appId = QString())
+static std::optional<TestWindow> s_background;
+
+static TestWindow createWindow(const QColor &color, const QPoint &position, const QString &appId = QString(), const QSize &size = QSize(40, 40))
 {
     TestWindow result;
     result.color = color;
@@ -86,7 +94,7 @@ static TestWindow createWindow(const QColor &color, const QPoint &position, cons
     if (!appId.isEmpty()) {
         result.shellSurface->set_app_id(appId);
     }
-    result.window = Test::renderAndWaitForShown(result.surface.get(), QSize(40, 40), color);
+    result.window = Test::renderAndWaitForShown(result.surface.get(), size, color);
     if (result.window) {
         result.window->move(position);
     }
@@ -116,10 +124,16 @@ static int parallaxOf(const QImage &image, const TestWindow &window)
     return left - right;
 }
 
-static std::optional<QImage> capture()
+static std::optional<QImage> capture(bool includeCursor = false)
 {
+    QSignalSpy rendered(kwinApp()->scene(), &WorkspaceScene::frameRendered);
+    kwinApp()->scene()->addRepaintFull();
+    if (!rendered.wait()) {
+        return std::nullopt;
+    }
+    QTest::qWait(100);
     ScreenShotManager manager;
-    return manager.takeScreenShot(workspace()->outputs().front(), {}, std::nullopt);
+    return manager.takeScreenShot(workspace()->outputs().front(), includeCursor ? ScreenShotFlags(ScreenShotIncludeCursor) : ScreenShotFlags(), std::nullopt);
 }
 
 static bool stereoOutput(bool enabled)
@@ -153,6 +167,9 @@ void StereoDepthPinnedTest::initTestCase()
     for (const QString &name : builtinNames) {
         plugins.writeEntry(name + QStringLiteral("Enabled"), false);
     }
+    KConfigGroup depth(config, QStringLiteral("StereoDepth"));
+    depth.writeEntry("SunkLimit", s_sunkLimit);
+    depth.writeEntry("PoppedLimit", s_poppedLimit);
     config->sync();
     kwinApp()->setConfig(config);
 
@@ -167,19 +184,62 @@ void StereoDepthPinnedTest::init()
         .geometry = Rect(QPoint(), s_outputSize),
         .modes = {plainMode(), stereoMode()},
     }});
-    QVERIFY(Test::setupWaylandConnection());
+    QVERIFY(Test::setupWaylandConnection(qstrcmp(QTest::currentTestFunction(), "testCursorFollowsWindowDepth") == 0 ? Test::AdditionalWaylandInterfaces(Test::AdditionalWaylandInterface::Seat) : Test::AdditionalWaylandInterfaces()));
     QVERIFY(stereoOutput(true));
     options->setStereoSunkLimit(s_sunkLimit);
     options->setStereoPoppedLimit(s_poppedLimit);
+    s_background = createWindow(Qt::black, QPoint(), QString(), s_outputSize);
+    QVERIFY(s_background->window);
+    s_background->window->setKeepBelow(true);
 }
 
 void StereoDepthPinnedTest::cleanup()
 {
+    s_background.reset();
     Test::destroyWaylandConnection();
+    QTRY_VERIFY(workspace()->windows().isEmpty());
     for (const QString &group : s_rulesConfig->groupList()) {
         s_rulesConfig->deleteGroup(group);
     }
     workspace()->slotReconfigure();
+}
+
+void StereoDepthPinnedTest::testCursorFollowsWindowDepth()
+{
+    const TestWindow a = createWindow(Qt::red, QPoint(20, 20));
+    const TestWindow b = createWindow(Qt::blue, QPoint(140, 20));
+    QVERIFY(a.window && b.window);
+    activate(b);
+    std::unique_ptr<KWayland::Client::Pointer> pointer(Test::waylandSeat()->createPointer());
+    QSignalSpy entered(pointer.get(), &KWayland::Client::Pointer::entered);
+    Test::pointerMotion(QPointF(40, 40), 1);
+    QVERIFY(entered.wait());
+    auto cursorSurface = Test::createSurface();
+    QImage green(QSize(10, 10), QImage::Format_ARGB32_Premultiplied);
+    green.fill(Qt::green);
+    cursorSurface->attachBuffer(Test::waylandShmPool()->createBuffer(green));
+    cursorSurface->damage(green.rect());
+    cursorSurface->commit();
+    pointer->setCursor(cursorSurface.get(), QPoint(5, 5));
+    Test::flushWaylandConnection();
+    QTRY_COMPARE(kwinApp()->cursorImage().image().convertToFormat(green.format()), green);
+    for (bool above : {false, true}) {
+        a.window->setKeepAbove(above);
+        QVERIFY(Test::waylandSync());
+        QCOMPARE(a.window->keepAbove(), above);
+        auto image = capture(true);
+        QVERIFY(image);
+        const int expected = above ? s_popped : s_sunk;
+        QCOMPARE(parallaxOf(*image, a), expected);
+        const int left = firstX(*image, 0, 40, Qt::green);
+        const int right = firstX(*image, s_outputSize.width(), 40, Qt::green);
+        QVERIFY(left >= 0 && right >= 0);
+        QCOMPARE(left - right, expected);
+        const QString directory = qEnvironmentVariable("KWIN_CURSOR_DEPTH_PROOF");
+        if (!directory.isEmpty()) {
+            QVERIFY(image->save(directory + (above ? QStringLiteral("/cursor-popped.png") : QStringLiteral("/cursor-sunk.png"))));
+        }
+    }
 }
 
 void StereoDepthPinnedTest::testNothingPinned()
