@@ -114,18 +114,41 @@ def expected(mode, swap=False):
     width = 2 * W if mode == 'sbs-full' else W
     height = 2 * H + PACKING_GAP if mode == 'frame-packing' else H
     image = Image.new('RGB', (width, height))
+    if PALETTE:
+        if mode == 'sbs':
+            regions = [(0, 0, W // 2, H), (W // 2, 0, W // 2, H)]
+        elif mode == 'tab':
+            regions = [(0, 0, W, H // 2), (0, H // 2, W, H // 2)]
+        elif mode == 'sbs-full':
+            regions = [(0, 0, W, H), (W, 0, W, H)]
+        elif mode == 'frame-packing':
+            regions = [(0, 0, W, H), (0, H + PACKING_GAP, W, H)]
+        else:
+            regions = [(0, 0, width, height)]
+        for x, y, w, h in regions:
+            image.paste(periodic_image(w, h, lambda xx, yy: pixel(mode, x + xx, y + yy, swap)), (x, y))
+        return image
     image.putdata([pixel(mode, x, y, swap) for y in range(height) for x in range(width)])
     return image
+
+
+def periodic_image(width, height, sample):
+    """Expand an independently computed 2x2 tile for the periodic palette input."""
+    rows = [bytes(sample(0, y) + sample(1, y)) * ((width + 1) // 2) for y in range(2)]
+    data = (rows[0][:width * 3] + rows[1][:width * 3]) * ((height + 1) // 2)
+    return Image.frombytes('RGB', (width, height), data[:width * height * 3])
 
 
 def difference(actual, prediction):
     if actual.size != prediction.size:
         return {'size_mismatch': [list(actual.size), list(prediction.size)]}
     diff = ImageChops.difference(actual, prediction)
-    values = list(diff.getdata())
-    return {'pixels': len(values), 'different_pixels': sum(any(v) for v in values),
-            'over_one_lsb_pixels': sum(max(v) > 1 for v in values),
-            'max_channel_error': max(map(max, values))}
+    red, green, blue = diff.split()
+    maximum = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+    histogram = maximum.histogram()
+    return {'pixels': actual.width * actual.height, 'different_pixels': sum(histogram[1:]),
+            'over_one_lsb_pixels': sum(histogram[2:]),
+            'max_channel_error': maximum.getextrema()[1]}
 
 
 def capture_path(folder, tag):

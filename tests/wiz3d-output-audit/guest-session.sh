@@ -9,7 +9,7 @@ mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 case_set=$(cat /tmp/work/rig/case-set 2>/dev/null || echo matrix)
 if [ "$case_set" = swap-matrix ] && [ -z "${AUDIT_CASE:-}" ]; then
-    probes=$(cat /tmp/work/rig/swap-probes 2>/dev/null || echo 'rows-left rows-right columns-left columns-right checker-left checker-right anaglyph-modern anaglyph-crt sbs tab sbs-full frame-packing 2d pair-dual pair-mirror-h pair-mirror-v pair-ized')
+    probes=$(cat /tmp/work/rig/swap-probes 2>/dev/null || echo 'rows-left rows-right columns-left columns-right checker-left checker-right anaglyph-modern anaglyph-crt sbs tab sbs-full frame-packing 2d 2d-mono pair-dual pair-mirror-h pair-mirror-v pair-ized')
     for probe in $probes; do
         export AUDIT_CASE=$probe
         export XDG_CONFIG_HOME=/tmp/config-$probe XDG_CACHE_HOME=/tmp/cache-$probe
@@ -51,16 +51,36 @@ fi
 ./control enable > "$out/enable.txt" 2>&1 || exit 3
 ./control list > "$out/modes.txt" 2>&1
 if [ "$case_set" = swap-settings ]; then
+    ./control mode 0x100 > "$out/config.txt" 2>&1 || exit 3
+    PALETTE_FIXTURE=1 HOLD_SECONDS=300 ./fixture > "$out/client-static.log" 2>&1 &
+    client=$!
+    count=0
+    while ! grep -q '^fullscreen ' "$out/client-static.log" && [ "$count" -lt 120 ] && kill -0 "$client" 2>/dev/null; do
+        sleep 1
+        count=$((count+1))
+    done
+    if ! grep -q '^fullscreen ' "$out/client-static.log"; then exit 4; fi
+    ./drm-grab /dev/dri/card0 "$out/static-initial.ppm" > "$out/grab-static-initial.txt" 2>&1 || exit 4
     LD_LIBRARY_PATH=/tmp/work/rig/ui/lib QT_PLUGIN_PATH=/tmp/work/rig/ui/plugins KSCREEN_BACKEND_INPROCESS=1 KSCREEN_BACKEND=KWayland \
-        /tmp/work/rig/ui/swap-settings > "$out/settings-roundtrip.log" 2>&1
+        /tmp/work/rig/ui/swap-settings "$out" > "$out/settings-roundtrip.log" 2>&1
     result=$?
     echo "$result" > "$out/settings-roundtrip.exit"
+    kill "$client"
+    wait "$client"
     kill "$kp"
     wait "$kp"
     exit "$result"
 fi
 shoot() {
     tag=$1
+    second_client=
+    case "${AUDIT_CASE:-}" in 2d*)
+        FIXTURE_OUTPUT=HDMI-A-2 HOLD_SECONDS=180 ./fixture > "$out/client-$tag-second.log" 2>&1 &
+        second_client=$!
+        export FIXTURE_OUTPUT=HDMI-A-1
+        if [ "$AUDIT_CASE" = 2d-mono ]; then export MONO_FIXTURE=1; fi
+        ;;
+    esac
     HOLD_SECONDS=180 WAYLAND_DEBUG=client ./fixture > "$out/client-$tag.log" 2>&1 &
     client=$!
     count=0
@@ -81,6 +101,14 @@ shoot() {
         dmesg > "$out/kernel.log"
         exit 4
     fi
+    if [ -n "$second_client" ]; then
+        count=0
+        while ! grep -q '^fullscreen ' "$out/client-$tag-second.log" && [ "$count" -lt 120 ] && kill -0 "$second_client" 2>/dev/null; do
+            sleep 1
+            count=$((count+1))
+        done
+        if ! grep -q '^fullscreen ' "$out/client-$tag-second.log"; then exit 4; fi
+    fi
     count=0
     while [ "$count" -lt 15 ]; do
         sleep 1
@@ -88,7 +116,7 @@ shoot() {
         if grep -Eq '^nonblack [1-9]' "$out/grab-$tag.txt"; then break; fi
         count=$((count+1))
     done
-    case "$tag" in pair*) ./drm-grab /dev/dri/card0 "$out/$tag-second.ppm" 1 > "$out/grab-$tag-second.txt" 2>&1 ;; esac
+    case "$tag" in pair*|2d*) ./drm-grab /dev/dri/card0 "$out/$tag-second.ppm" 1 > "$out/grab-$tag-second.txt" 2>&1 ;; esac
     case "$tag" in sequential*)
         ./drm-flipwatch /dev/dri/card0 HDMI-A-1 40 > "$out/flip-$tag.txt" 2>&1
         ./drm-flipwatch /dev/dri/card0 HDMI-A-1 120 100000 > "$out/poll-$tag.txt" 2>&1
@@ -96,6 +124,8 @@ shoot() {
     esac
     kill "$client"
     wait "$client"
+    if [ -n "$second_client" ]; then kill "$second_client"; wait "$second_client"; fi
+    unset FIXTURE_OUTPUT MONO_FIXTURE
 }
 if [ "$case_set" = swap-matrix ]; then
     export PALETTE_FIXTURE=1
@@ -105,12 +135,13 @@ if [ "$case_set" = swap-matrix ]; then
         checker-left) flag=0x1000 ;; checker-right) flag=0x2000 ;;
         anaglyph-modern) flag=0x40 ;; anaglyph-crt) flag=0x80 ;;
         sbs) flag=4 ;; tab) flag=8 ;; sbs-full) flag=0x20 ;;
-        frame-packing) flag=0x10 ;; 2d) flag=0 ;;
+        frame-packing) flag=0x10 ;; 2d|2d-mono) flag=0 ;;
         pair-dual) set -- 1 0 0 ;; pair-mirror-h) set -- 2 0 1 ;;
         pair-mirror-v) set -- 2 0 2 ;; pair-ized) set -- 3 0 0 ;;
         *) exit 2 ;;
     esac
     case "$AUDIT_CASE" in
+        2d*) ./control mixed > "$out/config.txt" 2>&1 || exit 3 ;;
         pair*) ./control pair "$@" > "$out/config.txt" 2>&1 || exit 3 ;;
         sbs-full) ./control mode "$flag" 1920 1080 > "$out/config.txt" 2>&1 || exit 3 ;;
         frame-packing) ./control mode "$flag" 1280 720 > "$out/config.txt" 2>&1 || exit 3 ;;

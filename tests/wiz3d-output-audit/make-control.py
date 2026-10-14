@@ -132,6 +132,13 @@ int main(int argc, char **argv) {
             kde_output_configuration_v2_set_stereo_pair(c,devices[i].object,NULL,0,0,0);
             kde_output_configuration_v2_enable(c,devices[i].object,0);
         }
+    } else if (!strcmp(argv[1],"mixed") && nd==2) {
+        for (int i=0;i<2;i++) {
+            kde_output_configuration_v2_enable(c,devices[i].object,1);
+            kde_output_configuration_v2_set_stereo_pair(c,devices[i].object,NULL,0,0,0);
+            kde_output_configuration_v2_mode(c,devices[i].object,choose(i,i?0x100:0));
+            kde_output_configuration_v2_position(c,devices[i].object,i*640,0);
+        }
     } else if (!strcmp(argv[1],"pair") && argc==5 && nd==2) {
         int kind=atoi(argv[2]);
         for (int i=0;i<2;i++) {

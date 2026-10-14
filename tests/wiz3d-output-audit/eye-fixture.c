@@ -19,6 +19,10 @@
 #include "stereo-client.h"
 #include "viewporter-client.h"
 
+struct fixture_output { struct wl_output *object; char name[128]; };
+static struct fixture_output outputs[8];
+static int output_count;
+
 struct state {
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
@@ -66,12 +70,27 @@ static const struct xdg_toplevel_listener toplevel_listener = {
 	.close = toplevel_close,
 };
 
+static void output_geometry(void *d, struct wl_output *o, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sub, const char *make, const char *model, int32_t transform) {}
+static void output_mode(void *d, struct wl_output *o, uint32_t flags, int32_t w, int32_t h, int32_t hz) {}
+static void output_done(void *d, struct wl_output *o) {}
+static void output_scale(void *d, struct wl_output *o, int32_t scale) {}
+static void output_name(void *d, struct wl_output *o, const char *name) { snprintf(((struct fixture_output *)d)->name, 128, "%s", name); }
+static void output_description(void *d, struct wl_output *o, const char *description) {}
+static const struct wl_output_listener output_listener = {
+    .geometry=output_geometry, .mode=output_mode, .done=output_done, .scale=output_scale,
+    .name=output_name, .description=output_description,
+};
+
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name,
 			    const char *interface, uint32_t version)
 {
 	struct state *state = data;
 
-	if (!strcmp(interface, wl_compositor_interface.name))
+	if (!strcmp(interface, wl_output_interface.name) && version >= 4 && output_count < 8) {
+        struct fixture_output *output = &outputs[output_count++];
+        output->object = wl_registry_bind(registry, name, &wl_output_interface, 4);
+        wl_output_add_listener(output->object, &output_listener, output);
+    } else if (!strcmp(interface, wl_compositor_interface.name))
 		state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
 	else if (!strcmp(interface, wl_shm_interface.name))
 		state->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
@@ -116,20 +135,27 @@ int main(void)
 		return 1;
 	wl_registry_add_listener(wl_display_get_registry(display), &registry_listener, &state);
 	wl_display_roundtrip(display);
+	wl_display_roundtrip(display);
 	if (!state.compositor || !state.shm || !state.wm_base || !state.stereo || !state.viewporter)
 		return 1;
 	xdg_wm_base_add_listener(state.wm_base, &wm_listener, &state);
 
 	struct wl_surface *surface = wl_compositor_create_surface(state.compositor);
 	struct kde_stereo_content_v1 *declaration = kde_stereo_content_manager_v1_create(state.stereo, surface);
-	kde_stereo_content_v1_set_content(declaration, KDE_STEREO_CONTENT_V1_CONTENT_SIDE_BY_SIDE_FULL);
+	if (!getenv("MONO_FIXTURE"))
+		kde_stereo_content_v1_set_content(declaration, KDE_STEREO_CONTENT_V1_CONTENT_SIDE_BY_SIDE_FULL);
 	struct xdg_surface *xdg_surface = xdg_wm_base_get_xdg_surface(state.wm_base, surface);
 	struct xdg_toplevel *toplevel = xdg_surface_get_toplevel(xdg_surface);
 
 	xdg_surface_add_listener(xdg_surface, &surface_listener, &state);
 	xdg_toplevel_add_listener(toplevel, &toplevel_listener, &state);
 	xdg_toplevel_set_title(toplevel, "wiz3D audit LEFT red RIGHT blue");
-	xdg_toplevel_set_fullscreen(toplevel, NULL);
+    struct wl_output *target = NULL;
+    const char *target_name = getenv("FIXTURE_OUTPUT");
+    for (int i = 0; target_name && i < output_count; ++i)
+        if (!strcmp(target_name, outputs[i].name)) target = outputs[i].object;
+    if (target_name && !target) return 2;
+	xdg_toplevel_set_fullscreen(toplevel, target);
 	wl_surface_commit(surface);
 	while (!state.configured)
 		if (wl_display_dispatch(display) < 0)
@@ -139,7 +165,7 @@ int main(void)
 	struct wp_viewport *viewport = wp_viewporter_get_viewport(state.viewporter, surface);
 	wp_viewport_set_destination(viewport, state.width, state.height);
 	xdg_surface_set_window_geometry(xdg_surface, 0, 0, state.width, state.height);
-	state.width *= 2;
+	if (!getenv("MONO_FIXTURE")) state.width *= 2;
 	stride = state.width * 4;
 	size = stride * state.height;
 	fd = memfd_create("gradient", MFD_CLOEXEC);

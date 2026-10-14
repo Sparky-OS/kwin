@@ -94,7 +94,18 @@ It uses a second coordinate-tagged palette with unequal eye luminances, selected
 Each mode is captured with exchange off and then on; each pair is also captured with only its first output exchanged before enabling the second output's exchange.
 The control client requires the version-26 request and checks the returned setting event after applying it.
 The extended synthetic EDID includes full side-by-side at 1920×1080; frame packing uses 1280×720 with the declared vertical interval.
-`check-swap.py` checks every capture against the palette oracle, including preserved RightFirst modes and unchanged 2D.
+`check-swap.py` checks every capture against the palette oracle, including preserved RightFirst modes, eye selection on 2D outputs, and unchanged ordinary 2D content.
 For anaglyph exchange it models the existing KWin gamma-2.2 path, whose difference from wiz3D's piecewise-sRGB path is already recorded in milestone 1.
 The checker requires exact equality, with no one-LSB tolerance.
 This matrix does not certify shutter timing or change its scheduling.
+
+The `2d` case enables a 2D output beside a rows output and maps a separate declared fixture on each named connector.
+It captures both outputs with the 2D output's swap off and on.
+The `2d-mono` case repeats this with undeclared 2D content on the first output, which must remain unchanged.
+`FIXTURE_OUTPUT` selects the fixture connector; `MONO_FIXTURE` selects its ordinary 2D control.
+Optional whitespace-separated names in `rig/swap-probes` restrict a run; pass the same names after the evidence folder to `check-swap.py` when checking a subset.
+Retain the run's control, fixture and guest script snapshots beside its binary hashes.
+
+`swap-settings` keeps one rows fixture mapped and changes its setting through the newly built libkscreen backend.
+The initial, exchanged and restored captures test repainting without new client damage.
+Build `swap-settings.cpp` against the candidate libkscreen, supply that library and its KWayland plugin in `rig/ui/`, then run the case with its own evidence folder.
