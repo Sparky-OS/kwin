@@ -120,6 +120,7 @@ void VirtualOutput::applyChanges(const OutputConfiguration &config)
     next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
+    next.headsetView = props->headsetView.value_or(m_state.headsetView);
     if (props->customModes.has_value()) {
         next.customModes = *props->customModes;
 

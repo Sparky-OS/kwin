@@ -16,6 +16,8 @@
 // kwin
 #include "compositor.h"
 #include "core/output.h"
+#include "core/outputbackend.h"
+#include "core/outputconfiguration.h"
 #include "core/renderbackend.h"
 #include "debug_console.h"
 #include "kwinadaptor.h"
@@ -74,6 +76,49 @@ void DBusInterface::killWindow()
 QString DBusInterface::supportInformation()
 {
     return Workspace::self()->supportInformation();
+}
+
+QVariantMap DBusInterface::headsetViews()
+{
+    QVariantMap result;
+    for (BackendOutput *output : kwinApp()->outputBackend()->outputs()) {
+        if (!output->isSplitEyeDisplay()) {
+            continue;
+        }
+        const auto view = output->headsetView();
+        const auto logical = workspace()->findOutput(output);
+        result.insert(output->uuid(), QVariantMap{
+            {QStringLiteral("name"), output->name()},
+            {QStringLiteral("sourceWidth"), logical ? logical->geometry().width() : 0},
+            {QStringLiteral("sourceHeight"), logical ? logical->geometry().height() : 0},
+            {QStringLiteral("eyeWidth"), output->viewSize().width()},
+            {QStringLiteral("eyeHeight"), output->viewSize().height()},
+            {QStringLiteral("mode"), int(view.mode)},
+            {QStringLiteral("zoom"), view.zoom},
+            {QStringLiteral("centerX"), view.center.x()},
+            {QStringLiteral("centerY"), view.center.y()},
+            {QStringLiteral("followPointer"), view.followPointer},
+            {QStringLiteral("centerActiveWindow"), view.centerActiveWindow},
+        });
+    }
+    return result;
+}
+
+bool DBusInterface::setHeadsetView(const QString &outputUuid, int mode, double zoom, double centerX, double centerY, bool followPointer, bool centerActiveWindow)
+{
+    HeadsetView view{HeadsetView::Mode(mode), zoom, QPointF(centerX, centerY), followPointer, centerActiveWindow};
+    if (!view.isValid()) {
+        return false;
+    }
+    for (BackendOutput *output : kwinApp()->outputBackend()->outputs()) {
+        if (output->uuid() == outputUuid && output->isSplitEyeDisplay()) {
+            OutputConfiguration configuration;
+            configuration.source = OutputConfiguration::Source::User;
+            configuration.changeSet(output)->headsetView = view;
+            return workspace()->applyOutputConfiguration(configuration) == OutputConfigurationError::None;
+        }
+    }
+    return false;
 }
 
 QString DBusInterface::activeOutputName()

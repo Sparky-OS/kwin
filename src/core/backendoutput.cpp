@@ -433,6 +433,7 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
+    next.headsetView = props->headsetView.value_or(m_state.headsetView);
 
     setState(next);
 
@@ -576,6 +577,9 @@ void BackendOutput::setState(const State &state)
     }
     if (oldState.priority != state.priority) {
         Q_EMIT priorityChanged();
+    }
+    if (oldState.headsetView != state.headsetView) {
+        Q_EMIT headsetViewChanged();
     }
     if (oldState.deviceOffset != state.deviceOffset) {
         Q_EMIT deviceOffsetChanged();
@@ -914,6 +918,11 @@ uint32_t BackendOutput::priority() const
 double BackendOutput::scaleSetting() const
 {
     return m_state.scaleSetting;
+}
+
+HeadsetView BackendOutput::headsetView() const
+{
+    return m_state.headsetView;
 }
 
 QPoint BackendOutput::deviceOffset() const

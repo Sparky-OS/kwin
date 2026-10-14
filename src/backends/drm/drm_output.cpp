@@ -671,6 +671,7 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->sharpnessSetting = props->sharpness.value_or(m_state.sharpnessSetting);
     m_nextState->priority = props->priority.value_or(m_state.priority);
     m_nextState->deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
+    m_nextState->headsetView = props->headsetView.value_or(m_state.headsetView);
     m_nextState->automaticBrightness = props->automaticBrightness.value_or(m_state.automaticBrightness);
     m_nextState->lastBrightnessAdjustmentReason = props->brightnessReason.value_or(m_state.lastBrightnessAdjustmentReason);
     m_nextState->autoBrightnessCurve = props->autoBrightnessCurve.value_or(m_state.autoBrightnessCurve);

@@ -58,6 +58,8 @@ public Q_SLOTS: // METHODS
     bool setCurrentDesktop(int desktop);
     QString supportInformation();
     QString activeOutputName();
+    QVariantMap headsetViews();
+    bool setHeadsetView(const QString &outputUuid, int mode, double zoom, double centerX, double centerY, bool followPointer, bool centerActiveWindow);
     Q_NOREPLY void showDebugConsole();
 
     /**

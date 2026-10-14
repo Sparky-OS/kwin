@@ -8,6 +8,8 @@
 */
 #pragma once
 
+#include "headsetview.h"
+
 #include "output.h"
 
 class QJsonArray;
@@ -362,6 +364,7 @@ public:
      * used for creating black bars while mirroring.
      */
     QPoint deviceOffset() const;
+    HeadsetView headsetView() const;
 
     bool anaglyph() const;
     bool otherStereoFormats() const;
@@ -385,6 +388,7 @@ Q_SIGNALS:
      */
     void scaleSettingChanged();
     void deviceOffsetChanged();
+    void headsetViewChanged();
 
     /**
      * Notifies that the output is about to change configuration based on a
@@ -540,6 +544,7 @@ protected:
         uint32_t abmLevel = 0;
         bool anaglyph = false;
         bool otherStereoFormats = false;
+        HeadsetView headsetView;
     };
 
     void setInformation(const Information &information);

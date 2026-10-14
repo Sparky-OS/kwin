@@ -2,3 +2,5 @@ add_subdirectory(dialoghelper)
 add_subdirectory(killer)
 add_subdirectory(wayland_wrapper)
 add_subdirectory(kwindowprop)
+
+add_subdirectory(headset-view)

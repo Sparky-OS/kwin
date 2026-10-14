@@ -81,6 +81,7 @@ public:
     std::optional<uint32_t> abmLevel;
     std::optional<bool> anaglyph;
     std::optional<bool> otherStereoFormats;
+    std::optional<HeadsetView> headsetView;
 };
 
 class KWIN_EXPORT OutputConfiguration

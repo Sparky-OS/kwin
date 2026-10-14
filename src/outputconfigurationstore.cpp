@@ -422,6 +422,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
             .abmLevel = output->abmLevel(),
             .anaglyph = output->anaglyph(),
             .otherStereoFormats = output->otherStereoFormats(),
+            .headsetView = output->isSplitEyeDisplay() ? std::make_optional(output->headsetView()) : std::nullopt,
         };
         *outputIt = SetupState{
             .outputIndex = *outputIndex,
@@ -532,6 +533,7 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .abmLevel = state.abmLevel,
             .anaglyph = state.anaglyph,
             .otherStereoFormats = output->initialVirtualMode() ? output->isSplitEyeDisplay() : state.otherStereoFormats,
+            .headsetView = state.headsetView,
         };
     }
     return ret;
@@ -1243,6 +1245,18 @@ void OutputConfigurationStore::load()
         if (const auto it = data.find("uuid"); it != data.end() && !it->toString().isEmpty()) {
             state.uuid = it->toString();
         }
+        if (const auto it = data.find("headsetView"); it != data.end() && it->isObject()) {
+            const auto value = it->toObject();
+            HeadsetView view;
+            view.mode = HeadsetView::Mode(value["mode"].toInt());
+            view.zoom = value["zoom"].toDouble(1.0);
+            view.center = QPointF(value["centerX"].toDouble(0.5), value["centerY"].toDouble(0.5));
+            view.followPointer = value["followPointer"].toBool(true);
+            view.centerActiveWindow = value["centerActiveWindow"].toBool(false);
+            if (view.isValid()) {
+                state.headsetView = view;
+            }
+        }
         if (const auto it = data.find("stereoPartner"); it != data.end() && !it->toString().isEmpty()) {
             state.stereoPartner = it->toString();
         }
@@ -1594,6 +1608,14 @@ void OutputConfigurationStore::save()
         }
         if (output.uuid.has_value()) {
             o["uuid"] = *output.uuid;
+        }
+        if (output.headsetView) {
+            const auto &view = *output.headsetView;
+            o["headsetView"] = QJsonObject{
+                {"mode", int(view.mode)}, {"zoom", view.zoom},
+                {"centerX", view.center.x()}, {"centerY", view.center.y()},
+                {"followPointer", view.followPointer}, {"centerActiveWindow", view.centerActiveWindow},
+            };
         }
         if (output.stereoPartner && !output.stereoPartner->isEmpty()) {
             o["stereoPartner"] = *output.stereoPartner;

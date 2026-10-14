@@ -522,6 +522,9 @@ OutputConfigurationError Workspace::applyOutputConfiguration(OutputConfiguration
     };
     for (BackendOutput *output : outputs) {
         const auto change = config.changeSet(output);
+        if (change->headsetView && (!output->isSplitEyeDisplay() || !change->headsetView->isValid())) {
+            return OutputConfigurationError::Unknown;
+        }
         const auto mode = change->stereoPairMode.value_or(output->stereoPairMode());
         const QString partnerUuid = effectivePartner(output);
         if (mode == StereoPairMode::None) {
