@@ -156,6 +156,11 @@ int main(void)
 			int r = right ? 16 + u % 64 : 128 + u % 64;
 			int g = 32 + (y % 32) * 4;
 			int b = right ? 128 + (u + y) % 64 : 16 + (u + y) % 64;
+			if (getenv("PALETTE_FIXTURE")) {
+				r = (right ? 16 : 160) + 16 * (u % 2);
+				g = (right ? 224 : 32) + 16 * (y % 2);
+				b = (right ? 128 : 16) + 16 * ((u + y) % 2);
+			}
 			pixels[y * state.width + x] = 0xff000000 | r << 16 | g << 8 | b;
 		}
 	}

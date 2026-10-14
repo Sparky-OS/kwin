@@ -17,7 +17,7 @@ code = ['''#include <stdio.h>
 #include <wayland-client.h>
 #include "device-client.h"
 #include "management-client.h"
-struct device { struct kde_output_device_v2 *object; char name[128]; } devices[8];
+struct device { struct kde_output_device_v2 *object; char name[128]; unsigned swap; } devices[8];
 struct mode { struct kde_output_device_mode_v2 *object; int device, w, h, hz; unsigned flags; } modes[2048];
 int nd, nm, result;
 struct wl_display *display;
@@ -38,6 +38,7 @@ handlers = {
     if (nd >= 8) abort();
     devices[nd++].object = output;
     kde_output_device_v2_add_listener(output, &device_listener, NULL);''',
+    ('kde_output_device_v2', 'stereo_swap_eyes'): 'devices[device_index(object)].swap = enabled;',
     ('kde_output_device_v2', 'name'): 'snprintf(devices[device_index(object)].name, 128, "%s", name);',
     ('kde_output_device_v2', 'mode'): '''
     if (nm >= 2048) abort();
@@ -81,19 +82,20 @@ code.append('''
 static void global(void *data, struct wl_registry *r, uint32_t id, const char *name, uint32_t version) {
     if (!strcmp(name, "kde_output_management_v2")) {
         if (version < 24) abort();
-        manager=wl_registry_bind(r, id, &kde_output_management_v2_interface, 24);
+        manager=wl_registry_bind(r, id, &kde_output_management_v2_interface, version < kde_output_management_v2_interface.version ? version : kde_output_management_v2_interface.version);
     } else if (!strcmp(name, "kde_output_device_registry_v2")) {
-        struct kde_output_device_registry_v2 *devices=wl_registry_bind(r, id, &kde_output_device_registry_v2_interface, 24);
+        struct kde_output_device_registry_v2 *devices=wl_registry_bind(r, id, &kde_output_device_registry_v2_interface, version < kde_output_device_registry_v2_interface.version ? version : kde_output_device_registry_v2_interface.version);
         kde_output_device_registry_v2_add_listener(devices, &registry_listener, NULL);
     }
 }
 static void global_remove(void *d, struct wl_registry *r, uint32_t id) {}
 static const struct wl_registry_listener globals={global, global_remove};
+static int eye_width=640, eye_height=480;
 static struct kde_output_device_mode_v2 *choose(int device, unsigned flag) {
     struct mode *best=NULL;
     for (int i=0; i<nm; i++) {
         struct mode *m=&modes[i];
-        if (m->object && m->device==device && m->w==640 && m->h==480 && (m->flags & ~0x4000u)==flag)
+        if (m->object && m->device==device && m->w==eye_width && m->h==eye_height && (m->flags & ~0x4000u)==flag)
             if (!best || ((flag & 0xc0000) ? m->hz > best->hz : abs(m->hz-60000)<abs(best->hz-60000))) best=m;
     }
     if (!best) { fprintf(stderr,"no mode device=%d flag=%x\\n", device, flag); exit(2); }
@@ -122,6 +124,7 @@ int main(int argc, char **argv) {
         for (int i=0;i<nd;i++) kde_output_configuration_v2_set_stereo_formats(c,devices[i].object,1,1);
     } else if (!strcmp(argv[1],"mode")) {
         unsigned flag=strtoul(argv[2],NULL,0);
+        if (argc==5) { eye_width=atoi(argv[3]); eye_height=atoi(argv[4]); }
         kde_output_configuration_v2_enable(c,devices[0].object,1);
         kde_output_configuration_v2_set_stereo_pair(c,devices[0].object,NULL,0,0,0);
         kde_output_configuration_v2_mode(c,devices[0].object,choose(0,flag));
@@ -137,10 +140,23 @@ int main(int argc, char **argv) {
             kde_output_configuration_v2_position(c,devices[i].object,0,0);
             kde_output_configuration_v2_set_stereo_pair(c,devices[i].object,devices[1-i].object,kind,(kind==3?2:0)+i,atoi(argv[3+i]));
         }
+    } else if (!strcmp(argv[1], "swap") && argc==4) {
+#ifdef KDE_OUTPUT_CONFIGURATION_V2_SET_STEREO_SWAP_EYES_SINCE_VERSION
+        int output=atoi(argv[2]);
+        unsigned swap=strtoul(argv[3],NULL,0);
+        if (output<0 || output>=nd || kde_output_configuration_v2_get_version(c)<KDE_OUTPUT_CONFIGURATION_V2_SET_STEREO_SWAP_EYES_SINCE_VERSION) return 2;
+        kde_output_configuration_v2_set_stereo_swap_eyes(c,devices[output].object,swap);
+#else
+        return 2;
+#endif
     } else return 2;
     kde_output_configuration_v2_apply(c);
     while (!result && wl_display_dispatch(display)>=0) {}
     printf("configuration=%s\\n",result==1?"applied":"failed");
+    if (result==1 && !strcmp(argv[1],"swap")) {
+        for (int i=0;i<2;i++) if (wl_display_roundtrip(display)<0) return 1;
+        if (devices[atoi(argv[2])].swap != strtoul(argv[3],NULL,0)) return 3;
+    }
     return result==1?0:1;
 }
 ''')

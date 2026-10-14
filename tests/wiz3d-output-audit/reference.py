@@ -14,11 +14,20 @@ import sys
 from PIL import Image, ImageChops
 
 W, H = 640, 480
+PALETTE = False
+PACKING_GAP = 30
 MODERN_L = ((.4154, .4710, .1669), (-.0458, -.0484, -.0257), (-.0547, -.0615, .0128))
 MODERN_R = ((-.0109, -.0364, -.0060), (.3756, .7333, .0111), (-.0651, -.1287, 1.2971))
 
+CRT_L = ((.456, .500, .176), (-.040, -.038, -.016), (-.015, -.021, -.005))
+CRT_R = ((-.043, -.088, -.002), (.378, .734, -.018), (-.072, -.113, 1.226))
+
 
 def eye(right, x, y):
+    if PALETTE:
+        return ((16 if right else 160) + 16 * (x % 2),
+                (224 if right else 32) + 16 * (y % 2),
+                (128 if right else 16) + 16 * ((x + y) % 2))
     return (16 + x % 64 if right else 128 + x % 64,
             32 + y % 32 * 4,
             128 + (x + y) % 64 if right else 16 + (x + y) % 64)
@@ -59,13 +68,23 @@ def pixel(mode, x, y, swap=False):
         a = eye(right ^ swap, u, v)
         b = eye(right ^ swap, u + (mode == 'sbs'), v + (mode == 'tab'))
         return tuple(quantize((a[c] + b[c]) / 510) for c in range(3))
+    if mode == '2d':
+        return eye(False, x, y)
+    if mode == 'sbs-full':
+        return eye((x >= W) ^ swap, x % W, y)
+    if mode == 'frame-packing':
+        if H <= y < H + PACKING_GAP:
+            return (0, 0, 0)
+        right = y >= H + PACKING_GAP
+        return eye(right ^ swap, x, y - (H + PACKING_GAP) if right else y)
     if mode.startswith('anaglyph-'):
         dec = (lambda v: v ** 2.2) if mode.endswith('gamma22') else decode
         enc = (lambda v: max(0, min(1, v)) ** (1/2.2)) if mode.endswith('gamma22') else encode
         l = [dec(v / 255) for v in eye(swap, x, y)]
         r = [dec(v / 255) for v in eye(not swap, x, y)]
         return tuple(quantize(enc(sum(a*v + b*z for a, b, v, z in zip(lm, rm, l, r))))
-                     for lm, rm in zip(MODERN_L, MODERN_R))
+                     for lm, rm in zip(CRT_L if 'crt' in mode else MODERN_L,
+                                       CRT_R if 'crt' in mode else MODERN_R))
     if mode.startswith('cf-'):
         l = [decode(v / 255) for v in eye(swap, x, y)]
         r = [decode(v / 255) for v in eye(not swap, x, y)]
@@ -92,8 +111,10 @@ def pixel(mode, x, y, swap=False):
 
 
 def expected(mode, swap=False):
-    image = Image.new('RGB', (W, H))
-    image.putdata([pixel(mode, x, y, swap) for y in range(H) for x in range(W)])
+    width = 2 * W if mode == 'sbs-full' else W
+    height = 2 * H + PACKING_GAP if mode == 'frame-packing' else H
+    image = Image.new('RGB', (width, height))
+    image.putdata([pixel(mode, x, y, swap) for y in range(height) for x in range(width)])
     return image
 
 

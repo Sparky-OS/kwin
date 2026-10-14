@@ -1,11 +1,25 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-export HOME=/root XDG_RUNTIME_DIR=/run/user/0 LANG=C.UTF-8 LC_ALL=C.UTF-8
+export HOME=/root LANG=C.UTF-8 LC_ALL=C.UTF-8
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/0}
 export KWIN_DRM_DEVICES=/dev/dri/card0 LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=4
 export QT_QPA_PLATFORM=wayland
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
+case_set=$(cat /tmp/work/rig/case-set 2>/dev/null || echo matrix)
+if [ "$case_set" = swap-matrix ] && [ -z "${AUDIT_CASE:-}" ]; then
+    probes=$(cat /tmp/work/rig/swap-probes 2>/dev/null || echo 'rows-left rows-right columns-left columns-right checker-left checker-right anaglyph-modern anaglyph-crt sbs tab sbs-full frame-packing 2d pair-dual pair-mirror-h pair-mirror-v pair-ized')
+    for probe in $probes; do
+        export AUDIT_CASE=$probe
+        export XDG_CONFIG_HOME=/tmp/config-$probe XDG_CACHE_HOME=/tmp/cache-$probe
+        export XDG_RUNTIME_DIR=/run/user/0/$probe
+        mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
+        chmod 700 "$XDG_RUNTIME_DIR"
+        dbus-run-session -- sh /tmp/work/rig/guest-session.sh || exit "$?"
+    done
+    exit 0
+fi
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
     exec dbus-run-session -- sh /tmp/work/rig/guest-session.sh
 fi
@@ -13,6 +27,7 @@ out=/tmp/work/evidence/vkms
 case_set=$(cat /tmp/work/rig/case-set 2>/dev/null || echo matrix)
 if [ "$case_set" != matrix ]; then out=/tmp/work/evidence/$case_set; fi
 out=/tmp/work/evidence/$(cat /tmp/work/rig/output-name)
+if [ -n "${AUDIT_CASE:-}" ]; then out=$out/$AUDIT_CASE; fi
 mkdir -p "$out"
 mkdir -p /tmp/build
 cd /tmp/build
@@ -26,10 +41,24 @@ i=0
 while [ "$i" -lt 90 ] && [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; do sleep 1; i=$((i + 1)); done
 export WAYLAND_DISPLAY=wl-audit
 if [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; then echo "AUDIT_NO_SOCKET"; kill "$kp"; exit 1; fi
-timeout 30 kscreen-doctor -o > "$out/outputs.txt" 2>&1
-echo "$?" > "$out/outputs.exit"
+if [ "$case_set" = swap-matrix ] || [ "$case_set" = swap-settings ]; then
+    echo "Output state is recorded by the versioned control client." > "$out/outputs.txt"
+    echo "not-run" > "$out/outputs.exit"
+else
+    timeout 30 kscreen-doctor -o > "$out/outputs.txt" 2>&1
+    echo "$?" > "$out/outputs.exit"
+fi
 ./control enable > "$out/enable.txt" 2>&1 || exit 3
 ./control list > "$out/modes.txt" 2>&1
+if [ "$case_set" = swap-settings ]; then
+    LD_LIBRARY_PATH=/tmp/work/rig/ui/lib QT_PLUGIN_PATH=/tmp/work/rig/ui/plugins KSCREEN_BACKEND_INPROCESS=1 KSCREEN_BACKEND=KWayland \
+        /tmp/work/rig/ui/swap-settings > "$out/settings-roundtrip.log" 2>&1
+    result=$?
+    echo "$result" > "$out/settings-roundtrip.exit"
+    kill "$kp"
+    wait "$kp"
+    exit "$result"
+fi
 shoot() {
     tag=$1
     HOLD_SECONDS=180 WAYLAND_DEBUG=client ./fixture > "$out/client-$tag.log" 2>&1 &
@@ -68,6 +97,39 @@ shoot() {
     kill "$client"
     wait "$client"
 }
+if [ "$case_set" = swap-matrix ]; then
+    export PALETTE_FIXTURE=1
+    case "$AUDIT_CASE" in
+        rows-left) flag=0x100 ;; rows-right) flag=0x200 ;;
+        columns-left) flag=0x400 ;; columns-right) flag=0x800 ;;
+        checker-left) flag=0x1000 ;; checker-right) flag=0x2000 ;;
+        anaglyph-modern) flag=0x40 ;; anaglyph-crt) flag=0x80 ;;
+        sbs) flag=4 ;; tab) flag=8 ;; sbs-full) flag=0x20 ;;
+        frame-packing) flag=0x10 ;; 2d) flag=0 ;;
+        pair-dual) set -- 1 0 0 ;; pair-mirror-h) set -- 2 0 1 ;;
+        pair-mirror-v) set -- 2 0 2 ;; pair-ized) set -- 3 0 0 ;;
+        *) exit 2 ;;
+    esac
+    case "$AUDIT_CASE" in
+        pair*) ./control pair "$@" > "$out/config.txt" 2>&1 || exit 3 ;;
+        sbs-full) ./control mode "$flag" 1920 1080 > "$out/config.txt" 2>&1 || exit 3 ;;
+        frame-packing) ./control mode "$flag" 1280 720 > "$out/config.txt" 2>&1 || exit 3 ;;
+        *) ./control mode "$flag" > "$out/config.txt" 2>&1 || exit 3 ;;
+    esac
+    ./control swap 0 0 > "$out/swap-off.txt" 2>&1 || exit 3
+    shoot "$AUDIT_CASE-off"
+    ./control swap 0 1 > "$out/swap-first.txt" 2>&1 || exit 3
+    shoot "$AUDIT_CASE-first"
+    case "$AUDIT_CASE" in
+        pair*)
+            ./control swap 1 1 > "$out/swap-both.txt" 2>&1 || exit 3
+            shoot "$AUDIT_CASE-both"
+            ;;
+    esac
+    kill "$kp"
+    wait "$kp"
+    exit 0
+fi
 case "$case_set" in
     cache-rows-first) sequence="rows ized rows" ;;
     cache-ized-first) sequence="ized rows ized" ;;

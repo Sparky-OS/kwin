@@ -86,3 +86,15 @@ Run `check-cache.py evidence/m2/cache-before-rows rows-first`, or `ized-first` f
 The check exits nonzero on a missing capture, any differing pixel, or a failed eye-order control.
 CF's back average is mathematically invariant under exchanging eyes, so its swapped prediction must also match; each front and rows capture must reject the swapped prediction at every pixel.
 The baseline must fail and the changed package must pass both complete sequences.
+
+## Per-output eye exchange
+
+`swap-matrix` starts a fresh compositor, D-Bus session and configuration directory for each output mode in one isolated VM.
+It uses a second coordinate-tagged palette with unequal eye luminances, selected by `PALETTE_FIXTURE=1`.
+Each mode is captured with exchange off and then on; each pair is also captured with only its first output exchanged before enabling the second output's exchange.
+The control client requires the version-26 request and checks the returned setting event after applying it.
+The extended synthetic EDID includes full side-by-side at 1920×1080; frame packing uses 1280×720 with the declared vertical interval.
+`check-swap.py` checks every capture against the palette oracle, including preserved RightFirst modes and unchanged 2D.
+For anaglyph exchange it models the existing KWin gamma-2.2 path, whose difference from wiz3D's piecewise-sRGB path is already recorded in milestone 1.
+The checker requires exact equality, with no one-LSB tolerance.
+This matrix does not certify shutter timing or change its scheduling.
