@@ -44,6 +44,8 @@ find /tmp/kwin -type f | while read -r f; do
 done
 cp /bin/drm-grab /r/tmp/drm-grab
 chroot /r /bin/sh /tmp/work/rig/guest-session.sh
-echo "AUDIT_GUEST_EXIT $?"
+result=$?
+dmesg > "/work/evidence/$(cat /work/rig/output-name)/kernel.log"
+echo "AUDIT_GUEST_EXIT $result"
 sync
 poweroff -f

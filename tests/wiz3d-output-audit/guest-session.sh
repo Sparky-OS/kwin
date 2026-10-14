@@ -26,7 +26,8 @@ i=0
 while [ "$i" -lt 90 ] && [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; do sleep 1; i=$((i + 1)); done
 export WAYLAND_DISPLAY=wl-audit
 if [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; then echo "AUDIT_NO_SOCKET"; kill "$kp"; exit 1; fi
-kscreen-doctor -o > "$out/outputs.txt" 2>&1
+timeout 30 kscreen-doctor -o > "$out/outputs.txt" 2>&1
+echo "$?" > "$out/outputs.exit"
 ./control enable > "$out/enable.txt" 2>&1 || exit 3
 ./control list > "$out/modes.txt" 2>&1
 shoot() {
@@ -34,11 +35,23 @@ shoot() {
     HOLD_SECONDS=180 WAYLAND_DEBUG=client ./fixture > "$out/client-$tag.log" 2>&1 &
     client=$!
     count=0
-    while ! grep -q '^fullscreen ' "$out/client-$tag.log" && [ "$count" -lt 120 ]; do
+    while ! grep -q '^fullscreen ' "$out/client-$tag.log" && [ "$count" -lt 120 ] && kill -0 "$client" 2>/dev/null; do
         sleep 1
         count=$((count+1))
     done
-    if ! grep -q '^fullscreen ' "$out/client-$tag.log"; then echo "FIXTURE_NOT_READY $tag"; kill "$client"; exit 4; fi
+    if ! grep -q '^fullscreen ' "$out/client-$tag.log"; then
+        echo "FIXTURE_NOT_READY $tag"
+        kill "$client" 2>/dev/null
+        wait "$client"
+        echo "FIXTURE_EXIT $?" > "$out/failure-$tag.txt"
+        ./drm-grab /dev/dri/card0 "$out/unready-$tag.ppm" >> "$out/failure-$tag.txt" 2>&1
+        if ! kill -0 "$kp" 2>/dev/null; then
+            wait "$kp"
+            echo "KWIN_EXIT $?" >> "$out/failure-$tag.txt"
+        fi
+        dmesg > "$out/kernel.log"
+        exit 4
+    fi
     count=0
     while [ "$count" -lt 15 ]; do
         sleep 1
