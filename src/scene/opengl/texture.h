@@ -77,6 +77,8 @@ private:
 
     BufferType m_bufferType = BufferType::None;
     EglBackend *m_backend;
+    uint32_t m_dmabufFormat = 0;
+    int m_dmabufPlaneCount = 0;
 };
 
 } // namespace KWin
