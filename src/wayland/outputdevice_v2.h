@@ -110,6 +110,7 @@ private:
     void updateAbmLevel();
     void updateStereoFormats();
     void updateStereoPair();
+    void updateStereoSwapEyes();
 
     void scheduleDone();
 

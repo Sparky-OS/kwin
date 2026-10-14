@@ -145,6 +145,54 @@ private Q_SLOTS:
         backend.removeVirtualOutput(output);
     }
 
+    void swapEyesPersistsPerOutput()
+    {
+        QTemporaryDir configHome;
+        QVERIFY(configHome.isValid());
+        qputenv("XDG_CONFIG_HOME", configHome.path().toUtf8());
+        VirtualBackend backend;
+        auto first = backend.createVirtualOutput(VirtualOutputProperties{.name = QStringLiteral("swap-first"), .pixelSize = QSize(640, 480)});
+        auto second = backend.createVirtualOutput(VirtualOutputProperties{.name = QStringLiteral("swap-second"), .pixelSize = QSize(640, 480)});
+        QVERIFY(first);
+        QVERIFY(second);
+        const QList<BackendOutput *> outputs{first, second};
+        {
+            OutputConfigurationStore store;
+            store.clear();
+            const auto initial = store.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+            QVERIFY(initial);
+            for (auto output : outputs) {
+                output->applyChanges(initial->first);
+            }
+        }
+        QSignalSpy changed(first, &BackendOutput::stereoSwapEyesChanged);
+        QVERIFY(!first->stereoSwapEyes());
+        QVERIFY(!second->stereoSwapEyes());
+        for (const bool swap : {true, false}) {
+            OutputConfiguration config;
+            config.changeSet(first)->stereoSwapEyes = swap;
+            first->applyChanges(config);
+            first->applyChanges(config);
+            QCOMPARE(first->stereoSwapEyes(), swap);
+            QVERIFY(!second->stereoSwapEyes());
+            {
+                OutputConfigurationStore store;
+                store.storeConfig(outputs, false);
+            }
+            OutputConfigurationStore restored;
+            const auto queried = restored.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+            QVERIFY(queried);
+            QCOMPARE(queried->first.constChangeSet(first)->stereoSwapEyes, std::optional<bool>(swap));
+            QCOMPARE(queried->first.constChangeSet(second)->stereoSwapEyes, std::optional<bool>(false));
+            const auto singleOutput = restored.queryConfig({first}, false, AccelerometerOrientation::Undefined, false);
+            QVERIFY(singleOutput);
+            QCOMPARE(singleOutput->first.constChangeSet(first)->stereoSwapEyes, std::optional<bool>(swap));
+        }
+        QCOMPARE(changed.count(), 2);
+        backend.removeVirtualOutput(first);
+        backend.removeVirtualOutput(second);
+    }
+
     void nativeViewportGeometry()
     {
         VirtualBackend backend;

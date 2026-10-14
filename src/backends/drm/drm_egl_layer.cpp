@@ -77,6 +77,7 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::doBeginFrame()
     }
     m_surface.setStereoPair(drmOutput()->isStereoPair() ? drmOutput()->stereoPairMode() : StereoPairMode::None,
                             drmOutput()->stereoPairRole());
+    m_surface.setStereoSwapEyes(drmOutput()->stereoSwapEyes());
     return m_surface.startRendering(scanoutSize(),
                                     drmOutput()->transform().combine(OutputTransform::FlipY),
                                     supportedDrmFormats(),

@@ -82,6 +82,7 @@ public:
         HdrIccProfile = 1 << 17,
         AbmLevel = 1 << 18,
         VirtualStereo = 1 << 19,
+        StereoSwapEyes = 1 << 20,
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -298,6 +299,7 @@ public:
     StereoPairRole stereoPairRole() const;
     StereoPairReflection stereoPairReflection() const;
     bool isStereoPair() const;
+    bool stereoSwapEyes() const;
     uint32_t maxBitsPerColor() const;
     struct BpcRange
     {
@@ -425,6 +427,7 @@ Q_SIGNALS:
     void uuidChanged();
     void replicationSourceChanged();
     void stereoPairChanged();
+    void stereoSwapEyesChanged();
     void allowDdcCiChanged();
     void maxBitsPerColorChanged();
     void edrPolicyChanged();
@@ -514,6 +517,7 @@ protected:
         StereoPairMode stereoPairMode = StereoPairMode::None;
         StereoPairRole stereoPairRole = StereoPairRole::Left;
         StereoPairReflection stereoPairReflection = StereoPairReflection::None;
+        bool stereoSwapEyes = false;
         bool detectedDdcCi = false;
         bool allowDdcCi = true;
         uint32_t maxBitsPerColor = 0;

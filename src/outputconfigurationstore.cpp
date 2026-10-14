@@ -408,6 +408,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
             .stereoPairMode = output->stereoPairMode(),
             .stereoPairRole = output->stereoPairRole(),
             .stereoPairReflection = output->stereoPairReflection(),
+            .stereoSwapEyes = output->stereoSwapEyes(),
             .detectedDdcCi = output->detectedDdcCi(),
             .allowDdcCi = output->allowDdcCi(),
             .maxBitsPerColor = output->maxBitsPerColor(),
@@ -514,6 +515,7 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .stereoPairMode = state.stereoPairMode,
             .stereoPairRole = state.stereoPairRole,
             .stereoPairReflection = state.stereoPairReflection,
+            .stereoSwapEyes = state.stereoSwapEyes,
             .detectedDdcCi = state.detectedDdcCi,
             .allowDdcCi = state.allowDdcCi,
             .maxBitsPerColor = state.maxBitsPerColor,
@@ -696,6 +698,7 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             .allowSdrSoftwareBrightness = existingData.allowSdrSoftwareBrightness.value_or(output->brightnessDevice() == nullptr),
             .colorPowerTradeoff = existingData.colorPowerTradeoff.value_or(BackendOutput::ColorPowerTradeoff::PreferAccuracy),
             .uuid = existingData.uuid,
+            .stereoSwapEyes = existingData.stereoSwapEyes.value_or(false),
             .detectedDdcCi = existingData.detectedDdcCi.value_or(false),
             .allowDdcCi = existingData.allowDdcCi.value_or(!output->isDdcCiKnownBroken()),
             .maxBitsPerColor = existingData.maxBitsPerColor,
@@ -1237,6 +1240,9 @@ void OutputConfigurationStore::load()
         if (const auto it = data.find("stereoPartner"); it != data.end() && !it->toString().isEmpty()) {
             state.stereoPartner = it->toString();
         }
+        if (const auto it = data.find("stereoSwapEyes"); it != data.end() && it->isBool()) {
+            state.stereoSwapEyes = it->toBool();
+        }
         if (const auto it = data.find("stereoPairMode"); it != data.end()) {
             state.stereoPairMode = stereoPairModeFromString(it->toString());
         }
@@ -1573,6 +1579,9 @@ void OutputConfigurationStore::save()
         }
         if (output.stereoPartner && !output.stereoPartner->isEmpty()) {
             o["stereoPartner"] = *output.stereoPartner;
+        }
+        if (output.stereoSwapEyes) {
+            o["stereoSwapEyes"] = *output.stereoSwapEyes;
         }
         if (output.stereoPairMode && *output.stereoPairMode != StereoPairMode::None) {
             o["stereoPairMode"] = stereoPairModeToString(*output.stereoPairMode);

@@ -428,6 +428,7 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
     next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
     next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
+    next.stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
 
@@ -547,6 +548,9 @@ void BackendOutput::setState(const State &state)
         || oldState.stereoPairRole != state.stereoPairRole
         || oldState.stereoPairReflection != state.stereoPairReflection) {
         Q_EMIT stereoPairChanged();
+    }
+    if (oldState.stereoSwapEyes != state.stereoSwapEyes) {
+        Q_EMIT stereoSwapEyesChanged();
     }
     // detectedDdcCi is ignored here, it should result in capabilitiesChanged() instead
     if (oldState.allowDdcCi != state.allowDdcCi) {
@@ -808,6 +812,11 @@ StereoPairRole BackendOutput::stereoPairRole() const
 StereoPairReflection BackendOutput::stereoPairReflection() const
 {
     return m_state.stereoPairReflection;
+}
+
+bool BackendOutput::stereoSwapEyes() const
+{
+    return m_state.stereoSwapEyes;
 }
 
 bool BackendOutput::isStereoPair() const

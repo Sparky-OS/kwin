@@ -63,6 +63,7 @@ public:
     std::optional<StereoPairMode> stereoPairMode;
     std::optional<StereoPairRole> stereoPairRole;
     std::optional<StereoPairReflection> stereoPairReflection;
+    std::optional<bool> stereoSwapEyes;
     std::optional<bool> detectedDdcCi;
     std::optional<bool> allowDdcCi;
     std::optional<uint32_t> maxBitsPerColor;

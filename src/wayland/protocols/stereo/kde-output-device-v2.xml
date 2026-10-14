@@ -10,7 +10,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-  <interface name="kde_output_device_registry_v2" version="24">
+  <interface name="kde_output_device_registry_v2" version="26">
     <description summary="output devices">
       This interface can be used to list output devices.
 
@@ -52,7 +52,7 @@
     </event>
   </interface>
 
-  <interface name="kde_output_device_v2" version="24">
+  <interface name="kde_output_device_v2" version="26">
     <description summary="output configuration representation">
       An output device describes a display device available to the compositor.
       output_device is similar to wl_output, but focuses on output
@@ -289,6 +289,7 @@
       <entry name="abm_level" value="0x10000" since="23"
              summary="if this outputdevice supports the abm level setting"/>
       <entry name="virtual_stereo" value="0x20000" since="24" summary="virtual stereo mode toggles are supported"/>
+      <entry name="stereo_swap_eyes" value="0x40000" since="26" summary="per-output eye exchange is supported"/>
     </enum>
 
     <event name="capabilities">
@@ -613,9 +614,18 @@
       <arg name="role" type="uint" enum="stereo_pair_role"/>
       <arg name="reflection" type="uint" enum="stereo_pair_reflection"/>
     </event>
+    <event name="stereo_swap_eyes" since="26">
+      <description summary="exchange the eyes at this output">
+        Whether the output exchanges its two stereo views before applying its
+        selected 3D output format. The setting has no effect on 2D output modes.
+        It composes with the existing right-first formats and is independent
+        for each output, including the two outputs of a stereo pair.
+      </description>
+      <arg name="enabled" type="uint" summary="0 for normal eye order, 1 to swap"/>
+    </event>
   </interface>
 
-  <interface name="kde_output_device_mode_v2" version="24">
+  <interface name="kde_output_device_mode_v2" version="26">
     <description summary="output mode">
       This object describes an output mode.
 
@@ -695,6 +705,21 @@
         Right-first reverses this order. Virtual modes are never preferred.
       </description>
       <arg name="flags" type="uint" enum="flags"/>
+    </event>
+    <event name="view_size" since="25">
+      <description summary="native viewport dimensions">
+        Gives the positive width and height of one rendered view in pixels,
+        before output transform and scale. For a split-eye display this is
+        one eye's viewport, not the packed panel size reported by size.
+        For an ordinary display it equals size.
+
+        Clients apply the output transform and divide by scale to obtain the
+        logical desktop size for this mode. This event is sent when the mode
+        is announced, before the output device's done event. The viewport
+        dimensions do not change during the lifetime of a mode object.
+      </description>
+      <arg name="width" type="int" summary="native viewport width"/>
+      <arg name="height" type="int" summary="native viewport height"/>
     </event>
   </interface>
 

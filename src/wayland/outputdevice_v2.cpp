@@ -148,6 +148,9 @@ static uint32_t kwinCapabilitiesToOutputDeviceCapabilities(BackendOutput::Capabi
     if (caps & BackendOutput::Capability::HdrIccProfile) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_hdr_icc_profile;
     }
+    if (caps & BackendOutput::Capability::StereoSwapEyes) {
+        ret |= QtWaylandServer::kde_output_device_v2::capability_stereo_swap_eyes;
+    }
     if (caps & BackendOutput::Capability::VirtualStereo) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_virtual_stereo;
     }
@@ -221,6 +224,7 @@ public:
     void sendHdrColorProfileSource(Resource *resource);
     void sendStereoFormats(Resource *resource);
     void sendStereoPair(Resource *resource);
+    void sendStereoSwapEyes(Resource *resource);
     void sendAbmLevel(Resource *resource);
 
     OutputDeviceV2Interface *q;
@@ -413,6 +417,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     connect(handle, &BackendOutput::hdrColorProfileSourceChanged, this, &OutputDeviceV2Interface::updateHdrColorProfileSource);
     connect(handle, &BackendOutput::stereoFormatsChanged, this, &OutputDeviceV2Interface::updateStereoFormats);
     connect(handle, &BackendOutput::stereoPairChanged, this, &OutputDeviceV2Interface::updateStereoPair);
+    connect(handle, &BackendOutput::stereoSwapEyesChanged, this, &OutputDeviceV2Interface::updateStereoSwapEyes);
     connect(handle, &BackendOutput::abmLevelChanged, this, &OutputDeviceV2Interface::updateAbmLevel);
 
     // Delay the done event to batch property updates.
@@ -512,6 +517,7 @@ void OutputDeviceV2InterfacePrivate::kde_output_device_v2_bind_resource(Resource
     sendAbmLevel(resource);
     sendStereoFormats(resource);
     sendStereoPair(resource);
+    sendStereoSwapEyes(resource);
     if (!m_uuid.isEmpty()) {
         sendDone(resource);
     }
@@ -1296,6 +1302,22 @@ void OutputDeviceV2InterfacePrivate::sendStereoFormats(Resource *resource)
     if (resource->version() >= KDE_OUTPUT_DEVICE_V2_STEREO_FORMATS_SINCE_VERSION) {
         send_stereo_formats(resource->handle, m_anaglyph, m_otherStereoFormats);
     }
+}
+
+void OutputDeviceV2InterfacePrivate::sendStereoSwapEyes(Resource *resource)
+{
+    if (resource->version() >= KDE_OUTPUT_DEVICE_V2_STEREO_SWAP_EYES_SINCE_VERSION) {
+        send_stereo_swap_eyes(resource->handle, m_handle->stereoSwapEyes());
+    }
+}
+
+void OutputDeviceV2Interface::updateStereoSwapEyes()
+{
+    const auto resources = d->resourceMap();
+    for (const auto &resource : resources) {
+        d->sendStereoSwapEyes(resource);
+    }
+    scheduleDone();
 }
 
 void OutputDeviceV2InterfacePrivate::sendStereoPair(Resource *resource)
