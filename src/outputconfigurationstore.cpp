@@ -409,6 +409,8 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
             .stereoPairRole = output->stereoPairRole(),
             .stereoPairReflection = output->stereoPairReflection(),
             .stereoSwapEyes = output->stereoSwapEyes(),
+            .ized3dMode = output->ized3dMode(),
+            .ized3dTransfer = output->ized3dTransfer(),
             .detectedDdcCi = output->detectedDdcCi(),
             .allowDdcCi = output->allowDdcCi(),
             .maxBitsPerColor = output->maxBitsPerColor(),
@@ -516,6 +518,8 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .stereoPairRole = state.stereoPairRole,
             .stereoPairReflection = state.stereoPairReflection,
             .stereoSwapEyes = state.stereoSwapEyes,
+            .ized3dMode = state.ized3dMode,
+            .ized3dTransfer = state.ized3dTransfer,
             .detectedDdcCi = state.detectedDdcCi,
             .allowDdcCi = state.allowDdcCi,
             .maxBitsPerColor = state.maxBitsPerColor,
@@ -699,6 +703,8 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             .colorPowerTradeoff = existingData.colorPowerTradeoff.value_or(BackendOutput::ColorPowerTradeoff::PreferAccuracy),
             .uuid = existingData.uuid,
             .stereoSwapEyes = existingData.stereoSwapEyes.value_or(false),
+            .ized3dMode = existingData.ized3dMode.value_or(Ized3dMode::CF),
+            .ized3dTransfer = existingData.ized3dTransfer.value_or(Ized3dTransfer::Linear),
             .detectedDdcCi = existingData.detectedDdcCi.value_or(false),
             .allowDdcCi = existingData.allowDdcCi.value_or(!output->isDdcCiKnownBroken()),
             .maxBitsPerColor = existingData.maxBitsPerColor,
@@ -1240,6 +1246,18 @@ void OutputConfigurationStore::load()
         if (const auto it = data.find("stereoPartner"); it != data.end() && !it->toString().isEmpty()) {
             state.stereoPartner = it->toString();
         }
+        if (const auto it = data.find("ized3dMode"); it != data.end()) {
+            const int value = it->toInt(-1);
+            if (value >= 0 && value <= int(Ized3dMode::Checkerboard)) {
+                state.ized3dMode = Ized3dMode(value);
+            }
+        }
+        if (const auto it = data.find("ized3dTransfer"); it != data.end()) {
+            const int value = it->toInt(-1);
+            if (value >= 0 && value <= int(Ized3dTransfer::Encoded)) {
+                state.ized3dTransfer = Ized3dTransfer(value);
+            }
+        }
         if (const auto it = data.find("stereoSwapEyes"); it != data.end() && it->isBool()) {
             state.stereoSwapEyes = it->toBool();
         }
@@ -1579,6 +1597,12 @@ void OutputConfigurationStore::save()
         }
         if (output.stereoPartner && !output.stereoPartner->isEmpty()) {
             o["stereoPartner"] = *output.stereoPartner;
+        }
+        if (output.ized3dMode) {
+            o["ized3dMode"] = int(*output.ized3dMode);
+        }
+        if (output.ized3dTransfer) {
+            o["ized3dTransfer"] = int(*output.ized3dTransfer);
         }
         if (output.stereoSwapEyes) {
             o["stereoSwapEyes"] = *output.stereoSwapEyes;

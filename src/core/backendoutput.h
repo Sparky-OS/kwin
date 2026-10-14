@@ -83,6 +83,7 @@ public:
         AbmLevel = 1 << 18,
         VirtualStereo = 1 << 19,
         StereoSwapEyes = 1 << 20,
+        Ized3dOptions = 1 << 21,
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -300,6 +301,8 @@ public:
     StereoPairReflection stereoPairReflection() const;
     bool isStereoPair() const;
     bool stereoSwapEyes() const;
+    Ized3dMode ized3dMode() const;
+    Ized3dTransfer ized3dTransfer() const;
     uint32_t maxBitsPerColor() const;
     struct BpcRange
     {
@@ -428,6 +431,7 @@ Q_SIGNALS:
     void replicationSourceChanged();
     void stereoPairChanged();
     void stereoSwapEyesChanged();
+    void ized3dOptionsChanged();
     void allowDdcCiChanged();
     void maxBitsPerColorChanged();
     void edrPolicyChanged();
@@ -518,6 +522,8 @@ protected:
         StereoPairRole stereoPairRole = StereoPairRole::Left;
         StereoPairReflection stereoPairReflection = StereoPairReflection::None;
         bool stereoSwapEyes = false;
+        Ized3dMode ized3dMode = Ized3dMode::CF;
+        Ized3dTransfer ized3dTransfer = Ized3dTransfer::Linear;
         bool detectedDdcCi = false;
         bool allowDdcCi = true;
         uint32_t maxBitsPerColor = 0;

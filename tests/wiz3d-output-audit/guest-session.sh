@@ -8,8 +8,11 @@ export QT_QPA_PLATFORM=wayland
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 case_set=$(cat /tmp/work/rig/case-set 2>/dev/null || echo matrix)
-if [ "$case_set" = swap-matrix ] && [ -z "${AUDIT_CASE:-}" ]; then
+if { [ "$case_set" = swap-matrix ] || [ "$case_set" = ized-matrix ]; } && [ -z "${AUDIT_CASE:-}" ]; then
     probes=$(cat /tmp/work/rig/swap-probes 2>/dev/null || echo 'rows-left rows-right columns-left columns-right checker-left checker-right anaglyph-modern anaglyph-crt sbs tab sbs-full frame-packing 2d 2d-mono pair-dual pair-mirror-h pair-mirror-v pair-ized')
+    if [ "$case_set" = ized-matrix ]; then
+        probes='cf cfl bw-cfl left-right-cfl interlaced checkerboard'
+    fi
     for probe in $probes; do
         export AUDIT_CASE=$probe
         export XDG_CONFIG_HOME=/tmp/config-$probe XDG_CACHE_HOME=/tmp/cache-$probe
@@ -41,7 +44,7 @@ i=0
 while [ "$i" -lt 90 ] && [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; do sleep 1; i=$((i + 1)); done
 export WAYLAND_DISPLAY=wl-audit
 if [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; then echo "AUDIT_NO_SOCKET"; kill "$kp"; exit 1; fi
-if [ "$case_set" = swap-matrix ] || [ "$case_set" = swap-settings ]; then
+if [ "$case_set" = swap-matrix ] || [ "$case_set" = swap-settings ] || [ "$case_set" = ized-matrix ] || [ "$case_set" = ized-settings ]; then
     echo "Output state is recorded by the versioned control client." > "$out/outputs.txt"
     echo "not-run" > "$out/outputs.exit"
 else
@@ -50,6 +53,15 @@ else
 fi
 ./control enable > "$out/enable.txt" 2>&1 || exit 3
 ./control list > "$out/modes.txt" 2>&1
+if [ "$case_set" = ized-settings ]; then
+    WAYLAND_DEBUG=client LD_LIBRARY_PATH=/tmp/work/rig/ui/lib QT_PLUGIN_PATH=/tmp/work/rig/ui/plugins KSCREEN_BACKEND_INPROCESS=1 KSCREEN_BACKEND=kwayland \
+        /tmp/work/rig/ui/ized3d-settings > "$out/settings-roundtrip.log" 2>&1
+    result=$?
+    echo "$result" > "$out/settings-roundtrip.exit"
+    kill "$kp"
+    wait "$kp"
+    exit "$result"
+fi
 if [ "$case_set" = swap-settings ]; then
     ./control mode 0x100 > "$out/config.txt" 2>&1 || exit 3
     PALETTE_FIXTURE=1 HOLD_SECONDS=300 ./fixture > "$out/client-static.log" 2>&1 &
@@ -61,7 +73,7 @@ if [ "$case_set" = swap-settings ]; then
     done
     if ! grep -q '^fullscreen ' "$out/client-static.log"; then exit 4; fi
     ./drm-grab /dev/dri/card0 "$out/static-initial.ppm" > "$out/grab-static-initial.txt" 2>&1 || exit 4
-    LD_LIBRARY_PATH=/tmp/work/rig/ui/lib QT_PLUGIN_PATH=/tmp/work/rig/ui/plugins KSCREEN_BACKEND_INPROCESS=1 KSCREEN_BACKEND=KWayland \
+    WAYLAND_DEBUG=client LD_LIBRARY_PATH=/tmp/work/rig/ui/lib QT_PLUGIN_PATH=/tmp/work/rig/ui/plugins KSCREEN_BACKEND_INPROCESS=1 KSCREEN_BACKEND=kwayland \
         /tmp/work/rig/ui/swap-settings "$out" > "$out/settings-roundtrip.log" 2>&1
     result=$?
     echo "$result" > "$out/settings-roundtrip.exit"
@@ -127,6 +139,25 @@ shoot() {
     if [ -n "$second_client" ]; then kill "$second_client"; wait "$second_client"; fi
     unset FIXTURE_OUTPUT MONO_FIXTURE
 }
+if [ "$case_set" = ized-matrix ]; then
+    export PALETTE_FIXTURE=1
+    case "$AUDIT_CASE" in
+        cf) formula=0 ;; cfl) formula=1 ;; bw-cfl) formula=2 ;;
+        left-right-cfl) formula=3 ;; interlaced) formula=4 ;; checkerboard) formula=5 ;;
+        *) exit 2 ;;
+    esac
+    for domain in linear encoded; do
+        transfer=0
+        if [ "$domain" = encoded ]; then transfer=1; fi
+        ./control ized "$formula" "$transfer" > "$out/config-$domain.txt" 2>&1 || exit 3
+        shoot "pair-ized-$domain-off"
+        ./control swap-both 1 > "$out/swap-$domain.txt" 2>&1 || exit 3
+        shoot "pair-ized-$domain-on"
+    done
+    kill "$kp"
+    wait "$kp"
+    exit 0
+fi
 if [ "$case_set" = swap-matrix ]; then
     export PALETTE_FIXTURE=1
     case "$AUDIT_CASE" in

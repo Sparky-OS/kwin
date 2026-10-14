@@ -109,3 +109,24 @@ Retain the run's control, fixture and guest script snapshots beside its binary h
 `swap-settings` keeps one rows fixture mapped and changes its setting through the newly built libkscreen backend.
 The initial, exchanged and restored captures test repainting without new client damage.
 Build `swap-settings.cpp` against the candidate libkscreen, supply that library and its KWayland plugin in `rig/ui/`, then run the case with its own evidence folder.
+
+## iZ3D analytic formulas
+
+`ized-matrix` starts a fresh compositor per formula and captures both panel inputs in both transfer domains, with swap off and on.
+The formulas are CF, CFL, BW CFL, L&R CFL, Interlaced and Checkerboard.
+The default transfer decodes piecewise sRGB before the formula and encodes its result; encoded arithmetic remains selectable.
+The interlaced formula decodes the neighboring texels before averaging.
+Calibration-table modes are deferred until genuine tables and provenance are available.
+
+`prepare-packages.sh packages/ized3d` updates the guest overlay and copies the checkout's output protocol XML for the control client.
+Set `ized-matrix` in `rig/case-set`, choose a separate `AUDIT_OUTPUT` path, then use `check-ized3d.py <capture-folder> <encoded-CF-baseline-folder>` in the Python/PIL container.
+The baseline folder must contain the earlier palette pair's `pair-ized-off` and `pair-ized-off-second` captures and grab logs.
+The checker saves both transfer predictions for every capture and rejects exchanged eyes on every sensitive panel.
+Symmetric average backs and input-independent spatial masks are checked as invariants, with their companion panels supplying the negative control.
+
+`ized3d-reference.py` transcribes the formulas independently of KWin's shader.
+`autotests/test_ized3d.cpp` renders the production shader into a floating-point target against the fixed vectors in `autotests/data/ized3d-formulas.json`.
+Its floating-point arithmetic tolerance is separate from the exact scanout-pixel comparisons.
+`ized-settings` exercises all formula/domain settings through libkscreen, choosing different values on the two outputs and reading both back.
+Build `ized3d-settings.cpp` against the candidate libkscreen and supply its binary and backend in `rig/ui/`.
+Use the lowercase backend name `kwayland`; negotiate the generated output-registry version so the setting events can be received.

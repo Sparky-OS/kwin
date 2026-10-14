@@ -386,6 +386,8 @@ void WaylandOutput::applyChanges(const OutputConfiguration &config)
     next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
     next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
     next.stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
+    next.ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
+    next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
     next.dpmsMode = props->dpmsMode.value_or(m_state.dpmsMode);
     if (next.dpmsMode != m_state.dpmsMode) {
         if (next.dpmsMode == DpmsMode::On) {

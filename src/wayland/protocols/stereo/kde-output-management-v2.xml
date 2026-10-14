@@ -11,7 +11,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-<interface name="kde_output_management_v2" version="26">
+<interface name="kde_output_management_v2" version="27">
   <description summary="configuration of server outputs through clients">
     This interface enables clients to set properties of output devices for screen
     configuration purposes via the server. To this end output devices are referenced
@@ -74,7 +74,7 @@
 
 </interface>
 
-<interface name="kde_output_configuration_v2" version="26">
+<interface name="kde_output_configuration_v2" version="27">
   <description summary="configure single output devices">
     outputconfiguration is a client-specific resource that can be used to ask
     the server to apply changes to available output devices.
@@ -509,6 +509,28 @@
     </description>
     <arg name="outputdevice" type="object" interface="kde_output_device_v2"/>
     <arg name="enabled" type="uint"/>
+  </request>
+    <enum name="ized3d_mode" since="27">
+      <entry name="cf" value="0"/>
+      <entry name="cfl" value="1"/>
+      <entry name="bw_cfl" value="2"/>
+      <entry name="left_right_cfl" value="3"/>
+      <entry name="interlaced" value="4"/>
+      <entry name="checkerboard" value="5"/>
+    </enum>
+    <enum name="ized3d_transfer" since="27">
+      <entry name="linear" value="0" summary="decode sRGB before the formula, then encode sRGB"/>
+      <entry name="encoded" value="1" summary="apply the formula to encoded values"/>
+    </enum>
+  <request name="set_ized3d_options" since="27">
+    <description summary="select the iZ3D panel formula and transfer domain">
+      Sets the analytic iZ3D formula and arithmetic domain for this output.
+      The values have the same meaning as the output-device ized3d_options
+      event. They are retained when the output is not in an iZ3D pair.
+    </description>
+    <arg name="outputdevice" type="object" interface="kde_output_device_v2"/>
+    <arg name="mode" type="uint" enum="ized3d_mode"/>
+    <arg name="transfer" type="uint" enum="ized3d_transfer"/>
   </request>
 </interface>
 

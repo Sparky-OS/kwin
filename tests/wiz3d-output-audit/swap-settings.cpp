@@ -6,6 +6,7 @@
 #include <QGuiApplication>
 #include <QDebug>
 #include <QEventLoop>
+#include <QElapsedTimer>
 #include <QProcess>
 #include <QTimer>
 
@@ -50,7 +51,16 @@ int main(int argc, char **argv)
         if (!op->exec()) {
             qFatal("Write failed: %s", qPrintable(op->errorString()));
         }
-        config = readConfig();
+        QElapsedTimer deadline;
+        deadline.start();
+        do {
+            QEventLoop settle;
+            QTimer::singleShot(100, &settle, &QEventLoop::quit);
+            settle.exec();
+            config = readConfig();
+        } while (config->output(first)->stereoSwapEyes() != swap && deadline.elapsed() < 30000);
+        qInfo() << "READBACK" << first << config->output(first)->stereoSwapEyes() << "expected" << swap
+                << "second" << second << config->output(second)->stereoSwapEyes() << "expected" << other;
         if (config->output(first)->stereoSwapEyes() != swap || config->output(second)->stereoSwapEyes() != other) {
             qFatal("Per-output swap readback differs");
         }

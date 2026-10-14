@@ -429,6 +429,8 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
     next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
     next.stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
+    next.ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
+    next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
 
@@ -551,6 +553,9 @@ void BackendOutput::setState(const State &state)
     }
     if (oldState.stereoSwapEyes != state.stereoSwapEyes) {
         Q_EMIT stereoSwapEyesChanged();
+    }
+    if (oldState.ized3dMode != state.ized3dMode || oldState.ized3dTransfer != state.ized3dTransfer) {
+        Q_EMIT ized3dOptionsChanged();
     }
     // detectedDdcCi is ignored here, it should result in capabilitiesChanged() instead
     if (oldState.allowDdcCi != state.allowDdcCi) {
@@ -817,6 +822,16 @@ StereoPairReflection BackendOutput::stereoPairReflection() const
 bool BackendOutput::stereoSwapEyes() const
 {
     return m_state.stereoSwapEyes;
+}
+
+Ized3dMode BackendOutput::ized3dMode() const
+{
+    return m_state.ized3dMode;
+}
+
+Ized3dTransfer BackendOutput::ized3dTransfer() const
+{
+    return m_state.ized3dTransfer;
 }
 
 bool BackendOutput::isStereoPair() const

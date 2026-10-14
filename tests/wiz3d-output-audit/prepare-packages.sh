@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 set -eu
 workspace=/K3D/temp/partners/queue/kwin-wiz3d-outputs
+source=/mnt/build/kwin-wiz3d-outputs/kwin/src/wayland/protocols/stereo
 packages=${1:?Pass a package folder relative to the workspace}
 case "$packages" in /*|*..*) exit 2 ;; esac
+cp "$source/kde-output-device-v2.xml" "$workspace/rig/device.xml"
+cp "$source/kde-output-management-v2.xml" "$workspace/rig/management.xml"
 export DOCKER_HOST=unix:///K3D/temp/partners/queue/kwin-wiz3d-outputs/docker.sock
 printf '%s\n' kwin-wiz3d-outputs-package-overlay >> "$workspace/.artifacts"
 docker run --rm --platform linux/amd64 --name kwin-wiz3d-outputs-package-overlay \

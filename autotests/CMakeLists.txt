@@ -369,3 +369,8 @@ add_executable(testStereoPattern test_stereo_pattern.cpp)
 target_link_libraries(testStereoPattern Qt::Test kwin)
 add_test(NAME kwin-testStereoPattern COMMAND testStereoPattern)
 ecm_mark_as_test(testStereoPattern)
+
+add_executable(testIzed3d test_ized3d.cpp)
+target_link_libraries(testIzed3d Qt::Test kwin)
+add_test(NAME kwin-testIzed3d COMMAND testIzed3d)
+ecm_mark_as_test(testIzed3d)

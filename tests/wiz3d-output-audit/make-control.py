@@ -17,7 +17,7 @@ code = ['''#include <stdio.h>
 #include <wayland-client.h>
 #include "device-client.h"
 #include "management-client.h"
-struct device { struct kde_output_device_v2 *object; char name[128]; unsigned swap; } devices[8];
+struct device { struct kde_output_device_v2 *object; char name[128]; unsigned swap, izedMode, izedTransfer; int izedKnown; } devices[8];
 struct mode { struct kde_output_device_mode_v2 *object; int device, w, h, hz; unsigned flags; } modes[2048];
 int nd, nm, result;
 struct wl_display *display;
@@ -39,6 +39,7 @@ handlers = {
     devices[nd++].object = output;
     kde_output_device_v2_add_listener(output, &device_listener, NULL);''',
     ('kde_output_device_v2', 'stereo_swap_eyes'): 'devices[device_index(object)].swap = enabled;',
+    ('kde_output_device_v2', 'ized3d_options'): 'struct device *d = &devices[device_index(object)]; d->izedMode=mode; d->izedTransfer=transfer; d->izedKnown=1;',
     ('kde_output_device_v2', 'name'): 'snprintf(devices[device_index(object)].name, 128, "%s", name);',
     ('kde_output_device_v2', 'mode'): '''
     if (nm >= 2048) abort();
@@ -146,7 +147,33 @@ int main(int argc, char **argv) {
             kde_output_configuration_v2_mode(c,devices[i].object,choose(i,0));
             kde_output_configuration_v2_position(c,devices[i].object,0,0);
             kde_output_configuration_v2_set_stereo_pair(c,devices[i].object,devices[1-i].object,kind,(kind==3?2:0)+i,atoi(argv[3+i]));
+#ifdef KDE_OUTPUT_CONFIGURATION_V2_SET_IZED3D_OPTIONS_SINCE_VERSION
+            /* Keep the existing cache/swap oracle explicit after the new default. */
+            if (kind==3 && kde_output_configuration_v2_get_version(c)>=KDE_OUTPUT_CONFIGURATION_V2_SET_IZED3D_OPTIONS_SINCE_VERSION)
+                kde_output_configuration_v2_set_ized3d_options(c,devices[i].object,0,1);
+#endif
         }
+    } else if (!strcmp(argv[1], "ized") && argc==4 && nd==2) {
+#ifdef KDE_OUTPUT_CONFIGURATION_V2_SET_IZED3D_OPTIONS_SINCE_VERSION
+        if (kde_output_configuration_v2_get_version(c)<KDE_OUTPUT_CONFIGURATION_V2_SET_IZED3D_OPTIONS_SINCE_VERSION) return 2;
+        for (int i=0;i<2;i++) {
+            kde_output_configuration_v2_enable(c,devices[i].object,1);
+            kde_output_configuration_v2_mode(c,devices[i].object,choose(i,0));
+            kde_output_configuration_v2_position(c,devices[i].object,0,0);
+            kde_output_configuration_v2_set_stereo_pair(c,devices[i].object,devices[1-i].object,3,2+i,0);
+            kde_output_configuration_v2_set_ized3d_options(c,devices[i].object,strtoul(argv[2],NULL,0),strtoul(argv[3],NULL,0));
+            kde_output_configuration_v2_set_stereo_swap_eyes(c,devices[i].object,0);
+        }
+#else
+        return 2;
+#endif
+    } else if (!strcmp(argv[1], "swap-both") && argc==3 && nd==2) {
+#ifdef KDE_OUTPUT_CONFIGURATION_V2_SET_STEREO_SWAP_EYES_SINCE_VERSION
+        if (kde_output_configuration_v2_get_version(c)<KDE_OUTPUT_CONFIGURATION_V2_SET_STEREO_SWAP_EYES_SINCE_VERSION) return 2;
+        for (int i=0;i<2;i++) kde_output_configuration_v2_set_stereo_swap_eyes(c,devices[i].object,strtoul(argv[2],NULL,0));
+#else
+        return 2;
+#endif
     } else if (!strcmp(argv[1], "swap") && argc==4) {
 #ifdef KDE_OUTPUT_CONFIGURATION_V2_SET_STEREO_SWAP_EYES_SINCE_VERSION
         int output=atoi(argv[2]);
@@ -163,6 +190,14 @@ int main(int argc, char **argv) {
     if (result==1 && !strcmp(argv[1],"swap")) {
         for (int i=0;i<2;i++) if (wl_display_roundtrip(display)<0) return 1;
         if (devices[atoi(argv[2])].swap != strtoul(argv[3],NULL,0)) return 3;
+    }
+    if (result==1 && (!strcmp(argv[1],"ized") || !strcmp(argv[1],"swap-both"))) {
+        for (int i=0;i<2;i++) if (wl_display_roundtrip(display)<0) return 1;
+        for (int i=0;i<nd;i++) {
+            printf("state %s swap=%u ized=%d mode=%u transfer=%u\\n",devices[i].name,devices[i].swap,devices[i].izedKnown,devices[i].izedMode,devices[i].izedTransfer);
+            if (!strcmp(argv[1],"ized") && (!devices[i].izedKnown || devices[i].izedMode!=strtoul(argv[2],NULL,0) || devices[i].izedTransfer!=strtoul(argv[3],NULL,0) || devices[i].swap)) return 3;
+            if (!strcmp(argv[1],"swap-both") && devices[i].swap!=strtoul(argv[2],NULL,0)) return 3;
+        }
     }
     return result==1?0:1;
 }

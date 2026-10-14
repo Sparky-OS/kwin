@@ -68,6 +68,7 @@ public:
     void setStereoLayout(StereoLayout layout, const QSize &eyeSize = QSize(), const QPoint &rightEyeOffset = QPoint());
     void setStereoPair(StereoPairMode mode, StereoPairRole role);
     void setStereoSwapEyes(bool swap);
+    void setIzed3dOptions(Ized3dMode mode, Ized3dTransfer transfer);
     /**
      * With stereo content the scene is rendered once per eye: the shadow buffer from
      * startRendering() holds the left eye, this one the right eye. Call it between
@@ -162,6 +163,8 @@ private:
     StereoPairMode m_stereoPairMode = StereoPairMode::None;
     StereoPairRole m_stereoPairRole = StereoPairRole::Left;
     bool m_stereoSwapEyes = false;
+    Ized3dMode m_ized3dMode = Ized3dMode::CF;
+    Ized3dTransfer m_ized3dTransfer = Ized3dTransfer::Linear;
     const BufferTarget m_requestedBufferTarget;
 };
 

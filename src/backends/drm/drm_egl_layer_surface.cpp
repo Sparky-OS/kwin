@@ -379,6 +379,8 @@ bool EglGbmLayerSurface::drawIzed3d(const QSize &fboSize, const Region &repaint)
     shader->setUniform("leftEye", m_stereoSwapEyes ? 1 : 0);
     shader->setUniform("rightEye", m_stereoSwapEyes ? 0 : 1);
     shader->setUniform("panel", m_stereoPairRole == StereoPairRole::Front ? 1 : 0);
+    shader->setUniform("formula", int(m_ized3dMode));
+    shader->setUniform("transfer", int(m_ized3dTransfer));
     QMatrix4x4 mat;
     mat.scale(1, -1);
     mat.ortho(QRectF(QPointF(), fboSize));
@@ -456,6 +458,12 @@ void EglGbmLayerSurface::setStereoPair(StereoPairMode mode, StereoPairRole role)
 void EglGbmLayerSurface::setStereoSwapEyes(bool swap)
 {
     m_stereoSwapEyes = swap;
+}
+
+void EglGbmLayerSurface::setIzed3dOptions(Ized3dMode mode, Ized3dTransfer transfer)
+{
+    m_ized3dMode = mode;
+    m_ized3dTransfer = transfer;
 }
 
 bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputFrame *frame)

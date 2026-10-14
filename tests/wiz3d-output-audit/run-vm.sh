@@ -6,7 +6,7 @@ source=/mnt/build/kwin-wiz3d-outputs/kwin/tests/wiz3d-output-audit
 old=/K3D/temp/partners/queue/mesa-stereo/vkms-bench
 root=/K3D/temp/partners/queue/displayxr-kwin/rig/root
 case_set=$(cat "$workspace/rig/case-set" 2>/dev/null || echo matrix)
-case "$case_set" in matrix|ized-first|sequential-fresh|cache-rows-first|cache-ized-first|swap-matrix|swap-settings) ;; *) echo "Unknown case set" >&2; exit 2 ;; esac
+case "$case_set" in matrix|ized-first|sequential-fresh|cache-rows-first|cache-ized-first|swap-matrix|swap-settings|ized-matrix|ized-settings) ;; *) echo "Unknown case set" >&2; exit 2 ;; esac
 output=vkms
 if [ "$case_set" != matrix ]; then output=$case_set; fi
 output=${AUDIT_OUTPUT:-$output}
@@ -66,7 +66,7 @@ docker run --rm --platform linux/amd64 --name kwin-wiz3d-outputs-rig --user "$(i
     -e QEMU_MODULE_DIR=/opt/host-libs/qemu debian:testing sh -c '
     ulimit -c 0
     limit=900
-    if [ "$(cat rig/case-set)" = swap-matrix ]; then limit=3600; fi
+    case "$(cat rig/case-set)" in swap-matrix|ized-matrix) limit=3600 ;; esac
     timeout "$limit" /opt/host-libs/ld-linux-x86-64.so.2 --library-path /opt/host-libs /opt/qemu-system-x86_64 \
         -L /opt/qemu-data -bios /opt/seabios/bios-256k.bin -machine q35 -accel tcg -cpu max -smp 4 -m 3G \
         -display none -vga none -nic none -monitor none -serial stdio -no-reboot \
