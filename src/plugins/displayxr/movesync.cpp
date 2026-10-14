@@ -241,6 +241,7 @@ void MoveSync::committed(Window *window)
         hold.lastHistorySize = hold.history.size();
         hold.statistics.holds++;
         qCDebug(KWIN_DISPLAYXR, "move sync tag appeared t=%lld held", microseconds(now));
+        Q_EMIT heldChanged();
     } else if (!tag) {
         // The tag went away: what is painted now is woven for no position, so the window item goes
         // to the window at once.
@@ -252,6 +253,8 @@ void MoveSync::committed(Window *window)
         qCDebug(KWIN_DISPLAYXR, "move sync tag gone t=%lld plain", microseconds(now));
         if (!hold.grabbing) {
             release(window, "tag unmapped");
+        } else {
+            Q_EMIT heldChanged();
         }
         return;
     }
@@ -372,6 +375,9 @@ void MoveSync::release(Window *window, const char *why)
     const Statistics &s = hold.statistics;
     qCDebug(KWIN_DISPLAYXR, "move sync done t=%lld (%s): %u frames, %u advances on a woven frame, %u timeouts, %u back hops, %u untagged, max behind %d logical px, %u holds, %u tag-lost releases; painted where woven %u, stale %u; plain frames %u, off the window %u",
             microseconds(Clock::now()), why, s.frames, s.advanced, s.timeouts, s.backHops, s.untagged, s.maxBehind, s.holds, s.tagLost, s.paintedWoven, s.paintedStale, s.plainFrames, s.plainOff);
+    if (hold.held) {
+        Q_EMIT heldChanged();
+    }
 }
 
 void MoveSync::show(Window *window, const Hold &hold)

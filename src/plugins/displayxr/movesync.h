@@ -55,6 +55,11 @@ public:
 
 Q_SIGNALS:
     void clientsChanged();
+    /**
+     * A hold began or ended: where the window's frames are painted, and so what the snapshot says
+     * about them, changed.
+     */
+    void heldChanged();
 
 private:
     using Clock = std::chrono::steady_clock;

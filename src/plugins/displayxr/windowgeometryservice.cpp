@@ -6,7 +6,9 @@
 
 #include "windowgeometryservice.h"
 #include "captureexclusion.h"
+#include "core/backendoutput.h"
 #include "core/output.h"
+#include "core/renderloop.h"
 #include "publishedgeometry.h"
 #include "wayland_server.h"
 #include "window.h"
@@ -120,6 +122,7 @@ WindowGeometryService::WindowGeometryService()
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/displayxr/WindowGeometry"), this);
     m_placement = std::make_unique<WindowPlacement>();
     connect(m_placement.get(), &WindowPlacement::moveSyncChanged, this, &WindowGeometryService::scheduleChanged);
+    connect(m_placement.get(), &WindowPlacement::moveSyncHoldChanged, this, &WindowGeometryService::scheduleChanged);
     m_captureExclusion = std::make_unique<CaptureExclusion>();
 
     const auto windows = workspace()->windows();
@@ -143,6 +146,7 @@ WindowGeometryService::WindowGeometryService()
     // The lock screen hides every window, so the published list is empty while it is up.
     connect(waylandServer(), &WaylandServer::lockStateChanged, this, &WindowGeometryService::scheduleChanged);
 
+    m_lastPayload = GetWindows();
     // Every object is on the bus before the name, so a client that sees the name can call them.
     QDBusConnection::sessionBus().registerService(s_serviceName);
 }
@@ -169,6 +173,10 @@ void WindowGeometryService::trackWindow(Window *window)
 void WindowGeometryService::trackOutput(LogicalOutput *output)
 {
     connect(output, &LogicalOutput::changed, this, &WindowGeometryService::scheduleChanged);
+    // What a frame painted may differ from what the last snapshot said without any of the events
+    // above: move sync lets a dragged window settle after the release, and buffer_device then moves
+    // from the frame woven for the position to the pixels painted.
+    connect(output->backendOutput()->renderLoop(), &RenderLoop::framePresented, this, &WindowGeometryService::checkChanged);
 }
 
 void WindowGeometryService::scheduleChanged()
@@ -187,7 +195,22 @@ void WindowGeometryService::scheduleChanged()
 void WindowGeometryService::emitChanged()
 {
     m_changeScheduled = false;
-    Q_EMIT WindowsChanged(GetWindows());
+    m_lastPayload = GetWindows();
+    Q_EMIT WindowsChanged(m_lastPayload);
+}
+
+void WindowGeometryService::checkChanged()
+{
+    // After each presented frame, at most one signal: the snapshot as it is now against the last one
+    // sent. A scheduled change sends it in any case.
+    if (m_changeScheduled) {
+        return;
+    }
+    const QString payload = GetWindows();
+    if (payload != m_lastPayload) {
+        m_lastPayload = payload;
+        Q_EMIT WindowsChanged(payload);
+    }
 }
 
 QString WindowGeometryService::GetWindows() const
