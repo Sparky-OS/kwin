@@ -130,3 +130,8 @@ Its floating-point arithmetic tolerance is separate from the exact scanout-pixel
 `ized-settings` exercises all formula/domain settings through libkscreen, choosing different values on the two outputs and reading both back.
 Build `ized3d-settings.cpp` against the candidate libkscreen and supply its binary and backend in `rig/ui/`.
 Use the lowercase backend name `kwayland`; negotiate the generated output-registry version so the setting events can be received.
+
+The matrix also runs `ized-settings` in a fresh session after the six formula cases.
+Use `ized-interlaced-gradient` separately and run `check-ized3d-gradient.py <capture-folder>` to distinguish the half-row offset direction.
+The repeating palette cannot distinguish the row above from the row below; this gradient check requires the correct offset to match and the reversed offset to fail on each back panel.
+Its front mask remains invariant.

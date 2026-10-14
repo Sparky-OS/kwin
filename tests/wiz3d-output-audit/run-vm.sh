@@ -6,7 +6,7 @@ source=/mnt/build/kwin-wiz3d-outputs/kwin/tests/wiz3d-output-audit
 old=/K3D/temp/partners/queue/mesa-stereo/vkms-bench
 root=/K3D/temp/partners/queue/displayxr-kwin/rig/root
 case_set=$(cat "$workspace/rig/case-set" 2>/dev/null || echo matrix)
-case "$case_set" in matrix|ized-first|sequential-fresh|cache-rows-first|cache-ized-first|swap-matrix|swap-settings|ized-matrix|ized-settings) ;; *) echo "Unknown case set" >&2; exit 2 ;; esac
+case "$case_set" in matrix|ized-first|sequential-fresh|cache-rows-first|cache-ized-first|swap-matrix|swap-settings|ized-matrix|ized-settings|ized-interlaced-gradient) ;; *) echo "Unknown case set" >&2; exit 2 ;; esac
 output=vkms
 if [ "$case_set" != matrix ]; then output=$case_set; fi
 output=${AUDIT_OUTPUT:-$output}

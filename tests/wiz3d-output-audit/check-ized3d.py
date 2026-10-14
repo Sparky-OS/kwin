@@ -21,7 +21,7 @@ def main():
     ref.PALETTE = True
     results = {}
     passed = True
-    for mode in ized.MODES:
+    for mode in sys.argv[3:] or ized.MODES:
         folder = root / mode
         for domain in ('linear', 'encoded'):
             for swap in (False, True):

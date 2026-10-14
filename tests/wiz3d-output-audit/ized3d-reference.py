@@ -24,7 +24,7 @@ def formula(mode, left, right, front=False, linear=True):
     raise ValueError(mode)
 
 
-def pixel(mode, domain, front, x, y, swap=False):
+def pixel(mode, domain, front, x, y, swap=False, neighbor_sign=1):
     assert mode in MODES and domain in ('linear', 'encoded')
     linear = domain == 'linear'
     decode = ref.decode if linear else lambda v: v
@@ -36,7 +36,7 @@ def pixel(mode, domain, front, x, y, swap=False):
         if front:
             result = [0 if right else 1] * 3
         elif mode == 'interlaced':
-            a, b = eye(right), eye(right, x, y + (-1 if right else 1))
+            a, b = eye(right), eye(right, x, y + neighbor_sign * (-1 if right else 1))
             result = [(v + w) / 2 for v, w in zip(a, b)]
         else:
             result = eye(right)

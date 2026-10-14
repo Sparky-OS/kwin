@@ -11,7 +11,7 @@ case_set=$(cat /tmp/work/rig/case-set 2>/dev/null || echo matrix)
 if { [ "$case_set" = swap-matrix ] || [ "$case_set" = ized-matrix ]; } && [ -z "${AUDIT_CASE:-}" ]; then
     probes=$(cat /tmp/work/rig/swap-probes 2>/dev/null || echo 'rows-left rows-right columns-left columns-right checker-left checker-right anaglyph-modern anaglyph-crt sbs tab sbs-full frame-packing 2d 2d-mono pair-dual pair-mirror-h pair-mirror-v pair-ized')
     if [ "$case_set" = ized-matrix ]; then
-        probes='cf cfl bw-cfl left-right-cfl interlaced checkerboard'
+        probes='cf cfl bw-cfl left-right-cfl interlaced checkerboard ized-settings'
     fi
     for probe in $probes; do
         export AUDIT_CASE=$probe
@@ -28,6 +28,7 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
 fi
 out=/tmp/work/evidence/vkms
 case_set=$(cat /tmp/work/rig/case-set 2>/dev/null || echo matrix)
+if [ "${AUDIT_CASE:-}" = ized-settings ]; then case_set=ized-settings; fi
 if [ "$case_set" != matrix ]; then out=/tmp/work/evidence/$case_set; fi
 out=/tmp/work/evidence/$(cat /tmp/work/rig/output-name)
 if [ -n "${AUDIT_CASE:-}" ]; then out=$out/$AUDIT_CASE; fi
@@ -44,7 +45,7 @@ i=0
 while [ "$i" -lt 90 ] && [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; do sleep 1; i=$((i + 1)); done
 export WAYLAND_DISPLAY=wl-audit
 if [ ! -S "$XDG_RUNTIME_DIR/wl-audit" ]; then echo "AUDIT_NO_SOCKET"; kill "$kp"; exit 1; fi
-if [ "$case_set" = swap-matrix ] || [ "$case_set" = swap-settings ] || [ "$case_set" = ized-matrix ] || [ "$case_set" = ized-settings ]; then
+if [ "$case_set" = swap-matrix ] || [ "$case_set" = swap-settings ] || [ "$case_set" = ized-matrix ] || [ "$case_set" = ized-settings ] || [ "$case_set" = ized-interlaced-gradient ]; then
     echo "Output state is recorded by the versioned control client." > "$out/outputs.txt"
     echo "not-run" > "$out/outputs.exit"
 else
@@ -139,8 +140,12 @@ shoot() {
     if [ -n "$second_client" ]; then kill "$second_client"; wait "$second_client"; fi
     unset FIXTURE_OUTPUT MONO_FIXTURE
 }
-if [ "$case_set" = ized-matrix ]; then
+if [ "$case_set" = ized-matrix ] || [ "$case_set" = ized-interlaced-gradient ]; then
     export PALETTE_FIXTURE=1
+    if [ "$case_set" = ized-interlaced-gradient ]; then
+        unset PALETTE_FIXTURE
+        AUDIT_CASE=interlaced
+    fi
     case "$AUDIT_CASE" in
         cf) formula=0 ;; cfl) formula=1 ;; bw-cfl) formula=2 ;;
         left-right-cfl) formula=3 ;; interlaced) formula=4 ;; checkerboard) formula=5 ;;
