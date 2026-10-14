@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "kwin_wayland_test.h"
 #include "generic_scene_opengl_test.h"
+#include "kwin_wayland_test.h"
 
 #include "core/graphicsbuffer.h"
 #include "plugins/screenshot/screenshot.h"
