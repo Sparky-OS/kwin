@@ -1,6 +1,6 @@
 # wiz3D output audit
 
-Audit tools for KWin baseline ec2519f5ec, with no compositor changes.
+Audit tools for KWin baseline ec2519f5ec and the subsequent output-filter patches.
 The report and evidence live in `/K3D/temp/partners/queue/kwin-wiz3d-outputs`.
 
 `prepare.sh` copies this checkout's protocol XML and extracts installed +stereo3d21 package files from `waterfox-stereo-bench:m3-kwin21`.
@@ -10,7 +10,8 @@ QEMU has no network, host GPU or graphical display.
 KWin binaries are overlaid in guest RAM, and runtime hashes are recorded.
 
 The local rig currently references the kernel/initramfs in the mesa-stereo lane and a read-only root in the displayxr-kwin lane, both reused during the original audit.
-The updated house rules forbid reading other partners' workspaces, so a new run requires authorized shared fixtures or copies supplied by the main session; update `old` and `root` in `run-vm.sh` accordingly.
+The milestone 2 brief expressly authorizes those two exact fixture paths for read-only reuse.
+Other partner paths remain private.
 The scripts do not authorize access to those folders by themselves.
 The existing PNG evidence can be compared without accessing any external guest fixture.
 
@@ -38,7 +39,7 @@ Do not substitute that failing transition for the passing pilot's negative contr
 ```sh
 export DOCKER_HOST=unix:///K3D/temp/partners/queue/kwin-wiz3d-outputs/docker.sock
 audit=/mnt/build/kwin-wiz3d-outputs/kwin/tests/wiz3d-output-audit
-docker run --rm --user "$(id -u):$(id -g)" --cpus 4 --network none \
+docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" --cpus 4 --network none \
     -v "$PWD:$PWD" -v "$audit:/audit:ro" -w "$PWD" \
     waterfox-stereo-bench:m3-kwin21 sh -eu -c '
     for folder in vkms pilot ized-first sequential-fresh; do
@@ -73,3 +74,15 @@ QEMU, Linux VKMS, Mesa llvmpipe, Wayland and KDE KWin supply the execution path.
 The reference targets wiz3D/effcol and the output-method sources credited to iZ3D Inc. in their 2002–2010 headers; `LICENSE-iZ3D.txt` names Bo3b Johnson.
 The optimized anaglyph method is credited to Eric Dubois.
 See the workspace's proposed attribution addition for the main session's public integration review.
+
+## Shader cache regression
+
+`cache-rows-first` performs rows → iZ3D → rows in one compositor session.
+`cache-ized-first` performs iZ3D → rows → iZ3D in a separate fresh session.
+Set `AUDIT_OUTPUT=m2/cache-before-rows` (or another distinct relative path) when invoking the runner to keep baseline and patched evidence separate.
+The guest records hashes of the binaries it actually runs.
+After the baseline runs, `prepare-packages.sh packages/cache` replaces the guest overlay with the locally built Debian packages; repeat both sequences under new evidence paths.
+Run `check-cache.py evidence/m2/cache-before-rows rows-first`, or `ized-first` for the reverse sequence, in the Python/PIL container.
+The check exits nonzero on a missing capture, any differing pixel, or a failed eye-order control.
+CF's back average is mathematically invariant under exchanging eyes, so its swapped prediction must also match; each front and rows capture must reject the swapped prediction at every pixel.
+The baseline must fail and the changed package must pass both complete sequences.

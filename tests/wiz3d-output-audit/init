@@ -35,11 +35,11 @@ mkdir -p /r/dev/pts /r/dev/shm
 mount -t devpts devpts /r/dev/pts
 mount -t tmpfs tmpfs /r/dev/shm
 for d in /r/tmp /r/run /r/root /r/var/tmp; do mount -t tmpfs tmpfs "$d"; done
-mkdir -p /r/tmp/work /tmp/kwin21
+mkdir -p /r/tmp/work /tmp/kwin
 mount --bind /work /r/tmp/work
-tar -xf /work/rig/scratch/kwin21.tar -C /tmp/kwin21
-find /tmp/kwin21 -type f | while read -r f; do
-    target=/r/${f#/tmp/kwin21/}
+tar -xf /work/rig/scratch/kwin.tar -C /tmp/kwin
+find /tmp/kwin -type f | while read -r f; do
+    target=/r/${f#/tmp/kwin/}
     if [ -f "$target" ]; then mount --bind "$f" "$target"; else echo "OVERRIDE_MISSING $target"; fi
 done
 cp /bin/drm-grab /r/tmp/drm-grab

@@ -12,6 +12,7 @@ fi
 out=/tmp/work/evidence/vkms
 case_set=$(cat /tmp/work/rig/case-set 2>/dev/null || echo matrix)
 if [ "$case_set" != matrix ]; then out=/tmp/work/evidence/$case_set; fi
+out=/tmp/work/evidence/$(cat /tmp/work/rig/output-name)
 mkdir -p "$out"
 mkdir -p /tmp/build
 cd /tmp/build
@@ -54,6 +55,28 @@ shoot() {
     kill "$client"
     wait "$client"
 }
+case "$case_set" in
+    cache-rows-first) sequence="rows ized rows" ;;
+    cache-ized-first) sequence="ized rows ized" ;;
+    *) sequence="" ;;
+esac
+if [ -n "$sequence" ]; then
+    step=0
+    for mode in $sequence; do
+        step=$((step+1))
+        if [ "$mode" = rows ]; then
+            tag=rows-step$step
+            ./control mode 0x100 > "$out/config-$tag.txt" 2>&1 || exit 3
+        else
+            tag=pair-ized-step$step
+            ./control pair 3 0 0 > "$out/config-$tag.txt" 2>&1 || exit 3
+        fi
+        shoot "$tag"
+    done
+    kill "$kp"
+    wait "$kp"
+    exit 0
+fi
 if [ "$case_set" = ized-first ]; then
     ./control pair 3 0 0 > "$out/config-pair-ized.txt" 2>&1 || exit 3
     shoot pair-ized
