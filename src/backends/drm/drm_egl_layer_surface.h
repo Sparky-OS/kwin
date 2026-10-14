@@ -127,9 +127,11 @@ private:
 
         std::unique_ptr<GLRenderTimeQuery> compositingTimeQuery;
 
-        // the two eyes mixed as red/cyan (anaglyph layouts)
         std::unique_ptr<GLShader> stereoPatternShader;
         bool stereoPatternShaderFailed = false;
+        std::unique_ptr<GLShader> ized3dShader;
+        bool ized3dShaderFailed = false;
+        // the two eyes mixed as red/cyan (anaglyph layouts)
         std::unique_ptr<GLShader> anaglyphShader;
         bool anaglyphShaderFailed = false;
     };

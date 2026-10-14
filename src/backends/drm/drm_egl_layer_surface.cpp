@@ -364,17 +364,17 @@ bool EglGbmLayerSurface::drawStereoPattern(const QSize &fboSize, const Region &r
 
 bool EglGbmLayerSurface::drawIzed3d(const QSize &fboSize, const Region &repaint)
 {
-    if (!m_surface->stereoPatternShader && !m_surface->stereoPatternShaderFailed) {
-        m_surface->stereoPatternShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/ized3d.frag"));
-        if (!m_surface->stereoPatternShader) {
-            m_surface->stereoPatternShaderFailed = true;
+    if (!m_surface->ized3dShader && !m_surface->ized3dShaderFailed) {
+        m_surface->ized3dShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/ized3d.frag"));
+        if (!m_surface->ized3dShader) {
+            m_surface->ized3dShaderFailed = true;
             qCWarning(KWIN_DRM) << "Failed to load the iZ3D shader, showing the left eye";
         }
     }
-    if (!m_surface->stereoPatternShader || !m_surface->currentRightShadowSlot) {
+    if (!m_surface->ized3dShader || !m_surface->currentRightShadowSlot) {
         return false;
     }
-    ShaderBinder binder(m_surface->stereoPatternShader.get());
+    ShaderBinder binder(m_surface->ized3dShader.get());
     GLShader *shader = binder.shader();
     shader->setUniform("leftEye", 0);
     shader->setUniform("rightEye", 1);
@@ -436,10 +436,17 @@ void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSi
 void EglGbmLayerSurface::setStereoPair(StereoPairMode mode, StereoPairRole role)
 {
     if (m_stereoPairMode != mode || m_stereoPairRole != role) {
-        if (m_surface) {
-            m_surface->damageJournal.clear();
-            m_surface->shadowDamageJournal.clear();
-            m_surface->rightShadowDamageJournal.clear();
+        for (Surface *surface : {m_surface.get(), m_oldSurface.get()}) {
+            if (surface) {
+                surface->context->makeCurrent();
+                surface->stereoPatternShader.reset();
+                surface->stereoPatternShaderFailed = false;
+                surface->ized3dShader.reset();
+                surface->ized3dShaderFailed = false;
+                surface->damageJournal.clear();
+                surface->shadowDamageJournal.clear();
+                surface->rightShadowDamageJournal.clear();
+            }
         }
     }
     m_stereoPairMode = mode;
