@@ -5,8 +5,13 @@ workspace=/K3D/temp/partners/queue/kwin-wiz3d-outputs
 source=/mnt/build/kwin-wiz3d-outputs/kwin/tests/wiz3d-output-audit
 old=/K3D/temp/partners/queue/mesa-stereo/vkms-bench
 root=/K3D/temp/partners/queue/displayxr-kwin/rig/root
+case_set=$(cat "$workspace/rig/case-set" 2>/dev/null || echo matrix)
+case "$case_set" in matrix|ized-first|sequential-fresh) ;; *) echo "Unknown case set" >&2; exit 2 ;; esac
+output=vkms
+if [ "$case_set" != matrix ]; then output=$case_set; fi
 export DOCKER_HOST=unix:///K3D/temp/partners/queue/kwin-wiz3d-outputs/docker.sock
 mkdir -p "$workspace/rig/scratch/overlay/phases" "$workspace/rig/scratch/overlay/data" "$workspace/rig/scratch/overlay/bin" "$workspace/evidence/vkms"
+mkdir -p "$workspace/evidence/$output"
 bench=/K3D/temp/publish-sso/tools/vkms-stereo-bench
 cp "$bench/guest/phases/lib.sh" "$workspace/rig/scratch/overlay/phases/lib.sh"
 cp "$bench/edid/stereo-test.bin" "$workspace/rig/scratch/overlay/data/stereo-test.bin"
@@ -15,6 +20,7 @@ cp "$source/init" "$workspace/rig/scratch/overlay/init"
 cp "$source/guest-session.sh" "$workspace/rig/guest-session.sh"
 cp "$source/eye-fixture.c" "$workspace/rig/eye-fixture.c"
 cp "$source/drm-grab.c" "$workspace/rig/drm-grab.c"
+cp "$source/drm-flipwatch.c" "$workspace/rig/drm-flipwatch.c"
 chmod 755 "$workspace/rig/scratch/overlay/init"
 docker run --rm --user "$(id -u):$(id -g)" --cpus 4 --network none \
     -v "$workspace:$workspace" -v "$source:$source:ro" -w "$workspace" \
@@ -43,6 +49,7 @@ docker run --rm --user "$(id -u):$(id -g)" --cpus 4 --network none \
     gcc -O2 -o control control.c device-protocol.c management-protocol.c $(pkg-config --cflags --libs wayland-client)
     gcc -O2 -o fixture eye-fixture.c stereo-protocol.c xdg-shell-protocol.c viewporter-protocol.c $(pkg-config --cflags --libs wayland-client)
     gcc -O2 -o drm-grab drm-grab.c $(pkg-config --cflags libdrm)
+    gcc -O2 -o drm-flipwatch drm-flipwatch.c $(pkg-config --cflags libdrm)
     ' > "$workspace/evidence/build-probes.log" 2>&1
 docker run --rm --user "$(id -u):$(id -g)" --cpus 4 --network none \
     -v "$workspace:$workspace" -w "$workspace" -v "$old:$old:ro" -v "$root:$root:ro" \
@@ -59,5 +66,6 @@ docker run --rm --user "$(id -u):$(id -g)" --cpus 4 --network none \
         -append "console=ttyS0 panic=-1 loglevel=4 vkms.create_default_dev=0" \
         -virtfs "local,path=$PWD,mount_tag=work,security_model=none,id=work" \
         -virtfs "local,path=$2,mount_tag=root,security_model=none,id=root,readonly=on" \
-        > evidence/vkms/console.log 2>&1
-    ' sh "$old" "$root"
+        > "evidence/$3/console.log" 2>&1
+    ' sh "$old" "$root" "$output"
+grep -q 'AUDIT_GUEST_EXIT 0' "$workspace/evidence/$output/console.log"

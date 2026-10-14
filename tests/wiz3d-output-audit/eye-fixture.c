@@ -92,6 +92,15 @@ static const struct wl_registry_listener registry_listener = {
 	.global_remove = registry_remove,
 };
 
+static void frame_done(void *data, struct wl_callback *callback, uint32_t time)
+{
+	bool *done = data;
+	*done = true;
+	wl_callback_destroy(callback);
+}
+
+static const struct wl_callback_listener frame_listener = { .done = frame_done };
+
 int main(void)
 {
 	struct state state = { .width = 640, .height = 480 };
@@ -155,9 +164,17 @@ int main(void)
 					   WL_SHM_FORMAT_XRGB8888);
 	wl_surface_attach(surface, buffer, 0, 0);
 	wl_surface_damage(surface, 0, 0, state.width, state.height);
-	wl_surface_commit(surface);
-	wl_display_roundtrip(display);
-	printf("fullscreen %dx%d\n", state.width, state.height);
+	for (int frame = 0; frame < 3; frame++) {
+		bool done = false;
+		struct wl_callback *callback = wl_surface_frame(surface);
+		wl_callback_add_listener(callback, &frame_listener, &done);
+		wl_surface_damage(surface, 0, 0, eye_width, state.height);
+		wl_surface_commit(surface);
+		while (!done)
+			if (wl_display_dispatch(display) < 0)
+				return 1;
+	}
+	printf("fullscreen %dx%d frames=3\n", eye_width * 2, state.height);
 	fflush(stdout);
 
 	end = time(NULL) + (hold ? atoi(hold) : 60);
