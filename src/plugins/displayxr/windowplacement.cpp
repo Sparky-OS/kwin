@@ -48,6 +48,7 @@ WindowPlacement::WindowPlacement()
     connect(&m_lattice, &DragLattice::needed, this, &WindowPlacement::DragLatticeNeeded);
     connect(&m_lattice, &DragLattice::done, this, &WindowPlacement::DragLatticeDone);
     connect(&m_moveSync, &MoveSync::clientsChanged, this, &WindowPlacement::moveSyncChanged);
+    connect(&m_moveSync, &MoveSync::heldChanged, this, &WindowPlacement::moveSyncHoldChanged);
     new WindowPlacement1Adaptor(this);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/displayxr/WindowPlacement"), this);
 }

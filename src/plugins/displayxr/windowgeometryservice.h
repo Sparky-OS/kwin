@@ -41,10 +41,12 @@ private:
     void trackOutput(LogicalOutput *output);
     void scheduleChanged();
     void emitChanged();
+    void checkChanged();
 
     std::unique_ptr<WindowPlacement> m_placement;
     std::unique_ptr<CaptureExclusion> m_captureExclusion;
     bool m_changeScheduled = false;
+    QString m_lastPayload;
 };
 
 } // namespace KWin

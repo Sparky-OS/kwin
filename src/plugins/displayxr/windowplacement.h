@@ -51,6 +51,11 @@ Q_SIGNALS:
      * A process enabled move sync, or its registration ended with its bus connection.
      */
     void moveSyncChanged();
+    /**
+     * Move sync began or ended holding a window where its frames were woven for, so the pixels the
+     * snapshot names for it changed.
+     */
+    void moveSyncHoldChanged();
 
 private:
     std::optional<pid_t> callerPid(uint pid) const;
