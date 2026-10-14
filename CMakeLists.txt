@@ -238,6 +238,13 @@ endif()
 unset(_kwin_output_device_xml)
 add_feature_info(StereoProtocolsInTree KWIN_STEREO_PROTOCOLS_IN_TREE "Stereo 3D protocols from src/wayland/protocols/stereo (PlasmaWaylandProtocols has no stereo 3D additions)")
 
+set(KWIN_SCREENCAST_PROTOCOLS_DIR ${PLASMA_WAYLAND_PROTOCOLS_DIR})
+file(READ ${PLASMA_WAYLAND_PROTOCOLS_DIR}/zkde-screencast-unstable-v1.xml _kwin_screencast_xml)
+if(NOT _kwin_screencast_xml MATCHES "stream_virtual_output_with_properties")
+    set(KWIN_SCREENCAST_PROTOCOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/wayland/protocols/stereo)
+endif()
+unset(_kwin_screencast_xml)
+
 find_package(XKB 0.7.0)
 set_package_properties(XKB PROPERTIES
     TYPE REQUIRED
