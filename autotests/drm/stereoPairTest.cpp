@@ -33,6 +33,8 @@ void StereoPairTest::sourceRectSelectsEachEye()
     QCOMPARE(stereoPairSourceRect(native, StereoPairRole::Right), Rect(QPoint(1920, 0), QSize(1920, 1080)));
     QCOMPARE(stereoPairSourceRect(native, StereoPairRole::Back), stereoPairSourceRect(native, StereoPairRole::Left));
     QCOMPARE(stereoPairSourceRect(native, StereoPairRole::Front), stereoPairSourceRect(native, StereoPairRole::Right));
+    QCOMPARE(stereoPairSourceRect(native, StereoPairRole::Left, true), stereoPairSourceRect(native, StereoPairRole::Right));
+    QCOMPARE(stereoPairSourceRect(native, StereoPairRole::Right, true), stereoPairSourceRect(native, StereoPairRole::Left));
 }
 
 void StereoPairTest::rolesMustBeComplementary()
