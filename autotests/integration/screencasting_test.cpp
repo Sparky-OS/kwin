@@ -737,12 +737,18 @@ void ScreencastingTest::testNativePanelRefresh()
         note(enabled ? "mirror" : "independent");
     };
     note("connected-independent");
+    if (qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(directory + QStringLiteral("/cursor-independent.done")), 120000);
+    }
     QTest::qWait(5000);
     if (qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
         const auto geometry = workspace()->findOutput(panel)->geometry();
         Test::pointerMotion(QPointF(geometry.right() - 1, geometry.bottom() - 1), 1);
     }
     mirror(true);
+    if (qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(directory + QStringLiteral("/cursor-mirror.done")), 120000);
+    }
     QTest::qWait(5000);
     if (qEnvironmentVariableIsSet("KWIN_PHONE_LOCK_CYCLE")) {
         note("private-rig-lock");
