@@ -9,6 +9,8 @@
 
 #include "fallapart.h"
 #include "effect/effecthandler.h"
+#include "effect/effectwindow.h"
+#include "scene/stereodepth.h"
 // KConfigSkeleton
 #include "fallapartconfig.h"
 
@@ -22,6 +24,41 @@ Q_LOGGING_CATEGORY(KWIN_FALLAPART, "kwin_effect_fallapart", QtWarningMsg)
 
 namespace KWin
 {
+
+// a piece within this many pixels of the output's edge goes flat, so that what is in front of the
+// screen is never cut by the screen's edge
+static constexpr qreal s_edgeMargin = 40;
+
+// how far a piece strays sideways in Dive, of what it does in Fly: the pieces fall into the
+// depth and stay in view
+static constexpr qreal s_diveScatter = 0.03;
+
+// the pieces fall for this part of the animation, then bounce on the floor, each bounce half
+// as fast and a quarter as high as the one before
+static constexpr qreal s_diveFall = 0.4;
+static constexpr qreal s_diveBounce = 0.5;
+
+/**
+ * How far down a piece in Dive is at @a progress, from 0 at the start to 1 at the floor, where
+ * it falls for @a fall of the animation and bounces after that.
+ */
+static qreal diveProfile(qreal progress, qreal fall)
+{
+    if (progress < fall) {
+        const qreal x = progress / fall;
+        return x * x;
+    }
+    qreal rest = progress - fall;
+    qreal duration = 2 * fall * s_diveBounce;
+    qreal height = s_diveBounce * s_diveBounce;
+    while (rest > duration) {
+        rest -= duration;
+        duration *= s_diveBounce;
+        height *= s_diveBounce * s_diveBounce;
+    }
+    const qreal x = rest / duration;
+    return 1 - height * 4 * x * (1 - x);
+}
 
 bool FallApartEffect::supported()
 {
@@ -40,6 +77,25 @@ void FallApartEffect::reconfigure(ReconfigureFlags)
 {
     FallApartConfig::self()->read();
     blockSize = FallApartConfig::blockSize();
+    dive = FallApartConfig::mode() == FallApartConfig::EnumMode::Dive;
+    depthSpread = FallApartConfig::depthSpread() / 100.0;
+}
+
+qreal FallApartEffect::currentProgress() const
+{
+    qreal progress = 0;
+    for (const FallApartAnimation &animation : windows) {
+        progress = std::max(progress, animation.progress);
+    }
+    return progress;
+}
+
+void FallApartEffect::setCurrentProgress(qreal progress)
+{
+    for (FallApartAnimation &animation : windows) {
+        animation.progress = progress;
+    }
+    effects->addRepaintFull();
 }
 
 void FallApartEffect::prePaintScreen(ScreenPrePaintData &data)
@@ -69,6 +125,10 @@ void FallApartEffect::apply(EffectWindow *w, int mask, WindowPaintData &data, Wi
         const qreal t = easing.valueForProgress(animationIt->progress);
         // Request the window to be divided into cells
         quads = quads.makeGrid(blockSize);
+        const Window *window = w->window();
+        const bool depth = StereoDepth::effectsEnabled() && window;
+        const RectF screen = w->screen() ? w->screen()->geometryF() : RectF();
+        const qreal progress = std::clamp(animationIt->progress, qreal(0), qreal(1));
         int cnt = 0;
         for (WindowQuad &quad : quads) {
             // make fragments move in various directions, based on where
@@ -88,7 +148,7 @@ void FallApartEffect::apply(EffectWindow *w, int mask, WindowPaintData &data, Wi
             if (p1.y() > w->height() / 2) {
                 ydiff = (p1.y() - w->height() / 2) / w->height() * 100;
             }
-            double modif = t * 64;
+            double modif = dive ? s_diveScatter * 64 * (1 - (1 - progress) * (1 - progress)) : t * 64;
             srandom(cnt); // change direction randomly but consistently
             xdiff += (rand() % 21 - 10);
             ydiff += (rand() % 21 - 10);
@@ -112,6 +172,25 @@ void FallApartEffect::apply(EffectWindow *w, int mask, WindowPaintData &data, Wi
                 x = dist * cos(angle);
                 y = dist * sin(angle);
                 quad[j].move(center.x() + x, center.y() + y);
+            }
+            if (depth) {
+                // one z for the whole piece, from the same seed: how far it has come or gone
+                const qreal spread = 1 - depthSpread * (rand() % 1000) / 1000.0;
+                const RectF area = quad.bounds().translated(w->pos());
+                qreal z;
+                if (dive) {
+                    // down to the nearest thing beneath it that it covers, no further: nothing is
+                    // behind what it covers
+                    const qreal floor = std::min(qreal(0), std::max(-StereoDepth::effectSunkLimit(), StereoDepth::coveredDepth(area, window) - StereoDepth::levelDepth(window)));
+                    z = floor * diveProfile(progress, s_diveFall * (2 - spread));
+                } else {
+                    // towards the viewer, but not out past the edge of the output
+                    const qreal edge = std::min({area.left() - screen.left(), area.top() - screen.top(), screen.right() - area.right(), screen.bottom() - area.bottom()});
+                    z = StereoDepth::effectPoppedLimit() * t * spread * std::clamp(edge / s_edgeMargin, qreal(0), qreal(1));
+                }
+                for (int j = 0; j < 4; ++j) {
+                    quad[j].setZ(z);
+                }
             }
             ++cnt;
         }

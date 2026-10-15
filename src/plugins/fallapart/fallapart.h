@@ -27,6 +27,7 @@ class FallApartEffect : public OffscreenEffect
 {
     Q_OBJECT
     Q_PROPERTY(int blockSize READ configuredBlockSize)
+    Q_PROPERTY(qreal progress READ currentProgress WRITE setCurrentProgress)
 
 public:
     FallApartEffect();
@@ -47,6 +48,10 @@ public:
         return blockSize;
     }
 
+    // the progress of the animation furthest along, and setting that of all of them, for tests
+    qreal currentProgress() const;
+    void setCurrentProgress(qreal progress);
+
     static bool supported();
 
 protected:
@@ -60,6 +65,11 @@ private:
     QHash<EffectWindow *, FallApartAnimation> windows;
     bool isRealWindow(EffectWindow *w);
     int blockSize;
+    // Fly: the pieces come towards the viewer. Dive: they sink behind the screen, hit the floor
+    // and bounce. The depth is the user's effect depth (kwinrc [StereoDepth]), a spread of it
+    // gives each piece its own.
+    bool dive = false;
+    qreal depthSpread = 0.25;
 };
 
 } // namespace
