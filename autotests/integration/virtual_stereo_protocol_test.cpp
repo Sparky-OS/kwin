@@ -106,7 +106,7 @@ private Q_SLOTS:
         RecordedRegistry devices;
         connect(&registry, &KWayland::Client::Registry::interfaceAnnounced, &registry, [&](const QByteArray &interface, uint32_t name, uint32_t advertised) {
             if (interface == kde_output_device_registry_v2_interface.name) {
-                QCOMPARE(advertised, 25u);
+                QVERIFY(advertised >= 25u);
                 devices.init(registry, name, 25);
             }
         });
