@@ -86,8 +86,7 @@ quint32 OutputScreenCastSource::drmFormat() const
 
 static bool isSplitEyeCapture(BackendOutput *output)
 {
-    return output->isSplitEyeDisplay()
-        && output->currentMode()->flags().testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf);
+    return output->isSplitEyeDisplay();
 }
 
 BackendOutput *OutputScreenCastSource::backendOutput() const
@@ -141,7 +140,8 @@ QPoint OutputScreenCastSource::renderOffset() const
 QSize OutputScreenCastSource::textureSize() const
 {
     if (isSplitEyeCapture(backendOutput())) {
-        return backendOutput()->modeSize();
+        const QSize eye = backendOutput()->viewSize();
+        return QSize(eye.width() * 2, eye.height());
     }
     return m_panel ? m_panel->pixelSize() : m_output->pixelSize();
 }

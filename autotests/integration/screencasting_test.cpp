@@ -658,9 +658,18 @@ void ScreencastingTest::testNativePanelMirror()
             qInfo() << name << "source" << source->geometry() << "panelMode" << panel->modeSize()
                     << "viewSize" << panel->viewSize() << "scale" << panel->scale()
                     << "offset" << panel->deviceOffset() << "stream" << image->size();
-            if (!changePanel) {
+            if (!changePanel || size == panelSize) {
                 QCOMPARE(image->size(), panelSize);
                 checkMirror(name);
+            } else {
+                QCOMPARE(image->size(), QSize(2560, 720));
+                const QRect expectedBlock(683, 324, 85, 72);
+                for (int eye = 0; eye < 2; ++eye) {
+                    const QRect eyeArea(eye * 1280, 0, 1280, 720);
+                    QVERIFY(within(boundsOf(*image, eyeArea, eye == 0 ? isRed : isBlue), eyeArea, 1));
+                    QCOMPARE(boundsOf(*image, eyeArea, eye == 0 ? isBlue : isRed), QRect());
+                    QVERIFY(within(boundsOf(*image, eyeArea, isWhite), expectedBlock.translated(eye * 1280, 0), 1));
+                }
             }
         }
         return;
@@ -777,7 +786,7 @@ void ScreencastingTest::testNativePanelRefresh()
     };
     QTest::qWait(2500);
     connectPhone();
-    BackendOutput *panel = nullptr;
+    QPointer<BackendOutput> panel;
     QTRY_VERIFY_WITH_TIMEOUT((panel = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-refresh-phone"))), 30000);
     window->move(workspace()->findOutput(panel)->geometry().topLeft());
     QFile steps(directory + QStringLiteral("/steps.log"));
@@ -826,21 +835,35 @@ void ScreencastingTest::testNativePanelRefresh()
     if (qEnvironmentVariableIsSet("PHONE_MODE_CYCLE")) {
         note("mode-1080-before");
         QTest::qWait(5000);
-        for (const QSize size : {QSize(1280, 720), QSize(1920, 1080)}) {
+        const bool changePanel = qEnvironmentVariable("PHONE_MODE_CYCLE") == QStringLiteral("panel");
+        for (const QSize size : {QSize(1280, 720), changePanel ? QSize(2340, 1080) : QSize(1920, 1080)}) {
             OutputConfiguration configuration;
             configuration.source = OutputConfiguration::Source::User;
-            configuration.changeSet(sourceBackend)->currentMode = OutputModeline(size, size.height() == 720 ? 60000 : 30000, OutputModeline::Flag::Stereo3DFramePacking);
+            QVERIFY(panel);
+            auto changedOutput = changePanel ? panel.data() : sourceBackend;
+            if (changePanel && size.height() == 720) {
+                const CustomModeDefinition mode{size, 60000, OutputModeline::Flag::Stereo3DFramePacking};
+                configuration.changeSet(panel)->customModes = QList<CustomModeDefinition>{mode};
+                configuration.changeSet(panel)->currentMode = OutputModeline::custom(mode);
+            } else {
+                configuration.changeSet(changedOutput)->currentMode = OutputModeline(size,
+                    changePanel || size.height() == 720 ? 60000 : 30000,
+                    changePanel ? OutputModeline::Flag::Stereo3DSideBySideHalf : OutputModeline::Flag::Stereo3DFramePacking);
+            }
             QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
             source = workspace()->findOutput(sourceBackend);
             QVERIFY(source);
-            QCOMPARE(source->geometry().size(), size);
-            QCOMPARE(panel->modeSize(), QSize(2340, 1080));
-            QCOMPARE(panel->scale(), 1170.0 / size.width());
-            QCOMPARE(panel->deviceOffset(), QPoint(0, 211));
+            QCOMPARE(changedOutput->modeSize(), size);
+            if (!changePanel) {
+                QCOMPARE(source->geometry().size(), size);
+                QCOMPARE(panel->modeSize(), QSize(2340, 1080));
+                QCOMPARE(panel->scale(), 1170.0 / size.width());
+                QCOMPARE(panel->deviceOffset(), QPoint(0, 211));
+            }
             producer.terminate();
             QVERIFY(producer.waitForFinished(5000));
             producer.start(QCoreApplication::applicationDirPath() + QStringLiteral("/capturefixture"),
-                           {directory + QStringLiteral("/chart.png"), QString::number(size.width()), QString::number(size.height()), QStringLiteral("stereo")});
+                           {directory + QStringLiteral("/chart.png"), QString::number(source->geometry().width()), QString::number(source->geometry().height()), QStringLiteral("stereo")});
             window = Test::waitForWaylandWindowShown();
             QVERIFY(window);
             window->move(source->geometry().topLeft());
