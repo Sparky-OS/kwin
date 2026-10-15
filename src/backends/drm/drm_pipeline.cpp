@@ -265,7 +265,7 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
         if (m_output->stereoPairMode() == StereoPairMode::Ized3d) {
             sourceRect = targetRect = Rect(QPoint(), m_pending.mode->size());
         } else {
-            sourceRect = stereoPairSourceRect(mode, m_output->stereoPairRole());
+            sourceRect = stereoPairSourceRect(mode, m_output->stereoPairRole(), m_output->stereoSwapEyes());
             targetRect = Rect(QPoint(0, 0), m_pending.mode->size());
         }
     } else if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {

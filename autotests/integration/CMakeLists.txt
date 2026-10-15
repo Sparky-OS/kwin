@@ -41,7 +41,7 @@ qt6_generate_wayland_protocol_client_sources(KWinIntegrationTestFramework
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-screen-edge-v1.xml
         ${KWIN_STEREO_PROTOCOLS_DIR}/kde-stereo-content-v1.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/keystate.xml
-        ${PLASMA_WAYLAND_PROTOCOLS_DIR}/zkde-screencast-unstable-v1.xml
+        ${KWIN_SCREENCAST_PROTOCOLS_DIR}/zkde-screencast-unstable-v1.xml
 )
 target_sources(KWinIntegrationTestFramework PRIVATE
     generic_scene_opengl_test.cpp
@@ -163,6 +163,7 @@ integrationTest(NAME testAlphaModifier SRCS alpha_modifier_test.cpp)
 integrationTest(NAME testStereoContent SRCS stereo_content_test.cpp)
 integrationTest(NAME testScreenshotStereo SRCS screenshot_stereo_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testStereoDepthPinned SRCS stereo_depth_pinned_test.cpp LIBS screenshot_test_support)
+integrationTest(NAME testDmabufFormatSwitch SRCS dmabuf_formatswitch_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testKeyboardInput SRCS keyboard_input_test.cpp)
 integrationTest(NAME testFifo SRCS test_fifo.cpp PROPERTIES RUN_SERIAL TRUE)
 integrationTest(NAME testMouseKeys SRCS mouse_keys_test.cpp)

@@ -468,7 +468,12 @@ static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendO
         }
         renderer->setStereoEye(StereoEye::None);
     } else {
+        ItemRenderer *renderer = kwinApp()->scene()->renderer();
+        if (backendOutput && !view->layer()->hasStereoEyes() && backendOutput->stereoSwapEyes()) {
+            renderer->setStereoEye(StereoEye::Right);
+        }
         view->paint(renderTarget, view->renderOffset(), bufferDamage);
+        renderer->setStereoEye(StereoEye::None);
     }
     return view->layer()->endFrame(bufferDamage, surfaceDamage, frame.get());
 }

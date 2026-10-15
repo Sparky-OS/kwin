@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Headset View
+Comment=Choose fit, pan or zoom for a headset display
+Exec=kwin-headset-view
+Icon=video-display
+Categories=Qt;KDE;Settings;HardwareSettings;
+OnlyShowIn=KDE;

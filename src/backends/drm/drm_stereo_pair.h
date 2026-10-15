@@ -16,9 +16,10 @@
 namespace KWin
 {
 
-inline Rect stereoPairSourceRect(const drmModeModeInfo &mode, StereoPairRole role)
+inline Rect stereoPairSourceRect(const drmModeModeInfo &mode, StereoPairRole role, bool swapEyes = false)
 {
-    return Rect(role == StereoPairRole::Right || role == StereoPairRole::Front ? QPoint(mode.hdisplay, 0) : QPoint(0, 0),
+    const bool right = (role == StereoPairRole::Right || role == StereoPairRole::Front) != swapEyes;
+    return Rect(right ? QPoint(mode.hdisplay, 0) : QPoint(0, 0),
                 QSize(mode.hdisplay, mode.vdisplay));
 }
 

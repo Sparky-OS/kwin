@@ -32,7 +32,7 @@ ecm_add_qtwayland_server_protocol_kde(WaylandProtocols_xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/shadow.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/slide.xml
         ${PLASMA_WAYLAND_PROTOCOLS_DIR}/text-input-unstable-v2.xml
-        ${PLASMA_WAYLAND_PROTOCOLS_DIR}/zkde-screencast-unstable-v1.xml
+        ${KWIN_SCREENCAST_PROTOCOLS_DIR}/zkde-screencast-unstable-v1.xml
 
         ${PROJECT_SOURCE_DIR}/src/wayland/protocols/frog-color-management-v1.xml
         ${PROJECT_SOURCE_DIR}/src/wayland/protocols/wlr-layer-shell-unstable-v1.xml

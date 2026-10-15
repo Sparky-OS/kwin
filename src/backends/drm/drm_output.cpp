@@ -253,7 +253,7 @@ static const bool s_allowColorspaceNVidia = qEnvironmentVariableIntValue("KWIN_D
 
 BackendOutput::Capabilities DrmOutput::computeCapabilities() const
 {
-    Capabilities capabilities = Capability::VirtualStereo | Capability::Dpms | Capability::IccProfile | Capability::CustomModes | Capability::HdrIccProfile;
+    Capabilities capabilities = Capability::Ized3dOptions | Capability::StereoSwapEyes | Capability::VirtualStereo | Capability::Dpms | Capability::IccProfile | Capability::CustomModes | Capability::HdrIccProfile;
     if (m_connector->overscan.isValid() || m_connector->underscan.isValid()) {
         capabilities |= Capability::Overscan;
     }
@@ -629,6 +629,9 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
     m_nextState->stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
     m_nextState->stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
+    m_nextState->stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
+    m_nextState->ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
+    m_nextState->ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
     m_nextState->detectedDdcCi = props->detectedDdcCi.value_or(m_state.detectedDdcCi);
     m_nextState->allowDdcCi = props->allowDdcCi.value_or(m_state.allowDdcCi);
     if (m_nextState->allowSdrSoftwareBrightness != m_state.allowSdrSoftwareBrightness) {
@@ -668,6 +671,7 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->sharpnessSetting = props->sharpness.value_or(m_state.sharpnessSetting);
     m_nextState->priority = props->priority.value_or(m_state.priority);
     m_nextState->deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
+    m_nextState->headsetView = props->headsetView.value_or(m_state.headsetView);
     m_nextState->automaticBrightness = props->automaticBrightness.value_or(m_state.automaticBrightness);
     m_nextState->lastBrightnessAdjustmentReason = props->brightnessReason.value_or(m_state.lastBrightnessAdjustmentReason);
     m_nextState->autoBrightnessCurve = props->autoBrightnessCurve.value_or(m_state.autoBrightnessCurve);
@@ -913,7 +917,9 @@ void DrmOutput::tryKmsColorOffloading(State &next)
 void DrmOutput::maybeScheduleRepaints(const State &next)
 {
     // TODO move the output layers to BackendOutput, and have it take care of this when updating State
-    if (next.blendingColor != m_state.blendingColor || next.layerBlendingColor != m_state.layerBlendingColor) {
+    if (next.blendingColor != m_state.blendingColor || next.layerBlendingColor != m_state.layerBlendingColor
+        || next.stereoSwapEyes != m_state.stereoSwapEyes
+        || next.ized3dMode != m_state.ized3dMode || next.ized3dTransfer != m_state.ized3dTransfer) {
         const auto layers = m_pipeline->layers();
         for (const auto &layer : layers) {
             layer->addDeviceRepaint(Region::infinite());

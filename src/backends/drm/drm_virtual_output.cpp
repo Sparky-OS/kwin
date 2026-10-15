@@ -114,6 +114,9 @@ void DrmVirtualOutput::applyChanges(const OutputConfiguration &config)
     next.stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
     next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
     next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
+    next.stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
+    next.ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
+    next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
     if (props->customModes.has_value()) {

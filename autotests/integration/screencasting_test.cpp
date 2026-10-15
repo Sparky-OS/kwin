@@ -261,22 +261,31 @@ void ScreencastingTest::testNativePanel_data()
 {
     QTest::addColumn<bool>("stereo");
     QTest::addColumn<bool>("dmaBuf");
-    QTest::newRow("mono-duplicated") << false << false;
-    QTest::newRow("declared-full-sbs") << true << false;
-    QTest::newRow("mono-dmabuf") << false << true;
-    QTest::newRow("declared-full-sbs-dmabuf") << true << true;
+    QTest::addColumn<QSize>("panelSize");
+    QTest::addColumn<double>("scale");
+    QTest::addColumn<int>("refresh");
+    QTest::newRow("mono-duplicated") << false << false << QSize(2400, 1080) << 1.0 << 59940;
+    QTest::newRow("declared-full-sbs") << true << false << QSize(2400, 1080) << 1.0 << 59940;
+    QTest::newRow("mono-dmabuf") << false << true << QSize(2400, 1080) << 1.0 << 59940;
+    QTest::newRow("declared-full-sbs-dmabuf") << true << true << QSize(2400, 1080) << 1.0 << 59940;
+    QTest::newRow("fractional-native") << true << false << QSize(2520, 1260) << 1.75 << 60000;
+    QTest::newRow("1440p-120hz") << true << false << QSize(2560, 1440) << 2.0 << 120000;
+    QTest::newRow("4k-native") << true << false << QSize(3840, 2160) << 2.0 << 60000;
 }
 
 void ScreencastingTest::testNativePanel()
 {
     QFETCH(bool, stereo);
     QFETCH(bool, dmaBuf);
-    const QSize panelSize(2400, 1080);
-    const QSize eyeSize(1200, 1080);
+    QFETCH(QSize, panelSize);
+    QFETCH(double, scale);
+    QFETCH(int, refresh);
+    const QSize eyeSize(panelSize.width() / 2, panelSize.height());
+    const QSize logicalSize(eyeSize.width() / scale, eyeSize.height() / scale);
     const auto outputCount = workspace()->outputs().size();
     auto stream = std::make_unique<Test::ScreencastingStreamV1>(nullptr);
     stream->init(Test::screencasting()->stream_virtual_output_with_properties(QStringLiteral("native-phone"), QStringLiteral("Native phone panel"),
-        panelSize.width(), panelSize.height(), 59940, wl_fixed_from_double(1), 150, 68, 1, QtWayland::zkde_screencast_unstable_v1::pointer_hidden));
+        panelSize.width(), panelSize.height(), refresh, wl_fixed_from_double(1), 150, 68, 1, QtWayland::zkde_screencast_unstable_v1::pointer_hidden));
     QSignalSpy created(stream.get(), &Test::ScreencastingStreamV1::created);
     QSignalSpy failed(stream.get(), &Test::ScreencastingStreamV1::failed);
     QVERIFY(created.wait());
@@ -288,7 +297,15 @@ void ScreencastingTest::testNativePanel()
     QVERIFY(output);
     QCOMPARE(output->pixelSize(), eyeSize);
     QCOMPARE(backendOutput->modeSize(), panelSize);
-    QCOMPARE(output->refreshRate(), 59940);
+    QCOMPARE(output->refreshRate(), refresh);
+    {
+        OutputConfiguration configuration;
+        configuration.source = OutputConfiguration::Source::User;
+        configuration.changeSet(backendOutput)->scaleSetting = scale;
+        QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+    }
+    QCOMPARE(backendOutput->modeSize(), panelSize);
+    QCOMPARE(output->geometry().size(), logicalSize);
     QVERIFY(output->hasStereoEyes());
     QCOMPARE(backendOutput->edid().identifier(), QByteArray("native-phone"));
 
@@ -308,7 +325,7 @@ void ScreencastingTest::testNativePanel()
     environment.insert(QStringLiteral("WAYLAND_DISPLAY"), waylandServer()->socketName());
     producer.setProcessEnvironment(environment);
     producer.setProgram(QCoreApplication::applicationDirPath() + QStringLiteral("/capturefixture"));
-    producer.setArguments({fixturePath, QString::number(eyeSize.width()), QString::number(eyeSize.height()), stereo ? QStringLiteral("stereo") : QStringLiteral("mono")});
+    producer.setArguments({fixturePath, QString::number(logicalSize.width()), QString::number(logicalSize.height()), stereo ? QStringLiteral("stereo") : QStringLiteral("mono")});
     const auto stopProducer = qScopeGuard([&] {
         producer.terminate();
         producer.waitForFinished();
@@ -318,7 +335,7 @@ void ScreencastingTest::testNativePanel()
     QVERIFY2(window, producer.readAllStandardError().constData());
     QVERIFY(window->pid() != QCoreApplication::applicationPid());
     window->move(output->geometry().topLeft());
-    QCOMPARE(window->frameGeometry().size(), QSizeF(eyeSize));
+    QCOMPARE(window->frameGeometry().size(), QSizeF(logicalSize));
 
     PipeWireSourceStream receiver;
     std::optional<QImage> image;
@@ -340,7 +357,7 @@ void ScreencastingTest::testNativePanel()
         QVERIFY(rateFile.open(QIODevice::ReadOnly));
         const auto rate = QJsonDocument::fromJson(rateFile.readAll()).object();
         QVERIFY(rate[QStringLiteral("denominator")].toInt() > 0);
-        QCOMPARE(rate[QStringLiteral("numerator")].toInt() * 1000, rate[QStringLiteral("denominator")].toInt() * 59940);
+        QCOMPARE(rate[QStringLiteral("numerator")].toInt() * 1000, rate[QStringLiteral("denominator")].toInt() * refresh);
     } else {
         receiver.setAllowDmaBuf(false);
         connect(&receiver, &PipeWireSourceStream::frameReceived, this, [&](const PipeWireFrame &frame) {
@@ -352,7 +369,7 @@ void ScreencastingTest::testNativePanel()
         QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
         const auto rate = receiver.framerate();
         QVERIFY(rate.denominator != 0);
-        QCOMPARE(quint64(rate.numerator) * 1000, quint64(rate.denominator) * 59940);
+        QCOMPARE(quint64(rate.numerator) * 1000, quint64(rate.denominator) * refresh);
     }
     QCOMPAREIMG(*image, expected, stereo ? QLatin1StringView("native_stereo") : QLatin1StringView("native_mono"));
     const QString proofDirectory = qEnvironmentVariable("KWIN_PHONE_PROOF_DIR");
@@ -369,9 +386,26 @@ void ScreencastingTest::testNativePanel()
 void ScreencastingTest::testNativePanelMirror_data()
 {
     QTest::addColumn<bool>("stereo");
-    QTest::newRow("mono-duplicated") << false;
-    QTest::newRow("declared-full-sbs") << true;
+    QTest::addColumn<int>("viewMode");
+    QTest::addColumn<double>("zoom");
+    QTest::addColumn<double>("centerX");
+    QTest::addColumn<QRectF>("expectedViewport");
+    QTest::addColumn<QPointF>("pointer");
+    QTest::addColumn<QPoint>("windowOffset");
+    QTest::newRow("mono-duplicated") << false << 0 << 1.0 << 0.5 << QRectF(0, 0, 1920, 1080) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("declared-full-sbs") << true << 0 << 1.0 << 0.5 << QRectF(0, 0, 1920, 1080) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("full-height-center") << true << 1 << 1.0 << 0.5 << QRectF(375, 0, 1170, 1080) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("full-height-left") << true << 1 << 1.0 << 0.0 << QRectF(0, 0, 1170, 1080) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("full-height-right") << true << 1 << 1.0 << 1.0 << QRectF(750, 0, 1170, 1080) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("zoom-center") << true << 2 << 1.25 << 0.5 << QRectF(492, 108, 936, 864) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("zoom-left") << true << 2 << 1.25 << 0.0 << QRectF(0, 108, 936, 864) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("zoom-right") << true << 2 << 1.25 << 1.0 << QRectF(984, 108, 936, 864) << QPointF(-1, -1) << QPoint();
+    QTest::newRow("pointer-left") << true << 1 << 1.0 << 0.5 << QRectF(0, 0, 1170, 1080) << QPointF(1, 540) << QPoint();
+    QTest::newRow("pointer-right") << true << 1 << 1.0 << 0.5 << QRectF(750, 0, 1170, 1080) << QPointF(1918, 540) << QPoint();
+    QTest::newRow("center-active-fit") << true << 0 << 1.0 << 0.5 << QRectF(100, 50, 1920, 1080) << QPointF(-1, -1) << QPoint(100, 50);
 }
+
+
 
 static QRect boundsOf(const QImage &image, const QRect &area, const std::function<bool(const QColor &)> &match)
 {
@@ -402,6 +436,12 @@ void ScreencastingTest::testNativePanelMirror()
     // a split-eye panel that replicates a 3D monitor shows each eye's view of the monitor,
     // scaled to fit the eye's viewport and centred, and keeps streaming across the change
     QFETCH(bool, stereo);
+    QFETCH(int, viewMode);
+    QFETCH(double, zoom);
+    QFETCH(double, centerX);
+    QFETCH(QRectF, expectedViewport);
+    QFETCH(QPointF, pointer);
+    QFETCH(QPoint, windowOffset);
     const QSize sourceSize(1920, 1080);
     const OutputModeline plainMode(sourceSize, 30000, OutputModeline::Flag::Preferred);
     const OutputModeline framePacking(sourceSize, 30000, OutputModeline::Flag::Stereo3DFramePacking);
@@ -453,8 +493,8 @@ void ScreencastingTest::testNativePanelMirror()
     producer.start();
     Window *window = Test::waitForWaylandWindowShown();
     QVERIFY2(window, producer.readAllStandardError().constData());
-    window->move(source->geometry().topLeft());
-    QCOMPARE(window->frameGeometry(), RectF(source->geometry()));
+    window->move(source->geometry().topLeft() + windowOffset);
+    QCOMPARE(window->frameGeometry(), RectF(source->geometry().translated(windowOffset)));
 
     const QSize panelSize(2340, 1080);
     const QSize eyeSize(1170, 1080);
@@ -471,13 +511,26 @@ void ScreencastingTest::testNativePanelMirror()
     QVERIFY(created.wait());
     BackendOutput *panel = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-mirror-phone"));
     QVERIFY(panel);
+    QVERIFY(!panel->headsetView().centerActiveWindow);
     QVERIFY(workspace()->findOutput(panel) != source);
 
+    if (pointer.x() >= 0) {
+        Test::pointerMotion(pointer, 1);
+    }
     {
         OutputConfiguration configuration;
+        configuration.source = OutputConfiguration::Source::User;
         configuration.changeSet(panel)->replicationSource = source->backendOutput()->uuid();
+        const int configuredMode = qEnvironmentVariableIsSet("KWIN_PHONE_VIEW_NEGATIVE") ? 0 : viewMode;
+        configuration.changeSet(panel)->headsetView = HeadsetView{HeadsetView::Mode(configuredMode), zoom, QPointF(centerX, 0.5), pointer.x() >= 0, !windowOffset.isNull()};
         QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
     }
+    {
+        OutputConfiguration invalid;
+        invalid.changeSet(panel)->headsetView = HeadsetView{HeadsetView::Mode(99)};
+        QCOMPARE(workspace()->applyOutputConfiguration(invalid), OutputConfigurationError::Unknown);
+    }
+    QCOMPARE(panel->headsetView().centerActiveWindow, !windowOffset.isNull());
     QCOMPARE(workspace()->findOutput(panel), source);
     // fit 1920x1080 into one eye's 1170x1080: scale 1170 / 1920, 658 rows, centred
     const qreal scale = 1170.0 / 1920.0;
@@ -516,9 +569,11 @@ void ScreencastingTest::testNativePanelMirror()
         return c.red() < 8 && c.green() < 8 && c.blue() > 247;
     };
     // the prediction: the picture at 0,211 and 1170x658 in each eye, the block scaled into it
-    const QRect picture(0, 211, 1170, 658);
-    const QRect whiteBlock(QPoint(std::ceil(block.left() * scale), 211 + std::ceil(block.top() * scale)),
-                           QPoint(std::ceil((block.right() + 1) * scale) - 1, 211 + std::ceil((block.bottom() + 1) * scale) - 1));
+    const QRect picture = viewMode == 0 ? QRect(0, 211, 1170, 658) : QRect(0, 0, 1170, 1080);
+    const double viewScale = 1170.0 / expectedViewport.width();
+    const QRectF croppedBlock = QRectF(block.translated(windowOffset)).intersected(expectedViewport);
+    const QRect whiteBlock(QPoint(std::ceil((croppedBlock.left() - expectedViewport.left()) * viewScale), picture.y() + std::ceil((croppedBlock.top() - expectedViewport.top()) * viewScale)),
+                           QPoint(std::ceil((croppedBlock.right() - expectedViewport.left()) * viewScale) - 1, picture.y() + std::ceil((croppedBlock.bottom() - expectedViewport.top()) * viewScale) - 1));
     const auto checkMirror = [&](const QString &when) {
         for (int eye = 0; eye < 2; ++eye) {
             const QRect eyeArea(QPoint(eye * eyeSize.width(), 0), eyeSize);
@@ -537,6 +592,8 @@ void ScreencastingTest::testNativePanelMirror()
                     << "predicted picture" << describe(picture.translated(eyeArea.topLeft())) << "block" << describe(whiteBlock.translated(eyeArea.topLeft()));
         }
     };
+    QCOMPARE(source->geometry(), Rect(QPoint(), sourceSize));
+    QCOMPARE(window->frameGeometry(), RectF(source->geometry().translated(windowOffset)));
     checkMirror(QStringLiteral("mirrored"));
     if (QTest::currentTestFailed()) {
         return;
@@ -559,6 +616,8 @@ void ScreencastingTest::testNativePanelMirror()
     QVERIFY(panel);
     QCOMPARE(workspace()->findOutput(panel), source);
     QCOMPARE(panel->deviceOffset(), QPoint(0, 211));
+    QCOMPARE(int(panel->headsetView().mode), viewMode);
+    QCOMPARE(panel->headsetView().zoom, zoom);
     receive(stream->nodeId());
     QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
     QCOMPARE(image->size(), panelSize);
@@ -568,18 +627,22 @@ void ScreencastingTest::testNativePanelMirror()
     }
 
     // ending the replication gives the panel its own desktop again, on the same stream
+    window->move(source->geometry().topLeft());
+    QTRY_COMPARE(window->frameGeometry(), RectF(source->geometry()));
     {
         OutputConfiguration configuration;
         configuration.changeSet(panel)->replicationSource = QString();
         QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
     }
     QVERIFY(workspace()->findOutput(panel) != source);
+    window->move(source->geometry().topLeft());
+    QTRY_COMPARE(window->frameGeometry(), RectF(source->geometry()));
     QCOMPARE(panel->deviceOffset(), QPoint());
     image.reset();
     QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
     QCOMPARE(image->size(), panelSize);
     QCOMPARE(reclosed.count(), 0);
-    QCOMPARE(boundsOf(*image, QRect(QPoint(), panelSize), isRed), QRect());
+    QTRY_COMPARE_WITH_TIMEOUT(boundsOf(*image, QRect(QPoint(), panelSize), isRed), QRect(), 5000);
 
     receiver->stopStreaming();
     stream.reset();
@@ -674,12 +737,18 @@ void ScreencastingTest::testNativePanelRefresh()
         note(enabled ? "mirror" : "independent");
     };
     note("connected-independent");
+    if (qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(directory + QStringLiteral("/cursor-independent.done")), 120000);
+    }
     QTest::qWait(5000);
     if (qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
         const auto geometry = workspace()->findOutput(panel)->geometry();
         Test::pointerMotion(QPointF(geometry.right() - 1, geometry.bottom() - 1), 1);
     }
     mirror(true);
+    if (qEnvironmentVariableIsSet("PHONE_CURSOR_PROOF")) {
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(directory + QStringLiteral("/cursor-mirror.done")), 120000);
+    }
     QTest::qWait(5000);
     if (qEnvironmentVariableIsSet("KWIN_PHONE_LOCK_CYCLE")) {
         note("private-rig-lock");

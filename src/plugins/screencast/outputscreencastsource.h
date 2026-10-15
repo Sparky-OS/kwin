@@ -49,6 +49,7 @@ public:
 private:
     Region renderStereo(GLFramebuffer *target);
     BackendOutput *backendOutput() const;
+    RectF captureViewport() const;
     qreal renderScale() const;
     QPoint renderOffset() const;
     void updateView();

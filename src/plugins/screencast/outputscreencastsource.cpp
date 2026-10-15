@@ -26,6 +26,7 @@
 
 #include <QScopeGuard>
 #include "workspace.h"
+#include "window.h"
 
 #include <drm_fourcc.h>
 
@@ -68,6 +69,9 @@ OutputScreenCastSource::OutputScreenCastSource(BackendOutput *panel, std::option
     });
     connect(panel, &BackendOutput::scaleChanged, this, &OutputScreenCastSource::updateView);
     connect(panel, &BackendOutput::deviceOffsetChanged, this, &OutputScreenCastSource::updateView);
+    connect(panel, &BackendOutput::headsetViewChanged, this, &OutputScreenCastSource::updateView);
+    connect(Cursors::self(), &Cursors::positionChanged, this, &OutputScreenCastSource::updateView);
+    connect(workspace(), &Workspace::windowActivated, this, &OutputScreenCastSource::updateView);
 }
 
 OutputScreenCastSource::~OutputScreenCastSource()
@@ -91,14 +95,46 @@ BackendOutput *OutputScreenCastSource::backendOutput() const
     return m_panel ? m_panel.data() : m_output->backendOutput();
 }
 
+RectF OutputScreenCastSource::captureViewport() const
+{
+    if (!m_output) {
+        return {};
+    }
+    const QRectF source = m_output->geometryF();
+    if (!m_panel || m_panel->replicationSource().isEmpty() || !isSplitEyeCapture(m_panel)) {
+        return source;
+    }
+    const auto view = m_panel->headsetView();
+    QPointF focus = source.topLeft() + QPointF(view.center.x() * source.width(), view.center.y() * source.height());
+    if (view.centerActiveWindow && workspace()->activeWindow() && workspace()->activeWindow()->output() == m_output) {
+        focus = workspace()->activeWindow()->frameGeometry().center();
+        if (view.mode == HeadsetView::Mode::Fit) {
+            QRectF centered = source;
+            centered.moveCenter(focus);
+            return centered;
+        }
+    } else if (view.followPointer && source.contains(Cursors::self()->mouse()->pos())) {
+        focus = Cursors::self()->mouse()->pos();
+    }
+    return view.viewport(source, m_panel->viewSize(), focus);
+}
+
 qreal OutputScreenCastSource::renderScale() const
 {
+    if (m_panel && !m_panel->replicationSource().isEmpty() && isSplitEyeCapture(m_panel)
+        && m_panel->headsetView().mode != HeadsetView::Mode::Fit) {
+        return m_panel->viewSize().height() / captureViewport().height();
+    }
     // a panel that replicates another output keeps that output's view, scaled to fit
     return m_panel ? m_panel->scale() : m_output->scale();
 }
 
 QPoint OutputScreenCastSource::renderOffset() const
 {
+    if (m_panel && !m_panel->replicationSource().isEmpty() && isSplitEyeCapture(m_panel)
+        && m_panel->headsetView().mode != HeadsetView::Mode::Fit) {
+        return {};
+    }
     return m_panel ? m_panel->deviceOffset() : QPoint();
 }
 
@@ -162,6 +198,7 @@ Region OutputScreenCastSource::render(GLFramebuffer *target, const Region &buffe
 
 Region OutputScreenCastSource::renderStereo(GLFramebuffer *target)
 {
+    updateView();
     const QSize eyeSize = backendOutput()->viewSize();
     if (target->size() != textureSize()) {
         return Region{};
@@ -223,8 +260,8 @@ uint OutputScreenCastSource::refreshRate() const
 
 void OutputScreenCastSource::updateView()
 {
-    if (m_sceneView) {
-        m_sceneView->setViewport(m_output->geometryF());
+    if (m_sceneView && m_output) {
+        m_sceneView->setViewport(captureViewport());
         m_sceneView->setScale(renderScale());
         m_sceneView->setRenderOffset(renderOffset());
         m_sceneView->setRefreshRate(refreshRate());
@@ -307,12 +344,12 @@ bool OutputScreenCastSource::includesCursor(Cursor *cursor) const
 
 QPointF OutputScreenCastSource::mapFromGlobal(const QPointF &point) const
 {
-    return m_output->mapFromGlobal(point) + QPointF(renderOffset()) / renderScale();
+    return point - captureViewport().topLeft() + QPointF(renderOffset()) / renderScale();
 }
 
 RectF OutputScreenCastSource::mapFromGlobal(const RectF &rect) const
 {
-    return m_output->mapFromGlobal(rect).translated(QPointF(renderOffset()) / renderScale());
+    return rect.translated(-captureViewport().topLeft() + QPointF(renderOffset()) / renderScale());
 }
 
 } // namespace KWin

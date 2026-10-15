@@ -203,6 +203,20 @@ enum class StereoPairMode {
     Ized3d,
 };
 
+enum class Ized3dMode {
+    CF,
+    CFL,
+    BlackWhiteCFL,
+    LeftRightCFL,
+    Interlaced,
+    Checkerboard,
+};
+
+enum class Ized3dTransfer {
+    Linear,
+    Encoded,
+};
+
 enum class StereoPairRole {
     Left,
     Right,

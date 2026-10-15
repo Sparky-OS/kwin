@@ -428,8 +428,12 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.stereoPairMode = props->stereoPairMode.value_or(m_state.stereoPairMode);
     next.stereoPairRole = props->stereoPairRole.value_or(m_state.stereoPairRole);
     next.stereoPairReflection = props->stereoPairReflection.value_or(m_state.stereoPairReflection);
+    next.stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
+    next.ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
+    next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
+    next.headsetView = props->headsetView.value_or(m_state.headsetView);
 
     setState(next);
 
@@ -548,6 +552,12 @@ void BackendOutput::setState(const State &state)
         || oldState.stereoPairReflection != state.stereoPairReflection) {
         Q_EMIT stereoPairChanged();
     }
+    if (oldState.stereoSwapEyes != state.stereoSwapEyes) {
+        Q_EMIT stereoSwapEyesChanged();
+    }
+    if (oldState.ized3dMode != state.ized3dMode || oldState.ized3dTransfer != state.ized3dTransfer) {
+        Q_EMIT ized3dOptionsChanged();
+    }
     // detectedDdcCi is ignored here, it should result in capabilitiesChanged() instead
     if (oldState.allowDdcCi != state.allowDdcCi) {
         Q_EMIT allowDdcCiChanged();
@@ -567,6 +577,9 @@ void BackendOutput::setState(const State &state)
     }
     if (oldState.priority != state.priority) {
         Q_EMIT priorityChanged();
+    }
+    if (oldState.headsetView != state.headsetView) {
+        Q_EMIT headsetViewChanged();
     }
     if (oldState.deviceOffset != state.deviceOffset) {
         Q_EMIT deviceOffsetChanged();
@@ -810,6 +823,21 @@ StereoPairReflection BackendOutput::stereoPairReflection() const
     return m_state.stereoPairReflection;
 }
 
+bool BackendOutput::stereoSwapEyes() const
+{
+    return m_state.stereoSwapEyes;
+}
+
+Ized3dMode BackendOutput::ized3dMode() const
+{
+    return m_state.ized3dMode;
+}
+
+Ized3dTransfer BackendOutput::ized3dTransfer() const
+{
+    return m_state.ized3dTransfer;
+}
+
 bool BackendOutput::isStereoPair() const
 {
     return m_state.stereoPairMode != StereoPairMode::None && !m_state.stereoPartner.isEmpty();
@@ -890,6 +918,11 @@ uint32_t BackendOutput::priority() const
 double BackendOutput::scaleSetting() const
 {
     return m_state.scaleSetting;
+}
+
+HeadsetView BackendOutput::headsetView() const
+{
+    return m_state.headsetView;
 }
 
 QPoint BackendOutput::deviceOffset() const

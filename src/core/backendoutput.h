@@ -8,6 +8,8 @@
 */
 #pragma once
 
+#include "headsetview.h"
+
 #include "output.h"
 
 class QJsonArray;
@@ -82,6 +84,8 @@ public:
         HdrIccProfile = 1 << 17,
         AbmLevel = 1 << 18,
         VirtualStereo = 1 << 19,
+        StereoSwapEyes = 1 << 20,
+        Ized3dOptions = 1 << 21,
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -298,6 +302,9 @@ public:
     StereoPairRole stereoPairRole() const;
     StereoPairReflection stereoPairReflection() const;
     bool isStereoPair() const;
+    bool stereoSwapEyes() const;
+    Ized3dMode ized3dMode() const;
+    Ized3dTransfer ized3dTransfer() const;
     uint32_t maxBitsPerColor() const;
     struct BpcRange
     {
@@ -357,6 +364,7 @@ public:
      * used for creating black bars while mirroring.
      */
     QPoint deviceOffset() const;
+    HeadsetView headsetView() const;
 
     bool anaglyph() const;
     bool otherStereoFormats() const;
@@ -380,6 +388,7 @@ Q_SIGNALS:
      */
     void scaleSettingChanged();
     void deviceOffsetChanged();
+    void headsetViewChanged();
 
     /**
      * Notifies that the output is about to change configuration based on a
@@ -425,6 +434,8 @@ Q_SIGNALS:
     void uuidChanged();
     void replicationSourceChanged();
     void stereoPairChanged();
+    void stereoSwapEyesChanged();
+    void ized3dOptionsChanged();
     void allowDdcCiChanged();
     void maxBitsPerColorChanged();
     void edrPolicyChanged();
@@ -514,6 +525,9 @@ protected:
         StereoPairMode stereoPairMode = StereoPairMode::None;
         StereoPairRole stereoPairRole = StereoPairRole::Left;
         StereoPairReflection stereoPairReflection = StereoPairReflection::None;
+        bool stereoSwapEyes = false;
+        Ized3dMode ized3dMode = Ized3dMode::CF;
+        Ized3dTransfer ized3dTransfer = Ized3dTransfer::Linear;
         bool detectedDdcCi = false;
         bool allowDdcCi = true;
         uint32_t maxBitsPerColor = 0;
@@ -530,6 +544,7 @@ protected:
         uint32_t abmLevel = 0;
         bool anaglyph = false;
         bool otherStereoFormats = false;
+        HeadsetView headsetView;
     };
 
     void setInformation(const Information &information);

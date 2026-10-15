@@ -63,6 +63,9 @@ public:
     std::optional<StereoPairMode> stereoPairMode;
     std::optional<StereoPairRole> stereoPairRole;
     std::optional<StereoPairReflection> stereoPairReflection;
+    std::optional<bool> stereoSwapEyes;
+    std::optional<Ized3dMode> ized3dMode;
+    std::optional<Ized3dTransfer> ized3dTransfer;
     std::optional<bool> detectedDdcCi;
     std::optional<bool> allowDdcCi;
     std::optional<uint32_t> maxBitsPerColor;
@@ -78,6 +81,7 @@ public:
     std::optional<uint32_t> abmLevel;
     std::optional<bool> anaglyph;
     std::optional<bool> otherStereoFormats;
+    std::optional<HeadsetView> headsetView;
 };
 
 class KWIN_EXPORT OutputConfiguration

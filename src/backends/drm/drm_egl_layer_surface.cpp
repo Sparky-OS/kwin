@@ -292,8 +292,8 @@ bool EglGbmLayerSurface::drawAnaglyph(const QSize &fboSize, const Region &repain
     shader->setColorspaceUniforms(m_surface->blendingColor, m_surface->layerBlendingColor, RenderingIntent::AbsoluteColorimetricNoAdaptation);
     // the right eye's own picture when the scene was rendered once per eye, else the one desktop
     const std::shared_ptr<GLTexture> rightEye = m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : nullptr;
-    shader->setUniform("leftEye", 0);
-    shader->setUniform("rightEye", rightEye ? 1 : 0);
+    shader->setUniform("leftEye", m_stereoSwapEyes && rightEye ? 1 : 0);
+    shader->setUniform("rightEye", !m_stereoSwapEyes && rightEye ? 1 : 0);
     shader->setUniform("leftMatrix", duboisMatrix(m_stereoLayout, true));
     shader->setUniform("rightMatrix", duboisMatrix(m_stereoLayout, false));
     QMatrix4x4 mat;
@@ -335,8 +335,8 @@ bool EglGbmLayerSurface::drawStereoPattern(const QSize &fboSize, const Region &r
     shader->setColorspaceUniforms(m_surface->blendingColor, m_surface->layerBlendingColor, RenderingIntent::AbsoluteColorimetricNoAdaptation);
     // the right eye's own picture when the scene was rendered once per eye, else the one desktop
     const std::shared_ptr<GLTexture> rightEye = m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : nullptr;
-    shader->setUniform("leftEye", 0);
-    shader->setUniform("rightEye", rightEye ? 1 : 0);
+    shader->setUniform("leftEye", m_stereoSwapEyes && rightEye ? 1 : 0);
+    shader->setUniform("rightEye", !m_stereoSwapEyes && rightEye ? 1 : 0);
     const int layout = int(m_stereoLayout) - int(StereoLayout::RowsLeftFirst);
     shader->setUniform("pattern", layout / 2);
     shader->setUniform("rightFirst", layout % 2);
@@ -364,21 +364,23 @@ bool EglGbmLayerSurface::drawStereoPattern(const QSize &fboSize, const Region &r
 
 bool EglGbmLayerSurface::drawIzed3d(const QSize &fboSize, const Region &repaint)
 {
-    if (!m_surface->stereoPatternShader && !m_surface->stereoPatternShaderFailed) {
-        m_surface->stereoPatternShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/ized3d.frag"));
-        if (!m_surface->stereoPatternShader) {
-            m_surface->stereoPatternShaderFailed = true;
+    if (!m_surface->ized3dShader && !m_surface->ized3dShaderFailed) {
+        m_surface->ized3dShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/ized3d.frag"));
+        if (!m_surface->ized3dShader) {
+            m_surface->ized3dShaderFailed = true;
             qCWarning(KWIN_DRM) << "Failed to load the iZ3D shader, showing the left eye";
         }
     }
-    if (!m_surface->stereoPatternShader || !m_surface->currentRightShadowSlot) {
+    if (!m_surface->ized3dShader || !m_surface->currentRightShadowSlot) {
         return false;
     }
-    ShaderBinder binder(m_surface->stereoPatternShader.get());
+    ShaderBinder binder(m_surface->ized3dShader.get());
     GLShader *shader = binder.shader();
-    shader->setUniform("leftEye", 0);
-    shader->setUniform("rightEye", 1);
+    shader->setUniform("leftEye", m_stereoSwapEyes ? 1 : 0);
+    shader->setUniform("rightEye", m_stereoSwapEyes ? 0 : 1);
     shader->setUniform("panel", m_stereoPairRole == StereoPairRole::Front ? 1 : 0);
+    shader->setUniform("formula", int(m_ized3dMode));
+    shader->setUniform("transfer", int(m_ized3dTransfer));
     QMatrix4x4 mat;
     mat.scale(1, -1);
     mat.ortho(QRectF(QPointF(), fboSize));
@@ -436,14 +438,32 @@ void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSi
 void EglGbmLayerSurface::setStereoPair(StereoPairMode mode, StereoPairRole role)
 {
     if (m_stereoPairMode != mode || m_stereoPairRole != role) {
-        if (m_surface) {
-            m_surface->damageJournal.clear();
-            m_surface->shadowDamageJournal.clear();
-            m_surface->rightShadowDamageJournal.clear();
+        for (Surface *surface : {m_surface.get(), m_oldSurface.get()}) {
+            if (surface) {
+                surface->context->makeCurrent();
+                surface->stereoPatternShader.reset();
+                surface->stereoPatternShaderFailed = false;
+                surface->ized3dShader.reset();
+                surface->ized3dShaderFailed = false;
+                surface->damageJournal.clear();
+                surface->shadowDamageJournal.clear();
+                surface->rightShadowDamageJournal.clear();
+            }
         }
     }
     m_stereoPairMode = mode;
     m_stereoPairRole = role;
+}
+
+void EglGbmLayerSurface::setStereoSwapEyes(bool swap)
+{
+    m_stereoSwapEyes = swap;
+}
+
+void EglGbmLayerSurface::setIzed3dOptions(Ized3dMode mode, Ized3dTransfer transfer)
+{
+    m_ized3dMode = mode;
+    m_ized3dTransfer = transfer;
 }
 
 bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputFrame *frame)
@@ -520,9 +540,10 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             };
             for (size_t eye = 0; eye < fboEyes.size(); ++eye) {
                 if (const auto vbo = uploadStereoGeometry(std::span(&fboEyes[eye], 1))) {
-                    eyeTextures[eye]->bind();
+                    const auto &texture = eyeTextures[eye ^ size_t(m_stereoSwapEyes)];
+                    texture->bind();
                     vbo->render(GL_TRIANGLES);
-                    eyeTextures[eye]->unbind();
+                    texture->unbind();
                 }
             }
         } else if (const auto vbo = uploadGeometry(repaint, m_surface->gbmSwapchain->size())) {

@@ -119,13 +119,7 @@ static RenderGeometry clipQuads(const Item *item, const ItemRendererOpenGL::Rend
     const SurfaceItem *surfaceItem = qobject_cast<const SurfaceItem *>(item);
     WindowQuadList quads;
     if (surfaceItem && surfaceItem->stereoContent() != StereoContentNone) {
-        const WindowItem *windowItem = nullptr;
-        for (const Item *parent = surfaceItem; parent && !windowItem; parent = parent->parentItem()) {
-            windowItem = qobject_cast<const WindowItem *>(parent);
-        }
-        const Window *window = windowItem ? windowItem->window() : nullptr;
-        const bool hasStereoEyes = context->stereoCapture || (window ? window->output() && window->output()->hasStereoEyes() : context->stereoEye != StereoEye::None);
-        quads = surfaceItem->eyeQuads(hasStereoEyes && context->stereoEye == StereoEye::Right ? StereoEye::Right : StereoEye::Left);
+        quads = surfaceItem->eyeQuads(context->stereoEye == StereoEye::Right ? StereoEye::Right : StereoEye::Left);
     } else {
         quads = item->quads();
     }

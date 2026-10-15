@@ -24,7 +24,7 @@
 namespace KWin
 {
 
-static const quint32 s_version = 24;
+static const quint32 s_version = 27;
 
 class OutputManagementV2InterfacePrivate : public QtWaylandServer::kde_output_management_v2
 {
@@ -83,6 +83,8 @@ protected:
     void kde_output_configuration_v2_set_hdr_icc_profile_path(Resource *resource, ::wl_resource *outputdevice, const QString &profile_path) override;
     void kde_output_configuration_v2_set_hdr_color_profile_source(Resource *resource, ::wl_resource *outputdevice, uint32_t color_profile_source) override;
     void kde_output_configuration_v2_set_stereo_formats(Resource *resource, wl_resource *outputdevice, uint32_t anaglyph, uint32_t otherStereoFormats) override;
+    void kde_output_configuration_v2_set_stereo_swap_eyes(Resource *resource, wl_resource *outputdevice, uint32_t enabled) override;
+    void kde_output_configuration_v2_set_ized3d_options(Resource *resource, wl_resource *outputdevice, uint32_t mode, uint32_t transfer) override;
     void kde_output_configuration_v2_set_stereo_pair(Resource *resource, wl_resource *outputdevice, wl_resource *partner, uint32_t mode, uint32_t role, uint32_t reflection) override;
     void kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level) override;
 
@@ -574,6 +576,40 @@ void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_form
     if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
         config.changeSet(output->handle())->anaglyph = bool(anaglyph);
         config.changeSet(output->handle())->otherStereoFormats = bool(otherStereoFormats);
+    }
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_ized3d_options(Resource *resource, wl_resource *outputdevice, uint32_t mode, uint32_t transfer)
+{
+    if (invalid) {
+        return;
+    }
+    if (mode > uint32_t(Ized3dMode::Checkerboard) || transfer > uint32_t(Ized3dTransfer::Encoded)) {
+        failureReason = i18n("Invalid iZ3D option");
+        return;
+    }
+    if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
+        auto props = config.changeSet(output->handle());
+        props->ized3dMode = Ized3dMode(mode);
+        props->ized3dTransfer = Ized3dTransfer(transfer);
+    } else {
+        invalid = true;
+    }
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_swap_eyes(Resource *resource, wl_resource *outputdevice, uint32_t enabled)
+{
+    if (invalid) {
+        return;
+    }
+    if (enabled > 1) {
+        failureReason = i18n("Invalid swap eyes value");
+        return;
+    }
+    if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
+        config.changeSet(output->handle())->stereoSwapEyes = bool(enabled);
+    } else {
+        invalid = true;
     }
 }
 

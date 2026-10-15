@@ -145,6 +145,110 @@ private Q_SLOTS:
         backend.removeVirtualOutput(output);
     }
 
+    void swapEyesPersistsPerOutput()
+    {
+        QTemporaryDir configHome;
+        QVERIFY(configHome.isValid());
+        qputenv("XDG_CONFIG_HOME", configHome.path().toUtf8());
+        VirtualBackend backend;
+        auto first = backend.createVirtualOutput(VirtualOutputProperties{.name = QStringLiteral("swap-first"), .pixelSize = QSize(640, 480)});
+        auto second = backend.createVirtualOutput(VirtualOutputProperties{.name = QStringLiteral("swap-second"), .pixelSize = QSize(640, 480)});
+        QVERIFY(first);
+        QVERIFY(second);
+        const QList<BackendOutput *> outputs{first, second};
+        {
+            OutputConfigurationStore store;
+            store.clear();
+            const auto initial = store.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+            QVERIFY(initial);
+            for (auto output : outputs) {
+                output->applyChanges(initial->first);
+            }
+        }
+        QSignalSpy changed(first, &BackendOutput::stereoSwapEyesChanged);
+        QVERIFY(!first->stereoSwapEyes());
+        QVERIFY(!second->stereoSwapEyes());
+        for (const bool swap : {true, false}) {
+            OutputConfiguration config;
+            config.changeSet(first)->stereoSwapEyes = swap;
+            first->applyChanges(config);
+            first->applyChanges(config);
+            QCOMPARE(first->stereoSwapEyes(), swap);
+            QVERIFY(!second->stereoSwapEyes());
+            {
+                OutputConfigurationStore store;
+                store.storeConfig(outputs, false);
+            }
+            OutputConfigurationStore restored;
+            const auto queried = restored.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+            QVERIFY(queried);
+            QCOMPARE(queried->first.constChangeSet(first)->stereoSwapEyes, std::optional<bool>(swap));
+            QCOMPARE(queried->first.constChangeSet(second)->stereoSwapEyes, std::optional<bool>(false));
+            const auto singleOutput = restored.queryConfig({first}, false, AccelerometerOrientation::Undefined, false);
+            QVERIFY(singleOutput);
+            QCOMPARE(singleOutput->first.constChangeSet(first)->stereoSwapEyes, std::optional<bool>(swap));
+        }
+        QCOMPARE(changed.count(), 2);
+        backend.removeVirtualOutput(first);
+        backend.removeVirtualOutput(second);
+    }
+
+    void ized3dOptionsPersistPerOutput()
+    {
+        QTemporaryDir configHome;
+        QVERIFY(configHome.isValid());
+        qputenv("XDG_CONFIG_HOME", configHome.path().toUtf8());
+        VirtualBackend backend;
+        auto first = backend.createVirtualOutput(VirtualOutputProperties{.name = QStringLiteral("ized-first"), .pixelSize = QSize(640, 480)});
+        auto second = backend.createVirtualOutput(VirtualOutputProperties{.name = QStringLiteral("ized-second"), .pixelSize = QSize(640, 480)});
+        QVERIFY(first);
+        QVERIFY(second);
+        const QList<BackendOutput *> outputs{first, second};
+        QCOMPARE(first->ized3dMode(), Ized3dMode::CF);
+        QCOMPARE(first->ized3dTransfer(), Ized3dTransfer::Linear);
+        {
+            OutputConfigurationStore store;
+            store.clear();
+            const auto initial = store.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+            QVERIFY(initial);
+            for (auto output : outputs) {
+                output->applyChanges(initial->first);
+            }
+        }
+        QSignalSpy changed(first, &BackendOutput::ized3dOptionsChanged);
+        for (int mode = int(Ized3dMode::CF); mode <= int(Ized3dMode::Checkerboard); ++mode) {
+            for (auto transfer : {Ized3dTransfer::Linear, Ized3dTransfer::Encoded}) {
+                OutputConfiguration config;
+                config.changeSet(first)->ized3dMode = Ized3dMode(mode);
+                config.changeSet(first)->ized3dTransfer = transfer;
+                first->applyChanges(config);
+                first->applyChanges(config);
+                QCOMPARE(first->ized3dMode(), Ized3dMode(mode));
+                QCOMPARE(first->ized3dTransfer(), transfer);
+                QCOMPARE(second->ized3dMode(), Ized3dMode::CF);
+                QCOMPARE(second->ized3dTransfer(), Ized3dTransfer::Linear);
+                {
+                    OutputConfigurationStore store;
+                    store.storeConfig(outputs, false);
+                }
+                OutputConfigurationStore restored;
+                const auto queried = restored.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+                QVERIFY(queried);
+                QCOMPARE(queried->first.constChangeSet(first)->ized3dMode, std::optional<Ized3dMode>(Ized3dMode(mode)));
+                QCOMPARE(queried->first.constChangeSet(first)->ized3dTransfer, std::optional<Ized3dTransfer>(transfer));
+                QCOMPARE(queried->first.constChangeSet(second)->ized3dMode, std::optional<Ized3dMode>(Ized3dMode::CF));
+                QCOMPARE(queried->first.constChangeSet(second)->ized3dTransfer, std::optional<Ized3dTransfer>(Ized3dTransfer::Linear));
+                const auto singleOutput = restored.queryConfig({first}, false, AccelerometerOrientation::Undefined, false);
+                QVERIFY(singleOutput);
+                QCOMPARE(singleOutput->first.constChangeSet(first)->ized3dMode, std::optional<Ized3dMode>(Ized3dMode(mode)));
+                QCOMPARE(singleOutput->first.constChangeSet(first)->ized3dTransfer, std::optional<Ized3dTransfer>(transfer));
+            }
+        }
+        QCOMPARE(changed.count(), 11);
+        backend.removeVirtualOutput(first);
+        backend.removeVirtualOutput(second);
+    }
+
     void nativeViewportGeometry()
     {
         VirtualBackend backend;

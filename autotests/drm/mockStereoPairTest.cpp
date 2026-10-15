@@ -109,8 +109,16 @@ void MockStereoPairTest::atomicCommitReadsEachEye_data()
     QTest::addColumn<StereoPairRole>("firstRole");
     QTest::addColumn<StereoPairRole>("secondRole");
     QTest::addColumn<StereoPairReflection>("secondReflection");
-    QTest::addRow("dual projection") << StereoPairRole::Left << StereoPairRole::Right << StereoPairReflection::None;
-    QTest::addRow("mirror rig") << StereoPairRole::Left << StereoPairRole::Right << StereoPairReflection::Horizontal;
+    QTest::addColumn<bool>("firstSwap");
+    QTest::addColumn<bool>("secondSwap");
+    for (auto reflection : {StereoPairReflection::None, StereoPairReflection::Horizontal, StereoPairReflection::Vertical}) {
+        for (bool firstSwap : {false, true}) {
+            for (bool secondSwap : {false, true}) {
+                QTest::addRow("reflection-%d-swap-%d-%d", int(reflection), firstSwap, secondSwap)
+                    << StereoPairRole::Left << StereoPairRole::Right << reflection << firstSwap << secondSwap;
+            }
+        }
+    }
 }
 
 void MockStereoPairTest::atomicCommitReadsEachEye()
@@ -118,6 +126,8 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
     QFETCH(StereoPairRole, firstRole);
     QFETCH(StereoPairRole, secondRole);
     QFETCH(StereoPairReflection, secondReflection);
+    QFETCH(bool, firstSwap);
+    QFETCH(bool, secondSwap);
 
     GpuManager::s_self = std::make_unique<GpuManager>();
     const auto mockGpu = findRenderDevice();
@@ -187,9 +197,10 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
         const auto change = configuration.changeSet(output);
         change->uuid = uuid;
         change->stereoPartner = partner;
-        change->stereoPairMode = StereoPairMode::MirrorRig;
+        change->stereoPairMode = secondReflection == StereoPairReflection::None ? StereoPairMode::DualProjection : StereoPairMode::MirrorRig;
         change->stereoPairRole = role;
         change->stereoPairReflection = reflection;
+        change->stereoSwapEyes = output == outputA.get() ? firstSwap : secondSwap;
         output->applyChanges(configuration);
     };
     setPair(outputA.get(), QStringLiteral("A"), QStringLiteral("B"), firstRole, StereoPairReflection::None);
@@ -209,8 +220,8 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
         });
         return it == properties.end() ? uint64_t(-1) : it->value;
     };
-    QCOMPARE(sourceX(planeA->id()), uint64_t(0));
-    QCOMPARE(sourceX(planeB->id()), uint64_t(1920) << 16);
+    QCOMPARE(sourceX(planeA->id()), uint64_t(firstSwap ? 1920 : 0) << 16);
+    QCOMPARE(sourceX(planeB->id()), uint64_t(secondSwap ? 0 : 1920) << 16);
 
     const auto fbProperty = [&](uint32_t planeId) {
         const auto prop = mockGpu->findPlane(planeId)->getPropId(QStringLiteral("FB_ID"));
@@ -229,7 +240,8 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
         return it == properties.end() ? uint64_t(0) : it->value;
     };
     QCOMPARE(rotationProperty(planeA->id()), uint64_t(1));
-    QCOMPARE(rotationProperty(planeB->id()), secondReflection == StereoPairReflection::Horizontal ? uint64_t(36) : uint64_t(1));
+    QCOMPARE(rotationProperty(planeB->id()), secondReflection == StereoPairReflection::Horizontal ? uint64_t(36)
+                                             : secondReflection == StereoPairReflection::Vertical ? uint64_t(33) : uint64_t(1));
 
 }
 

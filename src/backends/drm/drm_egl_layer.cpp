@@ -77,6 +77,10 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::doBeginFrame()
     }
     m_surface.setStereoPair(drmOutput()->isStereoPair() ? drmOutput()->stereoPairMode() : StereoPairMode::None,
                             drmOutput()->stereoPairRole());
+    // Ordinary pairs share one packed buffer; each plane selects its own eye.
+    m_surface.setStereoSwapEyes(drmOutput()->stereoSwapEyes()
+                               && (!drmOutput()->isStereoPair() || drmOutput()->stereoPairMode() == StereoPairMode::Ized3d));
+    m_surface.setIzed3dOptions(drmOutput()->ized3dMode(), drmOutput()->ized3dTransfer());
     return m_surface.startRendering(scanoutSize(),
                                     drmOutput()->transform().combine(OutputTransform::FlipY),
                                     supportedDrmFormats(),

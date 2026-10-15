@@ -124,6 +124,8 @@ void BufferTextureOpenGL::reset()
     qDeleteAll(m_planes);
     m_planes.clear();
     m_bufferType = BufferType::None;
+    m_dmabufFormat = 0;
+    m_dmabufPlaneCount = 0;
     m_size = QSize();
     m_releasePoint.reset();
 }
@@ -235,6 +237,8 @@ bool BufferTextureOpenGL::loadDmabufTexture(GraphicsBuffer *buffer, const std::s
     }
 
     m_bufferType = BufferType::DmaBuf;
+    m_dmabufFormat = attribs->format;
+    m_dmabufPlaneCount = attribs->planeCount;
     m_size = buffer->size();
     const auto info = FormatInfo::get(buffer->dmabufAttributes()->format);
     m_isFloatingPoint = info && info->floatingPoint;
@@ -245,9 +249,12 @@ bool BufferTextureOpenGL::loadDmabufTexture(GraphicsBuffer *buffer, const std::s
 
 void BufferTextureOpenGL::updateDmabufTexture(GraphicsBuffer *buffer, const std::shared_ptr<SyncReleasePoint> &releasePoint)
 {
-    if (Q_UNLIKELY(m_bufferType != BufferType::DmaBuf)) {
+    const auto attributes = buffer->dmabufAttributes();
+    if (Q_UNLIKELY(m_bufferType != BufferType::DmaBuf)
+        || m_dmabufFormat != attributes->format
+        || m_dmabufPlaneCount != attributes->planeCount) {
         reset();
-        attach(buffer, releasePoint);
+        loadDmabufTexture(buffer, releasePoint);
         return;
     }
 

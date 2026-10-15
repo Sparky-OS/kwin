@@ -36,6 +36,20 @@
         <arg type="a{sv}" direction="out"/>
     </method>
 
+    <method name="headsetViews">
+        <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+        <arg type="a{sv}" direction="out"/>
+    </method>
+    <method name="setHeadsetView">
+        <arg name="outputUuid" type="s" direction="in"/>
+        <arg name="mode" type="i" direction="in"/>
+        <arg name="zoom" type="d" direction="in"/>
+        <arg name="centerX" type="d" direction="in"/>
+        <arg name="centerY" type="d" direction="in"/>
+        <arg name="followPointer" type="b" direction="in"/>
+        <arg name="centerActiveWindow" type="b" direction="in"/>
+        <arg type="b" direction="out"/>
+    </method>
     <property name="showingDesktop" type="b" access="read"/>
     <method name="showDesktop">
         <annotation name="org.freedesktop.DBus.Method.NoReply" value="true"/>
