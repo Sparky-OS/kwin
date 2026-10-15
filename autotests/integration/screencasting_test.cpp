@@ -609,11 +609,19 @@ void ScreencastingTest::testNativePanelMirror()
         QVERIFY(image->save(proofDirectory + QStringLiteral("/mode-1080-before.png")));
         const bool changePanel = qEnvironmentVariable("PHONE_MODE_CYCLE") == QStringLiteral("panel");
         const QRect originalWhiteBlock = whiteBlock;
-        for (const QSize size : {QSize(1280, 720), QSize(1920, 1080)}) {
+        for (const QSize size : {QSize(1280, 720), changePanel ? panelSize : QSize(1920, 1080)}) {
             OutputConfiguration configuration;
             configuration.source = OutputConfiguration::Source::User;
             auto changedOutput = changePanel ? panel : source->backendOutput();
-            configuration.changeSet(changedOutput)->currentMode = OutputModeline(size, size.height() == 720 ? 60000 : 30000, OutputModeline::Flag::Stereo3DFramePacking);
+            if (changePanel && size.height() == 720) {
+                const CustomModeDefinition mode{size, 60000, OutputModeline::Flag::Stereo3DFramePacking};
+                configuration.changeSet(panel)->customModes = QList<CustomModeDefinition>{mode};
+                configuration.changeSet(panel)->currentMode = OutputModeline::custom(mode);
+            } else {
+                configuration.changeSet(changedOutput)->currentMode = OutputModeline(size,
+                    changePanel || size.height() == 720 ? 60000 : 30000,
+                    changePanel ? OutputModeline::Flag::Stereo3DSideBySideHalf : OutputModeline::Flag::Stereo3DFramePacking);
+            }
             QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
             QCOMPARE(changedOutput->modeSize(), size);
             if (!changePanel) {
@@ -716,6 +724,7 @@ void ScreencastingTest::testNativePanelRefresh()
     const OutputModeline framePacking(sourceSize, 30000, OutputModeline::Flag::Stereo3DFramePacking);
     Test::setOutputConfig({Test::OutputInfo{.geometry = Rect(QPoint(), sourceSize), .modes = {framePacking, OutputModeline(QSize(1280, 720), 60000, OutputModeline::Flag::Stereo3DFramePacking)}}});
     LogicalOutput *source = workspace()->outputs().front();
+    BackendOutput *const sourceBackend = source->backendOutput();
     QVERIFY(source->hasStereoEyes());
     auto environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("WAYLAND_DISPLAY"), waylandServer()->socketName());
@@ -782,8 +791,10 @@ void ScreencastingTest::testNativePanelRefresh()
     const auto mirror = [&](bool enabled) {
         window->move(source->geometry().topLeft());
         OutputConfiguration configuration;
-        configuration.changeSet(panel)->replicationSource = enabled ? source->backendOutput()->uuid() : QString();
+        configuration.changeSet(panel)->replicationSource = enabled ? sourceBackend->uuid() : QString();
         QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+        source = workspace()->findOutput(sourceBackend);
+        QVERIFY(source);
         QCOMPARE(workspace()->findOutput(panel) == source, enabled);
         if (!enabled) {
             window->move(workspace()->findOutput(panel)->geometry().topLeft());
@@ -818,8 +829,10 @@ void ScreencastingTest::testNativePanelRefresh()
         for (const QSize size : {QSize(1280, 720), QSize(1920, 1080)}) {
             OutputConfiguration configuration;
             configuration.source = OutputConfiguration::Source::User;
-            configuration.changeSet(source->backendOutput())->currentMode = OutputModeline(size, size.height() == 720 ? 60000 : 30000, OutputModeline::Flag::Stereo3DFramePacking);
+            configuration.changeSet(sourceBackend)->currentMode = OutputModeline(size, size.height() == 720 ? 60000 : 30000, OutputModeline::Flag::Stereo3DFramePacking);
             QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+            source = workspace()->findOutput(sourceBackend);
+            QVERIFY(source);
             QCOMPARE(source->geometry().size(), size);
             QCOMPARE(panel->modeSize(), QSize(2340, 1080));
             QCOMPARE(panel->scale(), 1170.0 / size.width());
