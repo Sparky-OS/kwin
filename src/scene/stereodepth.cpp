@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace KWin
 {
@@ -158,6 +159,48 @@ int StereoDepth::parallax(const Window *window, int viewWidth)
     const qreal level = StereoDepth::level(window);
     const qreal limit = level > 0 ? options->stereoPoppedLimit() : options->stereoSunkLimit();
     return std::lround(level * limit * viewWidth / s_referenceWidth);
+}
+
+bool StereoDepth::effectsEnabled()
+{
+    return options->stereoEffectSunkLimit() > 0 || options->stereoEffectPoppedLimit() > 0;
+}
+
+qreal StereoDepth::effectPoppedLimit()
+{
+    return options->stereoEffectPoppedLimit();
+}
+
+qreal StereoDepth::effectSunkLimit()
+{
+    return options->stereoEffectSunkLimit();
+}
+
+qreal StereoDepth::levelDepth(const Window *window)
+{
+    const qreal level = StereoDepth::level(window);
+    return level * (level > 0 ? options->stereoPoppedLimit() : options->stereoSunkLimit());
+}
+
+qreal StereoDepth::coveredDepth(const RectF &area, const Window *window)
+{
+    const LogicalOutput *output = window->output();
+    const QList<Window *> &stack = workspace()->stackingOrder();
+    qsizetype end = stack.indexOf(const_cast<Window *>(window));
+    if (end < 0) {
+        end = stack.size();
+    }
+    qreal depth = std::numeric_limits<qreal>::lowest();
+    for (qsizetype i = 0; i < end; ++i) {
+        const Window *other = stack[i];
+        if (!isOnStage(other, output)) {
+            continue;
+        }
+        if (other->isDesktop() || other->frameGeometry().intersects(area)) {
+            depth = std::max(depth, levelDepth(other));
+        }
+    }
+    return depth;
 }
 
 qreal StereoDepth::poppedLimit(int viewWidth)

@@ -15,5 +15,15 @@
       <min>0</min>
       <max>12</max>
     </entry>
+    <entry name="EffectSunkLimit" type="Double">
+      <default>30</default>
+      <min>0</min>
+      <max>120</max>
+    </entry>
+    <entry name="EffectPoppedLimit" type="Double">
+      <default>12</default>
+      <min>0</min>
+      <max>120</max>
+    </entry>
   </group>
 </kcfg>

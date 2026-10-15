@@ -6,9 +6,12 @@
 
 #pragma once
 
+#include "core/rect.h"
 #include "effect/globals.h"
 
 #include <QPointF>
+
+#include <kwin_export.h>
 
 namespace KWin
 {
@@ -28,7 +31,7 @@ class Window;
  * whatever is active. Fullscreen windows and windows that are not part of
  * the desktop's own elements stay at the screen's level.
  */
-class StereoDepth
+class KWIN_EXPORT StereoDepth
 {
 public:
     /**
@@ -37,6 +40,34 @@ public:
     static bool isEnabled();
 
     static qreal level(const Window *window);
+
+    /**
+     * Whether effects may use depth: either of the effects' limits is above zero. Effects
+     * describe their motion in depth with a z in pixels of a view 1920 wide, the unit of the
+     * limits, and the renderer turns it into the parallax between the eyes (RenderViewport).
+     */
+    static bool effectsEnabled();
+
+    /**
+     * How far effects may reach in front of and behind the screen, in pixels of a view 1920 wide.
+     * They are the user's own settings and are not bound by the desktop's limits above: an
+     * effect's motion may be bolder than where the windows sit.
+     */
+    static qreal effectPoppedLimit();
+    static qreal effectSunkLimit();
+
+    /**
+     * The depth of @a window's level in pixels of a view 1920 wide, positive in front of the screen.
+     */
+    static qreal levelDepth(const Window *window);
+
+    /**
+     * The depth of the nearest thing beneath @a window in the stack that lies under @a area (in
+     * logical coordinates), in pixels of a view 1920 wide, or the lowest qreal when nothing does.
+     * A piece of @a window that is drawn over @a area must not go behind it: nothing is behind
+     * what it covers.
+     */
+    static qreal coveredDepth(const RectF &area, const Window *window);
 
     static qreal poppedLimit(int viewWidth);
     static qreal sunkLimit(int viewWidth);

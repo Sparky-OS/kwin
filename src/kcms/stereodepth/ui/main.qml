@@ -81,5 +81,55 @@ KCM.SimpleKCM {
             font: Kirigami.Theme.smallFont
             text: i18n("Menus, dialogs and tooltips of the active window come forward by up to this much. More pop-out: things near the screen's edges and long reading get harder.")
         }
+
+        QQC2.Label {
+            Kirigami.FormData.isSection: true
+            Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+            wrapMode: Text.Wrap
+            text: i18n("How far the desktop's effects reach while they play, in the same pixels. Effects may be bolder than where the windows sit, so these are separate. Zero keeps an effect flat on that side.")
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18nc("@label:slider", "Effects, behind the screen:")
+            QQC2.Slider {
+                id: effectSunkSlider
+                from: 0
+                to: 120
+                stepSize: 1
+                snapMode: QQC2.Slider.SnapAlways
+                value: kcm.settings.effectSunkLimit
+                onMoved: kcm.settings.effectSunkLimit = value
+                KCM.SettingStateBinding {
+                    configObject: kcm.settings
+                    settingName: "EffectSunkLimit"
+                }
+            }
+            QQC2.Label {
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 4
+                text: effectSunkSlider.value === 0 ? i18nc("@label no depth", "Off") : i18ncp("@label pixels", "%1 pixel", "%1 pixels", effectSunkSlider.value)
+            }
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18nc("@label:slider", "Effects, in front of the screen:")
+            QQC2.Slider {
+                id: effectPoppedSlider
+                from: 0
+                to: 120
+                stepSize: 1
+                snapMode: QQC2.Slider.SnapAlways
+                value: kcm.settings.effectPoppedLimit
+                onMoved: kcm.settings.effectPoppedLimit = value
+                KCM.SettingStateBinding {
+                    configObject: kcm.settings
+                    settingName: "EffectPoppedLimit"
+                }
+            }
+            QQC2.Label {
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 4
+                text: effectPoppedSlider.value === 0 ? i18nc("@label no pop-out", "Off") : i18ncp("@label pixels", "%1 pixel", "%1 pixels", effectPoppedSlider.value)
+            }
+        }
     }
 }

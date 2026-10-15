@@ -281,6 +281,14 @@
             <default>4</default>
             <min>0</min>
         </entry>
+        <entry name="EffectSunkLimit" type="Double">
+            <default>30</default>
+            <min>0</min>
+        </entry>
+        <entry name="EffectPoppedLimit" type="Double">
+            <default>12</default>
+            <min>0</min>
+        </entry>
     </group>
     <group name="TabBox">
         <entry name="DelayTime" type="Int">

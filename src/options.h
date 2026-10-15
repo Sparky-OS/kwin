@@ -651,6 +651,8 @@ public:
      */
     qreal stereoSunkLimit() const;
     qreal stereoPoppedLimit() const;
+    qreal stereoEffectSunkLimit() const;
+    qreal stereoEffectPoppedLimit() const;
     bool interactiveWindowMoveEnabled() const;
     bool overlayVirtualKeyboardOnWindows() const;
 
@@ -715,6 +717,8 @@ public:
     void setAllowTearing(bool allow);
     void setStereoSunkLimit(qreal limit);
     void setStereoPoppedLimit(qreal limit);
+    void setStereoEffectSunkLimit(qreal limit);
+    void setStereoEffectPoppedLimit(qreal limit);
     void setInteractiveWindowMoveEnabled(bool set);
     void setOverlayVirtualKeyboardOnWindows(bool overlay);
 
@@ -967,6 +971,8 @@ private:
     bool m_allowTearing = true;
     qreal m_stereoSunkLimit = 10;
     qreal m_stereoPoppedLimit = 4;
+    qreal m_stereoEffectSunkLimit = 30;
+    qreal m_stereoEffectPoppedLimit = 12;
     bool m_interactiveWindowMoveEnabled = true;
     bool m_overlayVirtualKeyboardOnWindows = false;
     bool m_doubleClickBorderToMaximize = true;
