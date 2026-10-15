@@ -10,5 +10,17 @@
             <min>1</min>
             <max>100000</max>
         </entry>
+        <entry name="Mode" type="Enum">
+            <choices>
+                <choice name="Fly"/>
+                <choice name="Dive"/>
+            </choices>
+            <default>Fly</default>
+        </entry>
+        <entry name="DepthSpread" type="Int">
+            <default>25</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
     </group>
 </kcfg>
