@@ -39,6 +39,7 @@ WindowQuad WindowQuad::makeSubQuad(double x1, double y1, double x2, double y2) c
         // Use bilinear interpolation to compute the texture coords.
         ret.verts[i].tx = (1 - w1) * (1 - w2) * verts[0].tx + w1 * (1 - w2) * verts[1].tx + w1 * w2 * verts[2].tx + (1 - w1) * w2 * verts[3].tx;
         ret.verts[i].ty = (1 - w1) * (1 - w2) * verts[0].ty + w1 * (1 - w2) * verts[1].ty + w1 * w2 * verts[2].ty + (1 - w1) * w2 * verts[3].ty;
+        ret.verts[i].pz = (1 - w1) * (1 - w2) * verts[0].pz + w1 * (1 - w2) * verts[1].pz + w1 * w2 * verts[2].pz + (1 - w1) * w2 * verts[3].pz;
     }
 
     return ret;
@@ -219,6 +220,18 @@ void RenderGeometry::copy(std::span<GLVertex2D> destination)
     std::copy(cbegin(), cend(), destination.begin());
 }
 
+void RenderGeometry::copy(std::span<GLVertex3D> destination)
+{
+    Q_ASSERT(int(destination.size()) >= size());
+    for (qsizetype i = 0; i < size(); ++i) {
+        const GLVertex2D &vertex = at(i);
+        destination[i] = GLVertex3D{
+            .position = QVector3D(vertex.position.x(), vertex.position.y(), i < m_depths.size() ? m_depths.at(i) : 0),
+            .texcoord = vertex.texcoord,
+        };
+    }
+}
+
 void RenderGeometry::appendWindowVertex(const WindowVertex &windowVertex, qreal deviceScale)
 {
     GLVertex2D glVertex;
@@ -231,6 +244,10 @@ void RenderGeometry::appendWindowVertex(const WindowVertex &windowVertex, qreal 
         break;
     }
     glVertex.texcoord = QVector2D(windowVertex.u(), windowVertex.v());
+    if (windowVertex.z() != 0 || !m_depths.isEmpty()) {
+        m_depths.resize(size());
+        m_depths.append(windowVertex.z() * deviceScale);
+    }
     append(glVertex);
 }
 
