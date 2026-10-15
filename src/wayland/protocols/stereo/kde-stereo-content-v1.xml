@@ -6,7 +6,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-<interface name="kde_stereo_content_manager_v1" version="1">
+<interface name="kde_stereo_content_manager_v1" version="2">
   <description summary="declare stereo content of surfaces">
     A program tells the compositor that a surface's picture holds two
     views, one per eye, packed full side by side, with the left eye first.
@@ -37,10 +37,19 @@
   </enum>
 </interface>
 
-<interface name="kde_stereo_content_v1" version="1">
+<interface name="kde_stereo_content_v1" version="2">
   <description summary="stereo content declaration of one surface">
     The declaration of one surface, created with
     kde_stereo_content_manager_v1.create.
+
+    Since version 2, a surface declared side_by_side_full is one eye
+    wide and its buffer holds both eyes: unless a wp_viewport destination
+    is set, the surface's size is half the width the buffer would give it
+    (after the buffer scale, the buffer transform and a viewport source)
+    by the full height. A viewport destination, when set, is the size of
+    one eye. With version 1 the surface's size follows its buffer as for
+    any other surface, so a client that declares at version 1 maps the
+    buffer onto one eye's size itself, for example with a viewport.
   </description>
 
   <enum name="error">

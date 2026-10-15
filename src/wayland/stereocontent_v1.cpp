@@ -13,7 +13,7 @@
 namespace KWin
 {
 
-static constexpr uint32_t s_version = 1;
+static constexpr uint32_t s_version = 2;
 
 static constexpr StereoContent toStereoContent(uint32_t content)
 {
@@ -54,6 +54,7 @@ StereoContentSurfaceV1::~StereoContentSurfaceV1()
         const auto priv = SurfaceInterfacePrivate::get(m_surface);
         priv->stereoContent = nullptr;
         priv->pending->stereoContent = StereoContentNone;
+        priv->pending->stereoContentOneEyeWide = false;
         priv->pending->committed |= SurfaceState::Field::StereoContent;
     }
 }
@@ -76,6 +77,7 @@ void StereoContentSurfaceV1::kde_stereo_content_v1_set_content(Resource *resourc
     }
     const auto priv = SurfaceInterfacePrivate::get(m_surface);
     priv->pending->stereoContent = toStereoContent(content);
+    priv->pending->stereoContentOneEyeWide = resource->version() >= 2;
     priv->pending->committed |= SurfaceState::Field::StereoContent;
 }
 

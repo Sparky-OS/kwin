@@ -101,6 +101,8 @@ struct SurfaceState
     std::shared_ptr<SyncObjReleasePoint> releasePoint;
     double alphaMultiplier = 1;
     StereoContent stereoContent = StereoContentNone;
+    // declared with kde_stereo_content_v1 version 2: a full side-by-side buffer is two eyes of the surface
+    bool stereoContentOneEyeWide = false;
     YUVMatrixCoefficients yuvCoefficients = YUVMatrixCoefficients::Identity;
     EncodingRange range = EncodingRange::Full;
     bool fifoBarrier = false;

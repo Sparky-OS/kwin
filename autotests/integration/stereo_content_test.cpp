@@ -11,6 +11,7 @@
 #include "effect/globals.h"
 #include "pointer_input.h"
 #include "scene/surfaceitem.h"
+#include "wayland-client/viewporter.h"
 #include "wayland/surface.h"
 #include "wayland_server.h"
 #include "window.h"
@@ -34,6 +35,9 @@ private Q_SLOTS:
 
     void testDefaultValue();
     void testSetContent();
+    void testOneEyeWide_data();
+    void testOneEyeWide();
+    void testOneEyeWideViewportDestination();
     void testSubsurface();
     void testSetContentInvalidValue();
     void testRemoveOnDestroy();
@@ -52,7 +56,7 @@ void StereoContentTest::initTestCase()
 
 void StereoContentTest::init()
 {
-    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1));
+    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1 | Test::AdditionalWaylandInterface::Viewporter));
 
     workspace()->setActiveOutput(QPoint(640, 512));
     input()->pointer()->warp(QPoint(640, 512));
@@ -101,6 +105,56 @@ void StereoContentTest::testSetContent()
     QVERIFY(committed.wait());
     QCOMPARE(window->surface()->stereoContent(), StereoContentNone);
     QCOMPARE(window->stereoContent(), StereoContentNone);
+}
+
+void StereoContentTest::testOneEyeWide_data()
+{
+    QTest::addColumn<int>("bufferScale");
+
+    QTest::addRow("scale 1") << 1;
+    QTest::addRow("scale 2") << 2;
+}
+
+// From version 2, a full side-by-side surface is one eye wide: its buffer holds both eyes.
+void StereoContentTest::testOneEyeWide()
+{
+    QFETCH(int, bufferScale);
+
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
+    surface->setScale(bufferScale);
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(200, 50) * bufferScale, Qt::blue);
+    QVERIFY(window);
+    QCOMPARE(window->surface()->size(), QSizeF(200, 50));
+
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
+    declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
+    QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    QCOMPARE(window->surface()->size(), QSizeF(100, 50));
+    QCOMPARE(window->surface()->bufferSourceBox(), RectF(0, 0, 200 * bufferScale, 50 * bufferScale));
+
+    // Without the declaration the buffer is one picture again.
+    declaration->set_content(Test::StereoContentV1::content_none);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    QCOMPARE(window->surface()->size(), QSizeF(200, 50));
+}
+
+// A viewport destination is the size of one eye.
+void StereoContentTest::testOneEyeWideViewportDestination()
+{
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
+    auto viewport = Test::viewporter()->createViewport(*surface);
+    viewport->setDestination(QSize(80, 30));
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
+    declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(300, 60), Qt::blue);
+    QVERIFY(window);
+    QCOMPARE(window->surface()->size(), QSizeF(80, 30));
+    QCOMPARE(window->surface()->stereoContent(), StereoContentSideBySideFull);
 }
 
 void StereoContentTest::testSubsurface()

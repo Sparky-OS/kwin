@@ -642,6 +642,7 @@ void SurfaceState::mergeInto(SurfaceState *target)
     target->renderingIntent = renderingIntent;
     target->alphaMultiplier = alphaMultiplier;
     target->stereoContent = stereoContent;
+    target->stereoContentOneEyeWide = stereoContentOneEyeWide;
     target->yuvCoefficients = yuvCoefficients;
     target->fifoBarrier |= std::exchange(fifoBarrier, false);
     target->hasFifoWaitCondition = std::exchange(hasFifoWaitCondition, false);
@@ -704,6 +705,11 @@ void SurfaceInterfacePrivate::applyState(SurfaceState *next)
             surfaceSize = current->viewport.sourceGeometry.size();
         } else {
             surfaceSize = current->bufferTransform.map(current->buffer->size() / current->bufferScale);
+        }
+        // the surface is one eye wide, its buffer holds both eyes side by side
+        if (!current->viewport.destinationSize.isValid() && current->stereoContentOneEyeWide
+            && current->stereoContent == StereoContentSideBySideFull) {
+            surfaceSize.setWidth(surfaceSize.width() / 2);
         }
         surfaceSize /= serverScale;
 

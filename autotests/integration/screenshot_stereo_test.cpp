@@ -78,11 +78,12 @@ static QImage stereoSurface()
     return image;
 }
 
+// the declared surface is one eye wide, 50x50: the window capture holds both eyes side by side
 static void checkStereoResult(const QImage &image, const QColor &left, const QColor &right)
 {
-    QCOMPARE(image.size(), QSize(200, 50));
+    QCOMPARE(image.size(), QSize(100, 50));
     QCOMPARE(image.pixelColor(20, 20), left);
-    QCOMPARE(image.pixelColor(120, 20), right);
+    QCOMPARE(image.pixelColor(70, 20), right);
 }
 
 static void saveEvidence(const QString &name, const QImage &image)
