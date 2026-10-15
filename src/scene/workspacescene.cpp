@@ -726,6 +726,12 @@ void WorkspaceScene::postPaint()
 void WorkspaceScene::paint(const RenderTarget &renderTarget, const QPoint &deviceOffset, const Region &deviceRegion)
 {
     RenderViewport viewport(painted_delegate->viewport(), painted_delegate->scale(), renderTarget, deviceOffset);
+    const StereoEye eye = m_renderer->stereoEye();
+    if (eye != StereoEye::None && painted_screen && painted_screen->hasStereoEyes() && (StereoDepth::isEnabled() || StereoDepth::effectsEnabled())) {
+        // the two cameras: what effects put at a depth is seen apart by the eyes, in pixels of a
+        // view 1920 wide at the user's size of view
+        viewport.setStereo(eye, painted_delegate->deviceRect().width() / (1920.0 * painted_delegate->scale()));
+    }
 
     m_renderer->beginFrame(renderTarget, viewport);
 

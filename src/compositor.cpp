@@ -453,7 +453,7 @@ static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendO
     }
     auto &[renderTarget, repaint] = beginInfo.value();
     const Region bufferDamage = surfaceDamage.united(repaint).intersected(renderTarget.transformedRect());
-    if (view->layer()->hasStereoEyes() && (showsStereoContent(view) || StereoDepth::isEnabled())) {
+    if (view->layer()->hasStereoEyes() && (showsStereoContent(view) || StereoDepth::isEnabled() || StereoDepth::effectsEnabled())) {
         // stereo content or depth on a 3D or anaglyph output: the scene once per eye, each stereo
         // window showing that eye's view, each window at its level and everything else the same in both
         ItemRenderer *renderer = kwinApp()->scene()->renderer();
