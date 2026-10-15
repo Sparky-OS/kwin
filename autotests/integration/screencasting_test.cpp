@@ -447,7 +447,7 @@ void ScreencastingTest::testNativePanelMirror()
     const OutputModeline framePacking(sourceSize, 30000, OutputModeline::Flag::Stereo3DFramePacking);
     Test::setOutputConfig({Test::OutputInfo{
         .geometry = Rect(QPoint(), sourceSize),
-        .modes = {plainMode, framePacking},
+        .modes = {plainMode, framePacking, OutputModeline(QSize(1280, 720), 60000, OutputModeline::Flag::Stereo3DFramePacking)},
     }});
     const auto restoreOutputs = qScopeGuard([] {
         Test::setOutputConfig({
@@ -572,7 +572,7 @@ void ScreencastingTest::testNativePanelMirror()
     const QRect picture = viewMode == 0 ? QRect(0, 211, 1170, 658) : QRect(0, 0, 1170, 1080);
     const double viewScale = 1170.0 / expectedViewport.width();
     const QRectF croppedBlock = QRectF(block.translated(windowOffset)).intersected(expectedViewport);
-    const QRect whiteBlock(QPoint(std::ceil((croppedBlock.left() - expectedViewport.left()) * viewScale), picture.y() + std::ceil((croppedBlock.top() - expectedViewport.top()) * viewScale)),
+    QRect whiteBlock(QPoint(std::ceil((croppedBlock.left() - expectedViewport.left()) * viewScale), picture.y() + std::ceil((croppedBlock.top() - expectedViewport.top()) * viewScale)),
                            QPoint(std::ceil((croppedBlock.right() - expectedViewport.left()) * viewScale) - 1, picture.y() + std::ceil((croppedBlock.bottom() - expectedViewport.top()) * viewScale) - 1));
     const auto checkMirror = [&](const QString &when) {
         for (int eye = 0; eye < 2; ++eye) {
@@ -602,6 +602,60 @@ void ScreencastingTest::testNativePanelMirror()
     if (!proofDirectory.isEmpty()) {
         QVERIFY(QDir().mkpath(proofDirectory));
         QVERIFY(image->save(proofDirectory + (stereo ? QStringLiteral("/mirror-stereo.png") : QStringLiteral("/mirror-mono.png"))));
+    }
+
+    if (qEnvironmentVariableIsSet("PHONE_MODE_CYCLE")) {
+        QVERIFY(stereo && viewMode == 0 && windowOffset.isNull());
+        QVERIFY(image->save(proofDirectory + QStringLiteral("/mode-1080-before.png")));
+        const bool changePanel = qEnvironmentVariable("PHONE_MODE_CYCLE") == QStringLiteral("panel");
+        const QRect originalWhiteBlock = whiteBlock;
+        for (const QSize size : {QSize(1280, 720), QSize(1920, 1080)}) {
+            OutputConfiguration configuration;
+            configuration.source = OutputConfiguration::Source::User;
+            auto changedOutput = changePanel ? panel : source->backendOutput();
+            configuration.changeSet(changedOutput)->currentMode = OutputModeline(size, size.height() == 720 ? 60000 : 30000, OutputModeline::Flag::Stereo3DFramePacking);
+            QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+            QCOMPARE(changedOutput->modeSize(), size);
+            if (!changePanel) {
+                QCOMPARE(source->geometry().size(), size);
+            }
+            // The fixture follows the source's logical geometry, as a fullscreen client does.
+            // Keep the same PipeWire stream and the original packed image throughout.
+            producer.terminate();
+            QVERIFY(producer.waitForFinished(5000));
+            // A new marker position makes stale pre-change frames fail the assertion.
+            QImage nextFixture = fixture;
+            const int markerShift = size.height() == 720 ? 128 : 0;
+            {
+                QPainter painter(&nextFixture);
+                for (int eye = 0; eye < 2; ++eye) {
+                    const QPoint origin(eye * sourceSize.width(), 0);
+                    painter.fillRect(block.translated(origin), eye == 0 ? Qt::red : Qt::blue);
+                    painter.fillRect(block.translated(origin + QPoint(markerShift, 0)), Qt::white);
+                }
+            }
+            if (qEnvironmentVariableIsSet("PHONE_MODE_STALE_CONTROL")) nextFixture = fixture;
+            QVERIFY(nextFixture.save(fixturePath));
+            whiteBlock = originalWhiteBlock.translated(markerShift * 1170 / 1920, 0);
+            producer.setArguments({fixturePath, QString::number(source->geometry().width()), QString::number(source->geometry().height()), QStringLiteral("stereo")});
+            producer.start();
+            window = Test::waitForWaylandWindowShown();
+            QVERIFY(window);
+            window->move(source->geometry().topLeft());
+            image.reset();
+            QTRY_VERIFY_WITH_TIMEOUT(image.has_value(), 10000);
+            QTest::qWait(500);
+            const QString name = QStringLiteral("mode-%1-after").arg(size.height());
+            QVERIFY(image->save(proofDirectory + QLatin1Char('/') + name + QStringLiteral(".png")));
+            qInfo() << name << "source" << source->geometry() << "panelMode" << panel->modeSize()
+                    << "viewSize" << panel->viewSize() << "scale" << panel->scale()
+                    << "offset" << panel->deviceOffset() << "stream" << image->size();
+            if (!changePanel) {
+                QCOMPARE(image->size(), panelSize);
+                checkMirror(name);
+            }
+        }
+        return;
     }
 
     // the phone reconnects: the panel comes back replicating, as it was left, and streams the same picture
@@ -660,7 +714,7 @@ void ScreencastingTest::testNativePanelRefresh()
     const auto restoreIdleLock = qScopeGuard([] { ScreenLocker::KSldApp::self()->uninhibit(); });
     const QSize sourceSize(1920, 1080);
     const OutputModeline framePacking(sourceSize, 30000, OutputModeline::Flag::Stereo3DFramePacking);
-    Test::setOutputConfig({Test::OutputInfo{.geometry = Rect(QPoint(), sourceSize), .modes = {framePacking}}});
+    Test::setOutputConfig({Test::OutputInfo{.geometry = Rect(QPoint(), sourceSize), .modes = {framePacking, OutputModeline(QSize(1280, 720), 60000, OutputModeline::Flag::Stereo3DFramePacking)}}});
     LogicalOutput *source = workspace()->outputs().front();
     QVERIFY(source->hasStereoEyes());
     auto environment = QProcessEnvironment::systemEnvironment();
@@ -758,6 +812,29 @@ void ScreencastingTest::testNativePanelRefresh()
         note("private-rig-unlock");
     }
     QTest::qWait(15000);
+    if (qEnvironmentVariableIsSet("PHONE_MODE_CYCLE")) {
+        note("mode-1080-before");
+        QTest::qWait(5000);
+        for (const QSize size : {QSize(1280, 720), QSize(1920, 1080)}) {
+            OutputConfiguration configuration;
+            configuration.source = OutputConfiguration::Source::User;
+            configuration.changeSet(source->backendOutput())->currentMode = OutputModeline(size, size.height() == 720 ? 60000 : 30000, OutputModeline::Flag::Stereo3DFramePacking);
+            QCOMPARE(workspace()->applyOutputConfiguration(configuration), OutputConfigurationError::None);
+            QCOMPARE(source->geometry().size(), size);
+            QCOMPARE(panel->modeSize(), QSize(2340, 1080));
+            QCOMPARE(panel->scale(), 1170.0 / size.width());
+            QCOMPARE(panel->deviceOffset(), QPoint(0, 211));
+            producer.terminate();
+            QVERIFY(producer.waitForFinished(5000));
+            producer.start(QCoreApplication::applicationDirPath() + QStringLiteral("/capturefixture"),
+                           {directory + QStringLiteral("/chart.png"), QString::number(size.width()), QString::number(size.height()), QStringLiteral("stereo")});
+            window = Test::waitForWaylandWindowShown();
+            QVERIFY(window);
+            window->move(source->geometry().topLeft());
+            note(size.height() == 720 ? "mode-720-after" : "mode-1080-after");
+            QTest::qWait(5000);
+        }
+    }
     mirror(false);
     QTest::qWait(5000);
     mirror(true);
