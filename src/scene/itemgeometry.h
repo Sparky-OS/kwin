@@ -41,14 +41,24 @@ public:
     {
         return ty;
     }
+    /**
+     * The depth of the vertex in pixels of a view 1920 wide, positive in front of the screen. It
+     * is zero unless an effect sets it, and only a stereo output draws it (see StereoDepth).
+     */
+    double z() const
+    {
+        return pz;
+    }
     void move(double x, double y);
     void setX(double x);
     void setY(double y);
+    void setZ(double z);
 
 private:
     friend class WindowQuad;
     friend class WindowQuadList;
     double px, py; // position
+    double pz = 0; // depth
     double tx, ty; // texture coords
 };
 
@@ -147,6 +157,11 @@ public:
      */
     void copy(std::span<GLVertex2D> destination);
     /**
+     * Copy geometry data and the depth of its vertices into another buffer. The depth is that
+     * of the window vertices appended, in device pixels, and zero for any other vertex.
+     */
+    void copy(std::span<GLVertex3D> destination);
+    /**
      * Append a WindowVertex as a geometry vertex.
      *
      * WindowVertex is assumed to be in logical coordinates. It will be converted
@@ -201,6 +216,7 @@ public:
 
 private:
     VertexSnappingMode m_vertexSnappingMode = VertexSnappingMode::Round;
+    QList<float> m_depths;
 };
 
 inline WindowVertex::WindowVertex()
@@ -241,6 +257,11 @@ inline void WindowVertex::setX(double x)
 inline void WindowVertex::setY(double y)
 {
     py = y;
+}
+
+inline void WindowVertex::setZ(double z)
+{
+    pz = z;
 }
 
 inline WindowQuad::WindowQuad()
