@@ -100,6 +100,7 @@ public:
      * full-resolution stereo content, else (1, 1).
      */
     QSizeF stereoClientScale() const;
+    QSizeF stereoWindowScale() const;
     QSizeF programSizeScale() const;
     QSizeF minSize() const override;
     QSizeF maxSize() const override;
@@ -313,6 +314,9 @@ private:
     Xcb::Property fetchStereoContentClass() const;
     void readStereoContentClass(Xcb::Property &property);
     void getStereoContentClass();
+    Xcb::Property fetchStereoContentVersion() const;
+    void readStereoContentVersion(Xcb::Property &property);
+    void getStereoContentVersion();
 
     void configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, qreal rh, int gravity, bool from_tool);
     void getSyncCounter();
@@ -360,6 +364,8 @@ private:
     qreal m_bufferScale = 1;
     // how much larger the X11 window is than its place on screen (full-resolution stereo)
     QSizeF m_stereoClientScale = QSizeF(1, 1);
+    QSizeF m_stereoWindowScale = QSizeF(1, 1);
+    uint32_t m_stereoContentVersion = 0;
     // how much larger the program's own sizes are than its place on screen
     QSizeF m_programSizeScale = QSizeF(1, 1);
     // the program's own window size, as mapped or last asked for: a fullscreen

@@ -135,6 +135,8 @@ private Q_SLOTS:
     void testRandrEmulation();
     void testRestoreFocusToDestroyedWindow();
     void testStereoContentDeclaration();
+    void testStereoContentDeclarationOneEyeWide_data();
+    void testStereoContentDeclarationOneEyeWide();
     void testStereoContentDeclarationMalformed();
     void testStereoContentDeclarationRulePrecedence();
 };
@@ -3984,7 +3986,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 3u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 4u);
 
     const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -4014,6 +4016,49 @@ void X11WindowTest::testStereoContentDeclaration()
     xcb_flush(c.get());
     QVERIFY(stereoContentChangedSpy.wait());
     QCOMPARE(window->stereoContent(), StereoContentNone);
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoContentDeclarationOneEyeWide_data()
+{
+    QTest::addColumn<uint32_t>("version");
+    QTest::addColumn<int>("x11Width");
+
+    QTest::addRow("version 3") << 3u << 200;
+    QTest::addRow("version 4") << 4u << 100;
+}
+
+void X11WindowTest::testStereoContentDeclarationOneEyeWide()
+{
+    // This test verifies that a program declaring version 4 keeps its X11 window one eye wide,
+    // while a program packing both views itself (version 3, the default) gets an X11 window
+    // twice as wide; the window's place on screen is one eye in both cases.
+
+    QFETCH(uint32_t, version);
+    QFETCH(int, x11Width);
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    const uint32_t value = StereoContentSideBySideFull;
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value, version](xcb_window_t windowId) {
+        if (version != 3) {
+            xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content_version,
+                                XCB_ATOM_CARDINAL, 32, 1, &version);
+        }
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &value);
+    });
+    QVERIFY(window);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
+    const qreal scale = kwinApp()->xwaylandScale();
+    QCOMPARE(window->clientSize(), QSizeF(100, 100) / scale);
+
+    Xcb::WindowGeometry geometry(window->window());
+    QCOMPARE(geometry.rect().size(), QSize(x11Width, 100));
 
     xcb_unmap_window(c.get(), window->window());
     xcb_destroy_window(c.get(), window->window());

@@ -379,6 +379,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     auto colorSchemeCookie = fetchPreferredColorScheme();
     auto stereoContentCookie = fetchStereoContent();
     auto stereoContentClassCookie = fetchStereoContentClass();
+    auto stereoContentVersionCookie = fetchStereoContentVersion();
     auto transientCookie = fetchTransient();
     auto activitiesCookie = fetchActivities();
     auto applicationMenuServiceNameCookie = fetchApplicationMenuServiceName();
@@ -403,6 +404,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     getWmClientMachine();
     getSyncCounter();
     setCaption(readName());
+    readStereoContentVersion(stereoContentVersionCookie);
     readStereoContent(stereoContentCookie);
     readStereoContentClass(stereoContentClassCookie);
 
@@ -3100,8 +3102,8 @@ void X11Window::sendSyntheticConfigureNotify()
     u.event.x = m_client.x();
     u.event.y = m_client.y();
     // in the program's own units: one view for a program that declares stereo itself
-    u.event.width = std::round(m_client.width() * m_programSizeScale.width() / m_stereoClientScale.width());
-    u.event.height = std::round(m_client.height() * m_programSizeScale.height() / m_stereoClientScale.height());
+    u.event.width = std::round(m_client.width() * m_programSizeScale.width() / m_stereoWindowScale.width());
+    u.event.height = std::round(m_client.height() * m_programSizeScale.height() / m_stereoWindowScale.height());
     u.event.border_width = 0;
     u.event.above_sibling = XCB_WINDOW_NONE;
     u.event.override_redirect = 0;
@@ -3111,7 +3113,7 @@ void X11Window::sendSyntheticConfigureNotify()
 
 void X11Window::sendSyntheticConfigureNotifyIfNeeded()
 {
-    if (m_stereoClientScale != m_programSizeScale) {
+    if (m_stereoWindowScale != m_programSizeScale) {
         sendSyntheticConfigureNotify();
     }
 }
@@ -3134,6 +3136,17 @@ QSizeF X11Window::stereoClientScale() const
     default:
         return QSizeF(1, 1);
     }
+}
+
+// The X11 window against its place on screen: it holds both views of a full-resolution stereo
+// window, unless the program declares version 4 of the declaration, keeps its X11 window one
+// eye wide and presents a buffer twice as wide, holding both eyes.
+QSizeF X11Window::stereoWindowScale() const
+{
+    if (m_stereoContentVersion >= 4 && declaredStereoContent() == stereoContent()) {
+        return QSizeF(1, 1);
+    }
+    return stereoClientScale();
 }
 
 // The units of a program's own sizes against its place on screen: one view for a program
@@ -3612,10 +3625,11 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     const RectF bufferGeometry = nextFrameRectToBufferRect(frameGeometry);
     const qreal bufferScale = kwinApp()->xwaylandScale();
     const QSizeF stereoClientScale = this->stereoClientScale();
+    const QSizeF stereoWindowScale = this->stereoWindowScale();
     const QSizeF programSizeScale = this->programSizeScale();
 
     if (m_bufferGeometry == bufferGeometry && m_clientGeometry == clientGeometry && m_frameGeometry == frameGeometry && m_bufferScale == bufferScale
-        && m_stereoClientScale == stereoClientScale && m_programSizeScale == programSizeScale) {
+        && m_stereoClientScale == stereoClientScale && m_stereoWindowScale == stereoWindowScale && m_programSizeScale == programSizeScale) {
         return;
     }
 
@@ -3632,6 +3646,7 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
     m_bufferScale = bufferScale;
     const bool stereoScaleChanged = m_stereoClientScale != stereoClientScale;
     m_stereoClientScale = stereoClientScale;
+    m_stereoWindowScale = stereoWindowScale;
     m_programSizeScale = programSizeScale;
     m_output = workspace()->outputAt(frameGeometry.center());
 
@@ -3695,18 +3710,18 @@ void X11Window::configure(const Rect &nativeGeometry)
         if (isFullScreen() && !m_programSize.isEmpty()) {
             // fullscreen keeps the program's own frame (its rendering stays at full size)
             // and the output's 3D mode scales it, whatever its resolution
-            effectiveGeometry.setSize(Xcb::toXNative(QSizeF(m_programSize.width() * m_stereoClientScale.width() / m_programSizeScale.width(),
-                                                            m_programSize.height() * m_stereoClientScale.height() / m_programSizeScale.height())));
+            effectiveGeometry.setSize(Xcb::toXNative(QSizeF(m_programSize.width() * m_stereoWindowScale.width() / m_programSizeScale.width(),
+                                                            m_programSize.height() * m_stereoWindowScale.height() / m_programSizeScale.height())));
         } else {
-            effectiveGeometry.setWidth(std::round(effectiveGeometry.width() * m_stereoClientScale.width()));
-            effectiveGeometry.setHeight(std::round(effectiveGeometry.height() * m_stereoClientScale.height()));
+            effectiveGeometry.setWidth(std::round(effectiveGeometry.width() * m_stereoWindowScale.width()));
+            effectiveGeometry.setHeight(std::round(effectiveGeometry.height() * m_stereoWindowScale.height()));
         }
     }
     const bool geometryChanged = m_client.size() != effectiveGeometry.size() || m_client.position() != effectiveGeometry.topLeft();
     if (m_client.size() != effectiveGeometry.size()) {
         m_client.setGeometry(effectiveGeometry);
         // tell a program that declares stereo itself its own size (ICCCM 4.2.3)
-        if (m_stereoClientScale != m_programSizeScale) {
+        if (m_stereoWindowScale != m_programSizeScale) {
             sendSyntheticConfigureNotify();
         }
     } else if (m_client.position() != effectiveGeometry.topLeft()) {
@@ -3716,7 +3731,7 @@ void X11Window::configure(const Rect &nativeGeometry)
         // resized to let the client know about the new position. See ICCCM 4.1.5.
         sendSyntheticConfigureNotify();
     }
-    if (!geometryChanged && m_stereoClientScale != m_programSizeScale) {
+    if (!geometryChanged && m_stereoWindowScale != m_programSizeScale) {
         sendSyntheticConfigureNotify();
     }
 }
@@ -4257,6 +4272,26 @@ void X11Window::getStereoContentClass()
 {
     auto property = fetchStereoContentClass();
     readStereoContentClass(property);
+}
+
+Xcb::Property X11Window::fetchStereoContentVersion() const
+{
+    return Xcb::Property(false, window(), atoms->kde_net_wm_stereo_content_version, XCB_ATOM_CARDINAL, 0, 1);
+}
+
+void X11Window::readStereoContentVersion(Xcb::Property &property)
+{
+    // _KDE_NET_WM_STEREO_CONTENT_VERSION: CARDINAL/32, the version of the declaration the
+    // program follows; absent means 3, so a program that packs both views itself keeps an X11
+    // window twice its size
+    m_stereoContentVersion = property.value<uint32_t>().value_or(0);
+}
+
+void X11Window::getStereoContentVersion()
+{
+    auto property = fetchStereoContentVersion();
+    readStereoContentVersion(property);
+    handleStereoContentChanged();
 }
 
 //********************************************
