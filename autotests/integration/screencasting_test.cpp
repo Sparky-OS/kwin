@@ -832,7 +832,7 @@ void ScreencastingTest::testNativePanelRefresh()
         note("private-rig-unlock");
     }
     QTest::qWait(15000);
-    if (qEnvironmentVariableIsSet("PHONE_MODE_CYCLE")) {
+    if (qEnvironmentVariableIsSet("PHONE_MODE_CYCLE") && !qEnvironmentVariableIsSet("PHONE_LINK_FORMAT")) {
         note("mode-1080-before");
         QTest::qWait(5000);
         const bool changePanel = qEnvironmentVariable("PHONE_MODE_CYCLE") == QStringLiteral("panel");
