@@ -31,7 +31,8 @@ RenderViewport::RenderViewport(const RectF &renderRect, double scale, const Rend
     , m_renderRect(renderRect)
     , m_scaledRenderRect(renderRect.scaled(scale).rounded())
     , m_renderOffset(renderOffset)
-    , m_projectionMatrix(createProjectionMatrix(renderTarget, m_scaledRenderRect, renderOffset))
+    , m_flatProjectionMatrix(createProjectionMatrix(renderTarget, m_scaledRenderRect, renderOffset))
+    , m_projectionMatrix(m_flatProjectionMatrix)
     , m_scale(scale)
 {
 }
@@ -39,6 +40,25 @@ RenderViewport::RenderViewport(const RectF &renderRect, double scale, const Rend
 QMatrix4x4 RenderViewport::projectionMatrix() const
 {
     return m_projectionMatrix;
+}
+
+void RenderViewport::setStereo(StereoEye eye, qreal depthScale)
+{
+    m_stereoEye = eye;
+    m_projectionMatrix = m_flatProjectionMatrix;
+    if (eye == StereoEye::None) {
+        return;
+    }
+    // x' = x + (+- depthScale / 2) * z, y' = y, z' = 0
+    QMatrix4x4 shear;
+    shear(0, 2) = (eye == StereoEye::Left ? 0.5 : -0.5) * depthScale;
+    shear(2, 2) = 0;
+    m_projectionMatrix = m_flatProjectionMatrix * shear;
+}
+
+StereoEye RenderViewport::stereoEye() const
+{
+    return m_stereoEye;
 }
 
 RectF RenderViewport::renderRect() const

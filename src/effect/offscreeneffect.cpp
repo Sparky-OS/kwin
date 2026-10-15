@@ -179,7 +179,14 @@ void OffscreenData::paint(const RenderTarget &renderTarget, const RenderViewport
 
     GLVertexBuffer *vbo = GLVertexBuffer::streamingBuffer();
     vbo->reset();
-    vbo->setAttribLayout(std::span(GLVertexBuffer::GLVertex2DLayout), sizeof(GLVertex2D));
+    // the depth of the vertices is drawn on a stereo viewport only, the shear of its projection
+    // turns it into the parallax between the eyes; everywhere else it is left out
+    const bool stereo = viewport.stereoEye() != StereoEye::None;
+    if (stereo) {
+        vbo->setAttribLayout(std::span(GLVertexBuffer::GLVertex3DLayout), sizeof(GLVertex3D));
+    } else {
+        vbo->setAttribLayout(std::span(GLVertexBuffer::GLVertex2DLayout), sizeof(GLVertex2D));
+    }
 
     RenderGeometry geometry;
     geometry.setVertexSnappingMode(m_vertexSnappingMode);
@@ -188,11 +195,19 @@ void OffscreenData::paint(const RenderTarget &renderTarget, const RenderViewport
     }
     geometry.postProcessTextureCoordinates(m_texture->matrix(NormalizedCoordinates));
 
-    const auto map = vbo->map<GLVertex2D>(geometry.size());
-    if (!map) {
-        return;
+    if (stereo) {
+        const auto map = vbo->map<GLVertex3D>(geometry.size());
+        if (!map) {
+            return;
+        }
+        geometry.copy(*map);
+    } else {
+        const auto map = vbo->map<GLVertex2D>(geometry.size());
+        if (!map) {
+            return;
+        }
+        geometry.copy(*map);
     }
-    geometry.copy(*map);
     vbo->unmap();
 
     vbo->bindArrays();
