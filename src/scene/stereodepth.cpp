@@ -12,6 +12,8 @@
 #include "window.h"
 #include "workspace.h"
 
+#include <QEasingCurve>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -21,6 +23,11 @@ namespace KWin
 
 // the width of the view the limits are given for
 static constexpr qreal s_referenceWidth = 1920;
+
+// how long a change of level lasts at the default animation speed: towards the viewer quickly, so
+// that nothing is drawn behind what it is over for more than an instant, and away from it gently
+static constexpr std::chrono::milliseconds s_riseDuration(80);
+static constexpr std::chrono::milliseconds s_sinkDuration(150);
 
 enum class Role {
     Fixed, // at the screen's level whatever happens
@@ -156,9 +163,12 @@ qreal StereoDepth::level(const Window *window)
 
 int StereoDepth::parallax(const Window *window, int viewWidth)
 {
-    const qreal level = StereoDepth::level(window);
-    const qreal limit = level > 0 ? options->stereoPoppedLimit() : options->stereoSunkLimit();
-    return std::lround(level * limit * viewWidth / s_referenceWidth);
+    return parallax(levelDepth(window), viewWidth);
+}
+
+int StereoDepth::parallax(qreal depth, int viewWidth)
+{
+    return std::lround(depth * viewWidth / s_referenceWidth);
 }
 
 bool StereoDepth::effectsEnabled()
@@ -215,6 +225,11 @@ qreal StereoDepth::sunkLimit(int viewWidth)
 
 int StereoDepth::pointerParallax(const QPointF &pos, int viewWidth)
 {
+    return parallax(pointerDepth(pos), viewWidth);
+}
+
+qreal StereoDepth::pointerDepth(const QPointF &pos)
+{
     if (effects && effects->activeFullScreenEffect()) {
         return 0;
     }
@@ -230,7 +245,7 @@ int StereoDepth::pointerParallax(const QPointF &pos, int viewWidth)
             }
         }
     }
-    return window ? parallax(window, viewWidth) : 0;
+    return window ? levelDepth(window) : 0;
 }
 
 int StereoDepth::eyeShift(int parallax, StereoEye eye)
@@ -249,6 +264,49 @@ int StereoDepth::maxEyeShift(int viewWidth)
 {
     const qreal limit = std::max(options->stereoSunkLimit(), options->stereoPoppedLimit());
     return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
+}
+
+void StereoDepth::Motion::setTarget(qreal depth, std::chrono::nanoseconds time)
+{
+    if (!m_started) {
+        m_from = m_to = depth;
+        m_started = true;
+        return;
+    }
+    if (depth == m_to) {
+        return;
+    }
+    m_from = this->depth(time);
+    m_to = depth;
+    m_start = time;
+    m_duration = m_to > m_from ? riseDuration() : sinkDuration();
+}
+
+qreal StereoDepth::Motion::depth(std::chrono::nanoseconds time) const
+{
+    if (m_duration <= std::chrono::nanoseconds::zero() || time >= m_start + m_duration) {
+        return m_to;
+    }
+    if (time <= m_start) {
+        return m_from;
+    }
+    const qreal progress = qreal((time - m_start).count()) / m_duration.count();
+    return m_from + (m_to - m_from) * QEasingCurve(QEasingCurve::OutCubic).valueForProgress(progress);
+}
+
+bool StereoDepth::Motion::isMoving(std::chrono::nanoseconds time) const
+{
+    return m_duration > std::chrono::nanoseconds::zero() && time < m_start + m_duration;
+}
+
+std::chrono::nanoseconds StereoDepth::Motion::riseDuration()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(s_riseDuration * options->animationTimeFactor());
+}
+
+std::chrono::nanoseconds StereoDepth::Motion::sinkDuration()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(s_sinkDuration * options->animationTimeFactor());
 }
 
 } // namespace KWin

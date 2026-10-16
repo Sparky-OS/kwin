@@ -11,6 +11,7 @@
 
 #include "core/renderviewport.h"
 #include "scene/scene.h"
+#include "scene/stereodepth.h"
 
 #include <QHash>
 
@@ -120,14 +121,19 @@ protected:
 private:
     void paintOverlay(const RenderTarget &renderTarget, const RenderViewport &viewport, const Region &deviceRegion);
     void repaintStereoDepth();
+    void updateStereoDepth();
     bool stereoDepthPainted(const Window *window) const;
     int stereoParallax(const Window *window) const;
+    int pointerParallax() const;
     void drawStereoShadow(const RenderTarget &renderTarget, const RenderViewport &viewport, WindowItem *caster, int mask, const Region &deviceRegion, const WindowPaintData &data);
     void createDndIconItem();
     void destroyDndIconItem();
     void updateCursor();
 
     const Window *m_depthWindow = nullptr;
+    QHash<const Window *, StereoDepth::Motion> m_depthMotions;
+    StereoDepth::Motion m_pointerDepth;
+    std::chrono::nanoseconds m_depthTime = std::chrono::nanoseconds::zero();
     QHash<LogicalOutput *, int> m_pointerParallax;
     PaintContext m_paintContext;
     std::unique_ptr<Item> m_containerItem;

@@ -170,6 +170,8 @@ void StereoDepthPinnedTest::initTestCase()
     KConfigGroup depth(config, QStringLiteral("StereoDepth"));
     depth.writeEntry("SunkLimit", s_sunkLimit);
     depth.writeEntry("PoppedLimit", s_poppedLimit);
+    // no motion between the levels: every capture is at the levels themselves
+    KConfigGroup(config, QStringLiteral("KDE")).writeEntry("AnimationDurationFactor", 0);
     config->sync();
     kwinApp()->setConfig(config);
 

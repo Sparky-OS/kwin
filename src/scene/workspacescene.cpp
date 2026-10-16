@@ -559,6 +559,8 @@ void WorkspaceScene::prePaint(SceneView *delegate, OutputFrame *frame)
     m_paintContext.mask = prePaintData.mask;
     m_paintContext.phase2Data.clear();
 
+    updateStereoDepth();
+
     if (m_paintContext.mask & (PAINT_SCREEN_TRANSFORMED | PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS)) {
         preparePaintGenericScreen();
     } else {
@@ -703,7 +705,7 @@ Region WorkspaceScene::collectDamage()
             const int shift = StereoDepth::maxEyeShift(width);
             // the pointer draws at the level of what is under it, which can change while it stays still
             int &pointerParallax = m_pointerParallax[painted_screen];
-            const int parallax = StereoDepth::pointerParallax(Cursors::self()->currentCursor()->pos(), width);
+            const int parallax = this->pointerParallax();
             if (parallax != pointerParallax) {
                 pointerParallax = parallax;
                 m_paintContext.deviceDamage |= mapToDevice(painted_delegate, m_cursorItem.get(), m_cursorItem->boundingRect());
@@ -717,6 +719,17 @@ Region WorkspaceScene::collectDamage()
 void WorkspaceScene::postPaint()
 {
     effects->postPaintScreen();
+
+    if (painted_screen && painted_screen->hasStereoEyes() && StereoDepth::isEnabled()) {
+        // a level is still being reached: the next frame shows the next step of the motion
+        if (std::ranges::any_of(m_depthMotions, [this](const StereoDepth::Motion &motion) {
+            return motion.isMoving(m_depthTime);
+        })) {
+            addRepaintFull();
+        } else if (m_pointerDepth.isMoving(m_depthTime)) {
+            m_cursorItem->scheduleRepaint(m_cursorItem->boundingRect());
+        }
+    }
 
     painted_delegate = nullptr;
     painted_screen = nullptr;
@@ -772,7 +785,7 @@ void WorkspaceScene::paintOverlay(const RenderTarget &renderTarget, const Render
     const StereoEye eye = m_renderer->stereoEye();
     if (eye != StereoEye::None && painted_screen && painted_screen->hasStereoEyes() && StereoDepth::isEnabled()) {
         const int width = painted_delegate->deviceRect().width();
-        const int shift = StereoDepth::eyeShift(StereoDepth::pointerParallax(Cursors::self()->currentCursor()->pos(), width), eye);
+        const int shift = StereoDepth::eyeShift(pointerParallax(), eye);
         data.translate(shift / viewport.scale());
         bounds.adjust(-StereoDepth::maxEyeShift(width), 0, StereoDepth::maxEyeShift(width), 0);
     }
@@ -909,7 +922,36 @@ int WorkspaceScene::stereoParallax(const Window *window) const
     if (!painted_screen || !painted_screen->hasStereoEyes() || !StereoDepth::isEnabled()) {
         return 0;
     }
-    return StereoDepth::parallax(window, painted_delegate->deviceRect().width());
+    const auto motion = m_depthMotions.constFind(window);
+    const qreal depth = motion == m_depthMotions.constEnd() ? StereoDepth::levelDepth(window) : motion->depth(m_depthTime);
+    return StereoDepth::parallax(depth, painted_delegate->deviceRect().width());
+}
+
+int WorkspaceScene::pointerParallax() const
+{
+    return StereoDepth::parallax(m_pointerDepth.depth(m_depthTime), painted_delegate->deviceRect().width());
+}
+
+// Each window and the pointer move towards their levels in a short motion, timed by the frames of
+// the output that shows them.
+void WorkspaceScene::updateStereoDepth()
+{
+    if (!painted_screen || !painted_screen->hasStereoEyes() || !StereoDepth::isEnabled()) {
+        return;
+    }
+    m_depthTime = painted_delegate->nextPresentationTimestamp();
+    for (WindowItem *windowItem : std::as_const(stacking_order)) {
+        const Window *window = windowItem->window();
+        auto motion = m_depthMotions.find(window);
+        if (motion == m_depthMotions.end()) {
+            motion = m_depthMotions.insert(window, StereoDepth::Motion());
+            connect(window, &QObject::destroyed, this, [this, window]() {
+                m_depthMotions.remove(window);
+            });
+        }
+        motion->setTarget(StereoDepth::levelDepth(window), m_depthTime);
+    }
+    m_pointerDepth.setTarget(StereoDepth::pointerDepth(Cursors::self()->currentCursor()->pos()), m_depthTime);
 }
 
 // A shadow lies on what it falls on: drawn for each receiver, in the receiver's visible part, at the

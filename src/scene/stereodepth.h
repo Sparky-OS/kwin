@@ -11,6 +11,8 @@
 
 #include <QPointF>
 
+#include <chrono>
+
 #include <kwin_export.h>
 
 namespace KWin
@@ -34,6 +36,36 @@ class Window;
 class KWIN_EXPORT StereoDepth
 {
 public:
+    /**
+     * A depth that follows its level in a short eased motion. Towards the viewer it is quick, so
+     * that nothing is drawn behind what it is over for more than an instant, and away from the
+     * viewer it is gentle. Both ease out, follow the animation speed, and are instant when
+     * animations are off. Depths are in pixels of a view 1920 wide, positive in front of the screen.
+     */
+    class KWIN_EXPORT Motion
+    {
+    public:
+        /**
+         * Moves towards @a depth from where the motion is at @a time. The first depth is taken at once.
+         */
+        void setTarget(qreal depth, std::chrono::nanoseconds time);
+        qreal depth(std::chrono::nanoseconds time) const;
+        bool isMoving(std::chrono::nanoseconds time) const;
+
+        /**
+         * How long a motion towards the viewer and away from it lasts at the animation speed.
+         */
+        static std::chrono::nanoseconds riseDuration();
+        static std::chrono::nanoseconds sinkDuration();
+
+    private:
+        qreal m_from = 0;
+        qreal m_to = 0;
+        std::chrono::nanoseconds m_start = std::chrono::nanoseconds::zero();
+        std::chrono::nanoseconds m_duration = std::chrono::nanoseconds::zero();
+        bool m_started = false;
+    };
+
     /**
      * Whether any level is switched on. With both limits at zero the desktop is drawn as before.
      */
@@ -79,10 +111,20 @@ public:
     static int parallax(const Window *window, int viewWidth);
 
     /**
+     * The parallax of @a depth, in pixels of a view 1920 wide, on a view @a viewWidth pixels wide.
+     */
+    static int parallax(qreal depth, int viewWidth);
+
+    /**
      * The parallax of the pointer at @a pos in the 2D geometry: that of the window under its hot
      * spot, or of the window being moved or resized, and none over nothing.
      */
     static int pointerParallax(const QPointF &pos, int viewWidth);
+
+    /**
+     * The same as a depth, in pixels of a view 1920 wide.
+     */
+    static qreal pointerDepth(const QPointF &pos);
 
     /**
      * How far @a eye's copy moves for @a parallax, to the right for the left eye when the window
