@@ -283,6 +283,13 @@ void ScreencastingTest::testNativePanel()
     const QSize eyeSize(panelSize.width() / 2, panelSize.height());
     const QSize logicalSize(eyeSize.width() / scale, eyeSize.height() / scale);
     const auto outputCount = workspace()->outputs().size();
+    for (auto local : kwinApp()->outputBackend()->outputs()) {
+        QVERIFY(!local->isNetworked());
+    }
+    bool networkedAtAnnouncement = false;
+    const auto announcement = connect(kwinApp()->outputBackend(), &OutputBackend::outputAdded, this, [&](BackendOutput *output) {
+        networkedAtAnnouncement = output->isNetworked();
+    });
     auto stream = std::make_unique<Test::ScreencastingStreamV1>(nullptr);
     stream->init(Test::screencasting()->stream_virtual_output_with_properties(QStringLiteral("native-phone"), QStringLiteral("Native phone panel"),
         panelSize.width(), panelSize.height(), refresh, wl_fixed_from_double(1), 150, 68, 1, QtWayland::zkde_screencast_unstable_v1::pointer_hidden));
@@ -293,6 +300,9 @@ void ScreencastingTest::testNativePanel()
     QTRY_COMPARE(workspace()->outputs().size(), outputCount + 1);
     auto backendOutput = kwinApp()->outputBackend()->findOutput(QStringLiteral("Virtual-native-phone"));
     QVERIFY(backendOutput);
+    disconnect(announcement);
+    QVERIFY(networkedAtAnnouncement);
+    QVERIFY(backendOutput->isNetworked());
     auto output = workspace()->findOutput(backendOutput);
     QVERIFY(output);
     QCOMPARE(output->pixelSize(), eyeSize);

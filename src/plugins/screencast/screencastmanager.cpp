@@ -106,7 +106,9 @@ void ScreencastManager::streamVirtualPanel(ScreencastStreamV1Interface *stream, 
         return;
     }
     auto backend = kwinApp()->outputBackend();
-    auto output = backend->createVirtualOutput(properties);
+    auto panelProperties = properties;
+    panelProperties.networked = true;
+    auto output = backend->createVirtualOutput(panelProperties);
     if (!output) {
         stream->sendFailed(i18n("Virtual panel properties are not supported"));
         return;

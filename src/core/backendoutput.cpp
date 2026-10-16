@@ -353,6 +353,7 @@ void BackendOutput::initializeVirtualOutput(const VirtualOutputProperties &prope
     information.physicalSize = properties.physicalSize;
     information.edid = Edid(QByteArrayView(), properties.name.toUtf8());
     information.splitEyeDisplay = properties.splitEye;
+    information.networked = properties.networked;
     information.initialVirtualMode = modeline;
     if (properties.splitEye) {
         information.capabilities |= Capability::VirtualStereo;
@@ -630,6 +631,11 @@ uint32_t BackendOutput::overscan() const
 VrrPolicy BackendOutput::vrrPolicy() const
 {
     return m_state.vrrPolicy;
+}
+
+bool BackendOutput::isNetworked() const
+{
+    return m_information.networked;
 }
 
 bool BackendOutput::isPlaceholder() const

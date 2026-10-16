@@ -41,6 +41,7 @@ struct KWIN_EXPORT VirtualOutputProperties
     qreal scale = 1;
     QSize physicalSize = {0, 0};
     bool splitEye = false;
+    bool networked = false;
 
     bool isValid() const;
 };

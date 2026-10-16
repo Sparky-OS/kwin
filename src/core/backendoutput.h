@@ -250,6 +250,7 @@ public:
     RgbRange rgbRange() const;
 
     bool isPlaceholder() const;
+    bool isNetworked() const;
     bool isNonDesktop() const;
     OutputTransform panelOrientation() const;
     bool wideColorGamut() const;
@@ -463,6 +464,7 @@ protected:
         bool internal = false;
         bool placeholder = false;
         bool nonDesktop = false;
+        bool networked = false;
         QByteArray mstPath;
         std::optional<double> maxPeakBrightness;
         std::optional<double> maxAverageBrightness;
