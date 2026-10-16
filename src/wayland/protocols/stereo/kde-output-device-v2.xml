@@ -10,7 +10,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-  <interface name="kde_output_device_registry_v2" version="27">
+  <interface name="kde_output_device_registry_v2" version="28">
     <description summary="output devices">
       This interface can be used to list output devices.
 
@@ -52,7 +52,7 @@
     </event>
   </interface>
 
-  <interface name="kde_output_device_v2" version="27">
+  <interface name="kde_output_device_v2" version="28">
     <description summary="output configuration representation">
       An output device describes a display device available to the compositor.
       output_device is similar to wl_output, but focuses on output
@@ -291,6 +291,8 @@
       <entry name="virtual_stereo" value="0x20000" since="24" summary="virtual stereo mode toggles are supported"/>
       <entry name="stereo_swap_eyes" value="0x40000" since="26" summary="per-output eye exchange is supported"/>
       <entry name="ized3d_options" value="0x80000" since="27" summary="iZ3D formula and transfer settings are supported"/>
+      <entry name="side_by_side_full_timing" value="0x100000" since="28" summary="the timing of side by side (full) 3D modes can be chosen"/>
+      <entry name="stereo_depth" value="0x200000" since="28" summary="the depth sent with picture and depth 3D modes can be chosen"/>
     </enum>
 
     <event name="capabilities">
@@ -649,9 +651,51 @@
       <arg name="mode" type="uint" enum="ized3d_mode"/>
       <arg name="transfer" type="uint" enum="ized3d_transfer"/>
     </event>
+    <enum name="side_by_side_full_timing" since="28">
+      <description summary="the timing of a side by side (full) 3D mode">
+        HDMI 1.4a, Appendix H, Figure H-4 sends side by side (full) with the
+        whole line doubled; NVIDIA's driver keeps the 2D horizontal blanking and
+        doubles only the active width. Both send the same picture, the two eyes
+        side by side at full width; they differ in the signal only.
+      </description>
+      <entry name="whole_line_doubled" value="0" summary="the HDMI 1.4a timing: blanking doubled too, 297 MHz for 1080p60"/>
+      <entry name="blanking_kept" value="1" summary="the horizontal blanking kept, as NVIDIA's driver times it: 278.1 MHz for 1080p60"/>
+    </enum>
+
+    <event name="side_by_side_full_timing" since="28">
+      <description summary="the timing of the output's side by side (full) 3D modes">
+        Sent when the output has the side_by_side_full_timing capability.
+        whole_line_doubled, the timing of the HDMI specification, is the
+        default. The setting has no effect on other modes.
+      </description>
+      <arg name="timing" type="uint" enum="side_by_side_full_timing"/>
+    </event>
+
+    <enum name="stereo_depth_source" since="28">
+      <description summary="what the depth picture of a picture and depth 3D mode shows"/>
+      <entry name="flat" value="0" summary="everything at the screen's depth"/>
+      <entry name="desktop" value="1" summary="the desktop's depth levels, 3D content at the level of its window"/>
+      <entry name="desktop_and_content" value="2" summary="the desktop's depth levels, and the depth of 3D content estimated from its two views"/>
+    </enum>
+
+    <event name="stereo_depth" since="28">
+      <description summary="the depth sent with the output's picture and depth 3D modes">
+        The HDMI 1.4a 3D structures L + depth and L + depth + graphics +
+        graphics-depth (Appendix H, Figures H-5 and H-6) send the left eye's
+        picture together with a depth picture, from which the display makes
+        the views. source says what the depth picture shows; desktop_and_content
+        is the default. viewing_distance is the viewer's distance from the
+        screen in centimetres, which the compositor sends in the parallax
+        information of the 3D metadata (Table H-4, dref); 0 lets the compositor
+        derive it from the display's size. Sent when the output has the
+        stereo_depth capability. The settings have no effect on other modes.
+      </description>
+      <arg name="source" type="uint" enum="stereo_depth_source"/>
+      <arg name="viewing_distance" type="uint" summary="centimetres, 0 for automatic"/>
+    </event>
   </interface>
 
-  <interface name="kde_output_device_mode_v2" version="27">
+  <interface name="kde_output_device_mode_v2" version="28">
     <description summary="output mode">
       This object describes an output mode.
 
@@ -715,6 +759,10 @@
       <entry name="virtual_stereo" value="0x4000" since="24"/>
       <entry name="stereo_sequential_left_first" value="0x40000" since="24"/>
       <entry name="stereo_sequential_right_first" value="0x80000" since="24"/>
+      <entry name="stereo_field_alternative" value="0x100000" since="28" summary="HDMI 1.4a 3D, field alternative"/>
+      <entry name="stereo_line_alternative" value="0x200000" since="28" summary="HDMI 1.4a 3D, line alternative"/>
+      <entry name="stereo_l_depth" value="0x400000" since="28" summary="HDMI 1.4a 3D, L + depth"/>
+      <entry name="stereo_l_depth_graphics" value="0x800000" since="28" summary="HDMI 1.4a 3D, L + depth + graphics + graphics-depth"/>
 
     </enum>
 
