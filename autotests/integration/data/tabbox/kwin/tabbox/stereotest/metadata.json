@@ -1,0 +1,8 @@
+{
+    "KPackageStructure": "KWin/WindowSwitcher",
+    "KPlugin": {
+        "Id": "stereotest",
+        "Name": "Stereo test switcher"
+    },
+    "X-Plasma-MainScript": "ui/main.qml"
+}

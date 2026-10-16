@@ -9,6 +9,7 @@
 */
 // own
 #include "layoutpreview.h"
+#include "scripting/stereorotation.h"
 
 #include <KLocalizedQmlContext>
 #include <KLocalizedString>
@@ -68,6 +69,7 @@ LayoutPreview::LayoutPreview(const QString &path, bool showDesktopThumbnail, QOb
     qmlRegisterType<WindowThumbnailItem>("org.kde.kwin", 3, 0, "WindowThumbnail");
     qmlRegisterType<SwitcherItem>("org.kde.kwin", 3, 0, "TabBoxSwitcher");
     qmlRegisterType<DesktopBackground>("org.kde.kwin", 3, 0, "DesktopBackground");
+    qmlRegisterType<StereoRotation>("org.kde.kwin", 3, 0, "StereoRotation");
     qmlRegisterAnonymousType<QAbstractItemModel>("org.kde.kwin", 3);
 
     component->loadUrl(QUrl::fromLocalFile(path));

@@ -86,6 +86,11 @@ class SwitcherItem : public QObject
     Q_PROPERTY(bool visible READ isVisible NOTIFY visibleChanged)
     Q_PROPERTY(bool allDesktops READ isAllDesktops NOTIFY allDesktopsChanged)
     Q_PROPERTY(int currentIndex READ currentIndex WRITE setCurrentIndex NOTIFY currentIndexChanged)
+    // the preview is drawn flat
+    Q_PROPERTY(bool stereo MEMBER m_stereo NOTIFY stereoChanged)
+    Q_PROPERTY(bool stereoEyes READ hasStereoEyes CONSTANT)
+    Q_PROPERTY(qreal stereoPopped READ stereoLimit CONSTANT)
+    Q_PROPERTY(qreal stereoSunk READ stereoLimit CONSTANT)
 
     /**
      * The main QML item that will be displayed in the Dialog
@@ -110,6 +115,14 @@ public:
     void setVisible(bool visible);
     void incrementIndex();
     void decrementIndex();
+    bool hasStereoEyes() const
+    {
+        return false;
+    }
+    qreal stereoLimit() const
+    {
+        return 0;
+    }
 
 Q_SIGNALS:
     void visibleChanged();
@@ -118,6 +131,7 @@ Q_SIGNALS:
     void allDesktopsChanged();
     void screenGeometryChanged();
     void itemChanged();
+    void stereoChanged();
 
     void aboutToShow();
     void aboutToHide();
@@ -127,6 +141,7 @@ private:
     QObject *m_item;
     int m_currentIndex;
     bool m_visible;
+    bool m_stereo = false;
 };
 
 inline QAbstractItemModel *SwitcherItem::model() const

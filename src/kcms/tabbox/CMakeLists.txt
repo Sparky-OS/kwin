@@ -36,6 +36,7 @@ endif()
 add_executable(kwin-tabbox-preview
     layoutpreview.cpp
     thumbnailitem.cpp
+    ${KWin_SOURCE_DIR}/src/scripting/stereorotation.cpp
 )
 qt_add_resources(kwin-tabbox-preview "thumbnails"
     PREFIX "/kwin-tabbox-preview"
