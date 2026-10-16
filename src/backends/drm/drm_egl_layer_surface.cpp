@@ -362,6 +362,51 @@ bool EglGbmLayerSurface::drawStereoPattern(const QSize &fboSize, const Region &r
     return true;
 }
 
+// HDMI 1.4a, Figure H-3: the eyes line by line, the left eye's first line first, each eye at full
+// height, so every line of an eye is sent once in a frame twice as tall
+bool EglGbmLayerSurface::drawLineAlternative(const QSize &fboSize, const Region &repaint)
+{
+    if (!m_surface->stereoPatternShader && !m_surface->stereoPatternShaderFailed) {
+        m_surface->stereoPatternShader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/stereopattern.frag"));
+        if (!m_surface->stereoPatternShader) {
+            m_surface->stereoPatternShaderFailed = true;
+            qCWarning(KWIN_DRM) << "Failed to load the stereo pattern shader, showing the desktop flat";
+        }
+    }
+    if (!m_surface->stereoPatternShader) {
+        return false;
+    }
+    ShaderBinder binder(m_surface->stereoPatternShader.get());
+    GLShader *shader = binder.shader();
+    shader->setColorspaceUniforms(m_surface->blendingColor, m_surface->layerBlendingColor, RenderingIntent::AbsoluteColorimetricNoAdaptation);
+    const std::shared_ptr<GLTexture> rightEye = m_surface->currentRightShadowSlot ? m_surface->currentRightShadowSlot->texture() : nullptr;
+    shader->setUniform("leftEye", m_stereoSwapEyes && rightEye ? 1 : 0);
+    shader->setUniform("rightEye", !m_stereoSwapEyes && rightEye ? 1 : 0);
+    shader->setUniform("pattern", 3);
+    shader->setUniform("rightFirst", 0);
+    shader->setUniform("eyeHeight", float(m_surface->currentShadowSlot->texture()->height()));
+    QMatrix4x4 mat;
+    mat.scale(1, -1);
+    mat.ortho(QRectF(QPointF(), fboSize));
+    shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
+    if (const auto vbo = uploadGeometry(repaint, m_surface->gbmSwapchain->size())) {
+        if (rightEye) {
+            glActiveTexture(GL_TEXTURE1);
+            rightEye->bind();
+            glActiveTexture(GL_TEXTURE0);
+        }
+        m_surface->currentShadowSlot->texture()->bind();
+        vbo->render(GL_TRIANGLES);
+        m_surface->currentShadowSlot->texture()->unbind();
+        if (rightEye) {
+            glActiveTexture(GL_TEXTURE1);
+            rightEye->unbind();
+            glActiveTexture(GL_TEXTURE0);
+        }
+    }
+    return true;
+}
+
 bool EglGbmLayerSurface::drawIzed3d(const QSize &fboSize, const Region &repaint)
 {
     if (!m_surface->ized3dShader && !m_surface->ized3dShaderFailed) {
@@ -472,6 +517,7 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
     const bool spatial = isSpatialStereo(m_stereoLayout) && m_surface->needsShadowBuffer;
     const bool anaglyph = isAnaglyph(m_stereoLayout) && m_surface->needsShadowBuffer;
     const bool stereo = m_stereoLayout != StereoLayout::None && m_surface->needsShadowBuffer;
+    const bool lineAlternative = m_stereoLayout == StereoLayout::LineAlternative && m_surface->needsShadowBuffer;
     const Region scanoutDamage = stereo ? Region(Rect(QPoint(), m_surface->gbmSwapchain->size())) : damagedDeviceRegion;
     if (m_surface->needsShadowBuffer) {
         const Region deviceRepaint = scanoutDamage | m_surface->damageJournal.accumulate(m_surface->currentSlot->age(), Region::infinite());
@@ -509,6 +555,8 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             // both eyes mixed; the repaint is the whole buffer in 3D
         } else if (spatial && drawStereoPattern(fbo->size(), repaint)) {
             // The pattern is anchored to scanout pixels.
+        } else if (lineAlternative && drawLineAlternative(fbo->size(), repaint)) {
+            // So are the lines of line alternative.
         } else if (stereo && !anaglyph && !spatial) {
             // the desktop into both eyes, left eye first: left half and right half for
             // side by side, top half and bottom half for top and bottom, each eye in full
@@ -524,6 +572,7 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
                 deviceEyes = {Rect(0, 0, w / 2, h), Rect(w / 2, 0, w - w / 2, h)};
                 break;
             case StereoLayout::FramePacking:
+            case StereoLayout::FieldAlternative:
                 glClearColor(0, 0, 0, 1);
                 glClear(GL_COLOR_BUFFER_BIT);
                 deviceEyes = {Rect(QPoint(0, 0), m_eyeSize), Rect(m_rightEyeOffset, m_eyeSize)};

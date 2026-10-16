@@ -87,6 +87,65 @@ private Q_SLOTS:
             }
         }
     }
+
+    // line alternative (HDMI 1.4a, Figure H-3): each eye at full height in a buffer twice as tall,
+    // the left eye's line first, every line of each eye exactly once
+    void lineAlternative()
+    {
+        const auto display = EglDisplay::create(eglGetDisplay(EGL_DEFAULT_DISPLAY), nullptr);
+        QVERIFY(display);
+        const auto context = EglContext::create(display.get(), EGL_NO_CONFIG_KHR, nullptr);
+        QVERIFY(context);
+        QVERIFY(context->makeCurrent());
+        const QSize eye(20, 9);
+        const QSize size(eye.width(), 2 * eye.height());
+        QImage left(eye, QImage::Format_RGBA8888_Premultiplied);
+        QImage right(eye, QImage::Format_RGBA8888_Premultiplied);
+        for (int y = 0; y < eye.height(); ++y) {
+            for (int x = 0; x < eye.width(); ++x) {
+                left.setPixel(x, y, qRgb(10 * y + 10, x, 0));
+                right.setPixel(x, y, qRgb(0, x, 10 * y + 10));
+            }
+        }
+        auto shader = ShaderManager::instance()->generateShaderFromFile(ShaderTrait::MapTexture, QString(), QStringLiteral(":/opengl/stereopattern.frag"));
+        QVERIFY(shader);
+        ShaderBinder binder(shader.get());
+        QMatrix4x4 projection;
+        projection.scale(1, -1);
+        projection.ortho(QRectF(QPointF(), size));
+        shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, projection);
+        shader->setColorspaceUniforms(ColorDescription::sRGB, ColorDescription::sRGB, RenderingIntent::AbsoluteColorimetricNoAdaptation);
+        shader->setUniform("leftEye", 0);
+        shader->setUniform("rightEye", 1);
+        shader->setUniform("pattern", 3);
+        shader->setUniform("rightFirst", 0);
+        shader->setUniform("eyeHeight", float(eye.height()));
+        const auto target = GLTexture::allocate(GL_RGBA8, size);
+        QVERIFY(target);
+        GLFramebuffer framebuffer(target.get());
+        QVERIFY(framebuffer.valid());
+        const auto leftTexture = GLTexture::upload(left);
+        const auto rightTexture = GLTexture::upload(right);
+        QVERIFY(leftTexture);
+        QVERIFY(rightTexture);
+        // the eyes' lines whole, without blending neighbours
+        leftTexture->setFilter(GL_LINEAR);
+        rightTexture->setFilter(GL_LINEAR);
+        context->pushFramebuffer(&framebuffer);
+        glActiveTexture(GL_TEXTURE1);
+        rightTexture->bind();
+        glActiveTexture(GL_TEXTURE0);
+        leftTexture->render(size);
+        context->popFramebuffer();
+        const QImage actual = target->toImage();
+        QCOMPARE(actual.size(), size);
+        for (int y = 0; y < size.height(); ++y) {
+            for (int x = 0; x < size.width(); ++x) {
+                const QRgb expected = y % 2 == 0 ? left.pixel(x, y / 2) : right.pixel(x, y / 2);
+                QCOMPARE(actual.pixel(x, y), expected);
+            }
+        }
+    }
 };
 QTEST_MAIN(StereoPatternTest)
 #include "test_stereo_pattern.moc"

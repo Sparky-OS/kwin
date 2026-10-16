@@ -31,8 +31,7 @@ namespace KWin
 // HDMI 3D modes are listed with the others but only ever set by the user
 static bool isStereo3D(OutputModeline::Flags flags)
 {
-    return flags.testFlag(OutputModeline::Flag::VirtualStereo) || flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf) || flags.testFlag(OutputModeline::Flag::Stereo3DTopAndBottom)
-        || flags.testFlag(OutputModeline::Flag::Stereo3DFramePacking) || flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideFull);
+    return flags & OutputModeline::AllStereo3D || flags.testFlag(OutputModeline::Flag::VirtualStereo);
 }
 
 static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &saved, bool anaglyph, bool otherStereoFormats, const std::optional<QList<CustomModeDefinition>> &customModes)

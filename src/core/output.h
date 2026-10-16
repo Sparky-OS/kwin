@@ -137,6 +137,12 @@ public:
         // one eye per refresh of the base timing, alternating; twins of 2D modes at 100 Hz or more
         Stereo3DSequentialLeftFirst = 0x40000,
         Stereo3DSequentialRightFirst = 0x80000,
+        // the other HDMI 1.4a 3D structures (Appendix H): the eyes field by field and line by
+        // line, and the left eye's picture with its depth, alone or with graphics and their depth
+        Stereo3DFieldAlternative = 0x100000,
+        Stereo3DLineAlternative = 0x200000,
+        Stereo3DLDepth = 0x400000,
+        Stereo3DLDepthGraphics = 0x800000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -153,7 +159,11 @@ public:
         | Flag::Stereo3DCheckerboardLeftFirst
         | Flag::Stereo3DCheckerboardRightFirst
         | Flag::Stereo3DSequentialLeftFirst
-        | Flag::Stereo3DSequentialRightFirst;
+        | Flag::Stereo3DSequentialRightFirst
+        | Flag::Stereo3DFieldAlternative
+        | Flag::Stereo3DLineAlternative
+        | Flag::Stereo3DLDepth
+        | Flag::Stereo3DLDepthGraphics;
 
     OutputModeline();
     OutputModeline(const QSize &size, uint32_t refreshRate, Flags flags = {});
@@ -215,6 +225,18 @@ enum class Ized3dMode {
 enum class Ized3dTransfer {
     Linear,
     Encoded,
+};
+
+/**
+ * The pictures of the HDMI 1.4a picture and depth structures, in the order they are sent: the
+ * left eye's picture and its depth (L + depth, Appendix H, Figure H-5), then graphics and
+ * their depth (L + depth + graphics + graphics-depth, Figure H-6).
+ */
+enum class StereoPlane {
+    Picture,
+    Depth,
+    Graphics,
+    GraphicsDepth,
 };
 
 enum class StereoPairRole {

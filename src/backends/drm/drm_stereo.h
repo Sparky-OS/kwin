@@ -18,9 +18,11 @@ namespace KWin
 {
 
 /**
- * Stereoscopic 3D output. SideBySideHalf, TopAndBottom, FramePacking and SideBySideFull
- * are HDMI 1.4 structures a mode is sent in (DRM_MODE_FLAG_3D_*, from the display's EDID):
- * choosing such a mode is turning 3D on, and the desktop is drawn into both eyes.
+ * Stereoscopic 3D output. SideBySideHalf, TopAndBottom, FramePacking, SideBySideFull,
+ * FieldAlternative, LineAlternative, LDepth and LDepthGraphics are the HDMI 1.4a structures
+ * a mode is sent in (Appendix H, Table H-2; DRM_MODE_FLAG_3D_*, from the display's EDID):
+ * choosing such a mode is turning 3D on, and the desktop is drawn into both eyes, or for
+ * the picture and depth structures into the left eye's picture and its depth.
  *
  * Without a 3D mode, an output can still be packed side by side (half) or top and bottom
  * on its 2D mode, for displays that don't detect a 3D signal and have their 3D format set
@@ -43,6 +45,10 @@ enum class StereoLayout {
     CheckerboardRightFirst,
     SequentialLeftFirst,
     SequentialRightFirst,
+    FieldAlternative,
+    LineAlternative,
+    LDepth,
+    LDepthGraphics,
 };
 
 inline bool isSpatialStereo(StereoLayout layout)
@@ -61,10 +67,16 @@ inline bool isFrameSequential(StereoLayout layout)
     return layout == StereoLayout::SequentialLeftFirst || layout == StereoLayout::SequentialRightFirst;
 }
 
+// the picture and depth structures: the left eye's picture with its depth (Figure H-5), and
+// also with graphics and the graphics' depth (Figure H-6)
+inline bool isPictureAndDepth(StereoLayout layout)
+{
+    return layout == StereoLayout::LDepth || layout == StereoLayout::LDepthGraphics;
+}
+
 /**
- * The mode flag for a DRM mode's 3D structure; empty for 2D modes and for the 3D structures
- * the desktop can't be drawn into (field and line alternative, L + depth), which aren't
- * listed.
+ * The mode flag for a DRM mode's 3D structure, empty for 2D modes: every structure of HDMI
+ * 1.4a, Appendix H, Table H-2.
  */
 inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
 {
@@ -77,6 +89,14 @@ inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
         return OutputModeline::Flag::Stereo3DFramePacking;
     case DRM_MODE_FLAG_3D_SIDE_BY_SIDE_FULL:
         return OutputModeline::Flag::Stereo3DSideBySideFull;
+    case DRM_MODE_FLAG_3D_FIELD_ALTERNATIVE:
+        return OutputModeline::Flag::Stereo3DFieldAlternative;
+    case DRM_MODE_FLAG_3D_LINE_ALTERNATIVE:
+        return OutputModeline::Flag::Stereo3DLineAlternative;
+    case DRM_MODE_FLAG_3D_L_DEPTH:
+        return OutputModeline::Flag::Stereo3DLDepth;
+    case DRM_MODE_FLAG_3D_L_DEPTH_GFX_GFX_DEPTH:
+        return OutputModeline::Flag::Stereo3DLDepthGraphics;
     default:
         return {};
     }
@@ -128,27 +148,60 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
     if (flags & OutputModeline::Flag::Stereo3DSideBySideFull) {
         return StereoLayout::SideBySideFull;
     }
+    if (flags & OutputModeline::Flag::Stereo3DFieldAlternative) {
+        return StereoLayout::FieldAlternative;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DLineAlternative) {
+        return StereoLayout::LineAlternative;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DLDepth) {
+        return StereoLayout::LDepth;
+    }
+    if (flags & OutputModeline::Flag::Stereo3DLDepthGraphics) {
+        return StereoLayout::LDepthGraphics;
+    }
     return StereoLayout::None;
 }
 
 /**
- * The layouts that send both eyes in full in one frame bigger than the mode, which is one
- * eye: frame packing (the left eye, the mode's vertical blanking, then the right eye from
- * line vtotal on), side by side full (the right eye from column hdisplay on), and frame
- * sequential (the two eyes from column hdisplay on, selected one refresh at a time). The
- * scanout buffer is that whole frame.
+ * The layouts that send the eyes, or the picture and its depth, in full in one frame bigger
+ * than the mode, which is one eye: frame packing and field alternative (the left eye, the
+ * mode's vertical blanking, then the right eye from line vtotal on; HDMI 1.4a, Figures 8-3
+ * and H-2), L + depth (the depth from line vtotal on, Figure H-5), L + depth + graphics +
+ * graphics-depth (four pictures one vtotal apart, Figure H-6), line alternative (the eyes
+ * line by line, left first, Figure H-3), side by side full (the right eye from column hdisplay
+ * on, Figure H-4), and frame sequential (the two eyes from column hdisplay on, selected one
+ * refresh at a time). The scanout buffer is that whole frame, as drm_mode_get_hv_timing()
+ * sizes it.
  */
 inline bool isFullFrameStereo(StereoLayout layout)
 {
-    return layout == StereoLayout::FramePacking || layout == StereoLayout::SideBySideFull
-        || layout == StereoLayout::SequentialLeftFirst || layout == StereoLayout::SequentialRightFirst;
+    switch (layout) {
+    case StereoLayout::FramePacking:
+    case StereoLayout::SideBySideFull:
+    case StereoLayout::SequentialLeftFirst:
+    case StereoLayout::SequentialRightFirst:
+    case StereoLayout::FieldAlternative:
+    case StereoLayout::LineAlternative:
+    case StereoLayout::LDepth:
+    case StereoLayout::LDepthGraphics:
+        return true;
+    default:
+        return false;
+    }
 }
 
 inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
 {
     switch (layout) {
     case StereoLayout::FramePacking:
+    case StereoLayout::FieldAlternative:
+    case StereoLayout::LDepth:
         return QSize(mode.hdisplay, mode.vtotal + mode.vdisplay);
+    case StereoLayout::LDepthGraphics:
+        return QSize(mode.hdisplay, 3 * mode.vtotal + mode.vdisplay);
+    case StereoLayout::LineAlternative:
+        return QSize(mode.hdisplay, 2 * mode.vdisplay);
     case StereoLayout::SideBySideFull:
     case StereoLayout::SequentialLeftFirst:
     case StereoLayout::SequentialRightFirst:
@@ -158,10 +211,26 @@ inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
     }
 }
 
-// where the right eye starts in a full-frame layout
+// where the right eye starts in a full-frame layout; for L + depth where the depth starts
 inline QPoint stereoRightEyeOffset(const drmModeModeInfo &mode, StereoLayout layout)
 {
-    return layout == StereoLayout::FramePacking ? QPoint(0, mode.vtotal) : QPoint(mode.hdisplay, 0);
+    switch (layout) {
+    case StereoLayout::FramePacking:
+    case StereoLayout::FieldAlternative:
+    case StereoLayout::LDepth:
+    case StereoLayout::LDepthGraphics:
+        return QPoint(0, mode.vtotal);
+    case StereoLayout::LineAlternative:
+        return QPoint(0, 1);
+    default:
+        return QPoint(mode.hdisplay, 0);
+    }
+}
+
+// where each picture of L + depth and L + depth + graphics + graphics-depth starts
+inline QPoint stereoPlaneOffset(const drmModeModeInfo &mode, StereoPlane plane)
+{
+    return QPoint(0, int(plane) * mode.vtotal);
 }
 
 inline Rect frameSequentialSourceRect(const drmModeModeInfo &mode, StereoEye eye)

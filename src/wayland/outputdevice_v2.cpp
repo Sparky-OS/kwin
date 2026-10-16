@@ -1472,8 +1472,9 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
             flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_REDUCED_BLANKING;
         }
         // the mode's HDMI 3D structure: kde_output_device_mode_v2.flags stereo_side_by_side_half,
-        // stereo_top_and_bottom, stereo_frame_packing and stereo_side_by_side_full
-        // (plasma-wayland-protocols, stereo3d branch)
+        // stereo_top_and_bottom, stereo_frame_packing, stereo_side_by_side_full and, since
+        // version 28, stereo_field_alternative, stereo_line_alternative, stereo_l_depth and
+        // stereo_l_depth_graphics (plasma-wayland-protocols, stereo3d branch)
         if (m_flags & OutputModeline::Flag::Stereo3DSideBySideHalf) {
             flags |= 0x4;
         }
@@ -1518,6 +1519,20 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
         }
         if (m_flags & OutputModeline::Flag::Stereo3DSequentialRightFirst) {
             flags |= 0x80000;
+        }
+        if (resource->version() >= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_FIELD_ALTERNATIVE_SINCE_VERSION) {
+            if (m_flags & OutputModeline::Flag::Stereo3DFieldAlternative) {
+                flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_FIELD_ALTERNATIVE;
+            }
+            if (m_flags & OutputModeline::Flag::Stereo3DLineAlternative) {
+                flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_LINE_ALTERNATIVE;
+            }
+            if (m_flags & OutputModeline::Flag::Stereo3DLDepth) {
+                flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_L_DEPTH;
+            }
+            if (m_flags & OutputModeline::Flag::Stereo3DLDepthGraphics) {
+                flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_L_DEPTH_GRAPHICS;
+            }
         }
         send_flags(resource->handle, flags);
     }

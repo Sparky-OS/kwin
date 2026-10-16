@@ -138,6 +138,7 @@ private:
         bool anaglyphShaderFailed = false;
     };
     bool drawStereoPattern(const QSize &fboSize, const Region &repaint);
+    bool drawLineAlternative(const QSize &fboSize, const Region &repaint);
     bool drawAnaglyph(const QSize &fboSize, const Region &repaint);
     bool drawIzed3d(const QSize &fboSize, const Region &repaint);
     bool checkSurface(const QSize &size, const FormatModifierMap &formats, BackendOutput::ColorPowerTradeoff tradeoff, uint32_t requiredAlphaBits);
