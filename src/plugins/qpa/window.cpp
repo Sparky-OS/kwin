@@ -118,7 +118,7 @@ void Window::lower()
 void Window::setGeometry(const QRect &rect)
 {
     if (m_handle) {
-        m_handle->moveResize(rect);
+        m_handle->moveResize(m_handle->fromNativeGeometry(rect));
         return;
     }
 

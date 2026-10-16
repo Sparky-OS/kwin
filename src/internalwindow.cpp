@@ -23,6 +23,7 @@ Q_DECLARE_METATYPE(NET::WindowType)
 
 static const QByteArray s_skipClosePropertyName = QByteArrayLiteral("KWIN_SKIP_CLOSE_ANIMATION");
 static const QByteArray s_shadowEnabledPropertyName = QByteArrayLiteral("kwin_shadow_enabled");
+static const QByteArray s_stereoPropertyName = QByteArrayLiteral("kwin_stereo");
 
 namespace KWin
 {
@@ -44,9 +45,10 @@ InternalWindow::InternalWindow(QWindow *handle)
     setSkipCloseAnimation(m_handle->property(s_skipClosePropertyName).toBool());
     updateColorScheme();
     updateShadow();
+    updateStereo();
 
-    setMoveResizeGeometry(m_handle->geometry());
-    commitGeometry(m_handle->geometry());
+    setMoveResizeGeometry(fromNativeGeometry(m_handle->geometry()));
+    commitGeometry(fromNativeGeometry(m_handle->geometry()));
 
     updateDecoration(true);
 
@@ -113,6 +115,10 @@ bool InternalWindow::eventFilter(QObject *watched, QEvent *event)
         }
         if (pe->propertyName() == s_shadowEnabledPropertyName) {
             updateShadow();
+        }
+        if (pe->propertyName() == s_stereoPropertyName) {
+            updateStereo();
+            commitGeometry(clientRectToFrameRect(fromNativeGeometry(m_handle->geometry())));
         }
     }
     return false;
@@ -251,7 +257,7 @@ void InternalWindow::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
         commitGeometry(rect);
     }
 
-    const QRect nativeRect = nextFrameRectToClientRect(rect).toRect();
+    const QRect nativeRect = toNativeGeometry(nextFrameRectToClientRect(rect)).toRect();
     if (m_handle->geometry() != nativeRect) {
         const QRect oldNativeRect = m_handle->geometry();
 
@@ -396,7 +402,7 @@ OutputTransform InternalWindow::bufferTransform() const
 
 void InternalWindow::present(const InternalWindowFrame &frame)
 {
-    RectF geometry(clientRectToFrameRect(m_handle->geometry()));
+    RectF geometry(clientRectToFrameRect(fromNativeGeometry(m_handle->geometry())));
     if (isInteractiveResize()) {
         geometry = interactiveMoveResizeGravity().apply(geometry, moveResizeGeometry());
     }
@@ -414,6 +420,27 @@ void InternalWindow::present(const InternalWindowFrame &frame)
 QWindow *InternalWindow::handle() const
 {
     return m_handle;
+}
+
+void InternalWindow::updateStereo()
+{
+    setDeclaredStereoContent(m_handle->property(s_stereoPropertyName).toBool() ? StereoContentSideBySideFull : StereoContentNone);
+}
+
+RectF InternalWindow::fromNativeGeometry(const QRectF &rect) const
+{
+    if (isSideBySideStereoContent(declaredStereoContent())) {
+        return RectF(rect.x(), rect.y(), rect.width() / 2, rect.height());
+    }
+    return RectF(rect);
+}
+
+QRectF InternalWindow::toNativeGeometry(const RectF &rect) const
+{
+    if (isSideBySideStereoContent(declaredStereoContent())) {
+        return QRectF(rect.x(), rect.y(), rect.width() * 2, rect.height());
+    }
+    return QRectF(rect);
 }
 
 bool InternalWindow::acceptsFocus() const

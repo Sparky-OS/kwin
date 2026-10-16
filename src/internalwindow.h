@@ -67,6 +67,13 @@ public:
 
     void present(const InternalWindowFrame &frame);
     qreal bufferScale() const;
+
+    /**
+     * The window's geometry from the geometry of its QWindow, and the other way. A window that
+     * draws both eyes full side by side (kwin_stereo) is one eye wide, its QWindow twice as wide.
+     */
+    RectF fromNativeGeometry(const QRectF &rect) const;
+    QRectF toNativeGeometry(const RectF &rect) const;
     void doSetNextTargetScale() override;
     QWindow *handle() const;
 
@@ -82,6 +89,7 @@ protected:
 
 private:
     void commitGeometry(const RectF &rect);
+    void updateStereo();
     void setCaption(const QString &caption);
     void markAsMapped();
     DecorationMode preferredDecorationMode() const;

@@ -19,7 +19,11 @@ SurfaceItemInternal::SurfaceItemInternal(InternalWindow *window, Item *parent)
 
     setDestinationSize(window->bufferGeometry().size());
     setBuffer(m_window->graphicsBuffer());
-    setBufferSourceBox(RectF(QPointF(0, 0), window->bufferGeometry().size() * window->bufferScale()));
+    if (const GraphicsBuffer *buffer = m_window->graphicsBuffer()) {
+        setBufferSourceBox(RectF(QPointF(0, 0), buffer->size()));
+    } else {
+        setBufferSourceBox(RectF(QPointF(0, 0), window->bufferGeometry().size() * window->bufferScale()));
+    }
     setBufferTransform(m_window->bufferTransform());
 }
 
