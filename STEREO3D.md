@@ -96,6 +96,33 @@ Two toggles per output, both off by default, so the mode list stays as it is unt
 
 Each row of the table "Displays decide the format" in [awesome-stereoscopy](https://github.com/danielcamposramos/awesome-stereoscopy#displays-decide-the-format) is one filter.
 
+## Every HDMI 3D structure, picture and depth included
+
+**The display's 3D modes are every structure of HDMI 1.4a** (Appendix H, Table H-2): frame packing, field alternative, line alternative, side by side (full and half), top and bottom, and the two picture and depth structures.
+Each mode is the frame the kernel times for it: field alternative and L + depth like frame packing (the second picture from line vtotal on), L + depth + graphics + graphics-depth four pictures one vtotal apart, line alternative the eyes line by line, left first.
+
+**Side by side (full) has two timings, a choice per output.**
+The whole line doubled, as Figure H-4 does, is the default; the horizontal blanking kept, as NVIDIA's driver does, is the other value, for a display that refuses the first.
+The picture is the same; only the signal differs.
+
+**A picture and depth display makes the views itself.**
+In L + depth (Figure H-5) KWin sends the left eye's picture and its depth, and the display renders each view from them.
+What the depth shows is a choice per output:
+- **Flat:** everything at the screen.
+- **Desktop:** the depth levels above, exact, each window at its level and 3D content at the level of its window.
+- **Desktop and 3D content** (the default, since 3D is why such a display is there): the same, and the depth of 3D content estimated from its two views, by matching blocks along the eyes' axis on the GPU at a quarter of the size; where the views match at more than one parallax (a plain area, a pattern that repeats along the axis) they don't tell the depth, and the content keeps its window's level there; where an effect moves windows, the whole picture is estimated.
+
+**With graphics, the chrome is the graphics.**
+L + depth + graphics + graphics-depth (Figure H-6) sends a second picture with its own depth, for the display to lay over the first.
+KWin puts the desktop's own chrome there (panels, menus, popups, notifications, on-screen displays and the pointer) at its depth level, and the windows in the picture.
+How a display lays the graphics over the picture is not in the published extraction of the specification, so this structure is drawn by the specification and marked untested on a display.
+
+**The depth is parallax, and the 3D metadata says how much.**
+Each depth sample is the parallax between the eyes: 128 is the screen, larger is behind it.
+The 3D metadata of the vendor InfoFrame (Table H-4) carries the parallax information of ISO/IEC 23002-3: parallax_zero, parallax_scale, the viewing distance (dref, a setting per output, three picture heights by default) and the screen's width (wref, from the EDID).
+The formula behind it is our reading of sections 6.1.2.2 and 6.2.2.2 of ISO/IEC 23002-3, unverified against the standard, whose text is not freely available.
+With the eyes swapped, the picture is the right eye's and the parallax runs the other way.
+
 ## Depth on the desktop
 
 **Windows and elements get real depth instead of clever trickery in 2D.** Desktops have long drawn depth with 2D tricks: a bigger shadow for the focused window, dimmed inactive windows, menus and tooltips lifted by their shadows, dialogs blurring what lies behind them. The meanings stay the same here (higher is more important, lifted is active, behind is waiting); only the cue becomes real: two eyes and a real distance.
