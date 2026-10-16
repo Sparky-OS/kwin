@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QRadioButton>
 #include <QScreen>
+#include <QSpinBox>
 #include <QtDBus>
 
 #include <KConfig>
@@ -39,6 +40,10 @@ namespace
 {
 
 constexpr int defaultFocusPolicyIndex = CLICK_TO_FOCUS;
+
+// with raise on hover, the focus comes this much before the raise, so that a window shows it is
+// active just ahead of coming to the front
+constexpr int focusBeforeRaise = 50;
 
 }
 
@@ -65,6 +70,8 @@ void KFocusConfig::initialize(KWinOptionsSettings *settings)
     connect(m_ui->windowFocusPolicy, qOverload<int>(&QComboBox::currentIndexChanged), this, &KFocusConfig::focusPolicyChanged);
     connect(m_ui->windowFocusPolicy, qOverload<int>(&QComboBox::currentIndexChanged), this, &KFocusConfig::updateDefaultIndicator);
     connect(this, SIGNAL(defaultsIndicatorsVisibleChanged(bool)), this, SLOT(updateDefaultIndicator()));
+    connect(m_ui->kcfg_AutoRaise, &QCheckBox::toggled, this, &KFocusConfig::autoRaiseChanged);
+    connect(m_ui->kcfg_AutoRaiseInterval, &QSpinBox::valueChanged, this, &KFocusConfig::autoRaiseChanged);
 
     connect(qApp, &QGuiApplication::screenAdded, this, &KFocusConfig::updateMultiScreen);
     connect(qApp, &QGuiApplication::screenRemoved, this, &KFocusConfig::updateMultiScreen);
@@ -155,9 +162,24 @@ void KFocusConfig::focusPolicyChanged()
     m_ui->kcfg_DelayFocusInterval->setEnabled(focusPolicy != CLICK_TO_FOCUS);
 }
 
+// While the focus delay is at its default or follows the raise delay, it stays a little shorter
+// than the raise delay when raising on hover; a focus delay of the person's own is kept.
+void KFocusConfig::autoRaiseChanged()
+{
+    const int linked = std::max(0, m_ui->kcfg_AutoRaiseInterval->value() - focusBeforeRaise);
+    const int focus = m_ui->kcfg_DelayFocusInterval->value();
+    if (!m_loading && m_ui->kcfg_AutoRaise->isChecked() && (focus == m_linkedFocusDelay || focus == m_settings->defaultDelayFocusIntervalValue())) {
+        m_ui->kcfg_DelayFocusInterval->setValue(linked);
+    }
+    m_linkedFocusDelay = linked;
+}
+
 void KFocusConfig::load(void)
 {
+    m_loading = true;
     KCModule::load();
+    m_loading = false;
+    m_linkedFocusDelay = std::max(0, m_settings->autoRaiseInterval() - focusBeforeRaise);
 
     const bool loadedNextFocusPrefersMouseItem = m_settings->nextFocusPrefersMouse();
 

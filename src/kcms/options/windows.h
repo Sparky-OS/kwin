@@ -81,10 +81,13 @@ private Q_SLOTS:
     void focusPolicyChanged();
     void updateMultiScreen();
     void updateDefaultIndicator();
+    void autoRaiseChanged();
 
 private:
     KWinFocusConfigForm *m_ui;
     KWinOptionsSettings *m_settings;
+    int m_linkedFocusDelay = 0;
+    bool m_loading = false;
 
     void updateFocusPolicyExplanatoryText();
 };
