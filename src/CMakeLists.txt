@@ -205,6 +205,7 @@ target_sources(kwin PRIVATE
     scripting/scriptedeffect.cpp
     scripting/scriptedquicksceneeffect.cpp
     scripting/scripting.cpp
+    scripting/stereorotation.cpp
     scripting/scripting_logging.cpp
     scripting/scriptingutils.cpp
     scripting/shortcuthandler.cpp

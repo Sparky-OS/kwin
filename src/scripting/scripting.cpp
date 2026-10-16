@@ -20,6 +20,7 @@
 #include "scripting_logging.h"
 #include "scriptingutils.h"
 #include "shortcuthandler.h"
+#include "stereorotation.h"
 #include "virtualdesktopmodel.h"
 #include "windowmodel.h"
 #include "windowthumbnailitem.h"
@@ -702,6 +703,7 @@ void KWin::Scripting::init()
     qmlRegisterType<VirtualDesktopModel>("org.kde.kwin", 3, 0, "VirtualDesktopModel");
     qmlRegisterUncreatableType<KWin::QuickSceneView>("org.kde.kwin", 3, 0, "SceneView", QStringLiteral("Can't instantiate an object of type SceneView"));
     qmlRegisterType<ScriptedQuickSceneEffect>("org.kde.kwin", 3, 0, "SceneEffect");
+    qmlRegisterType<StereoRotation>("org.kde.kwin", 3, 0, "StereoRotation");
 
     qmlRegisterSingletonType<DeclarativeScriptWorkspaceWrapper>("org.kde.kwin", 3, 0, "Workspace", [](QQmlEngine *qmlEngine, QJSEngine *jsEngine) {
         return new DeclarativeScriptWorkspaceWrapper();
