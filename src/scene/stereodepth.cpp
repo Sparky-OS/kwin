@@ -60,6 +60,28 @@ static bool isPopup(const Window *window)
         || window->isOnScreenDisplay() || window->isAppletPopup() || window->isPopupWindow();
 }
 
+static Role roleOf(const Window *window);
+
+static bool isOnStage(const Window *window, const LogicalOutput *output)
+{
+    return window->output() == output && window->isShown() && window->isOnCurrentDesktop() && window->isOnCurrentActivity();
+}
+
+// whether a window of the pile lies over @a window: the active window waits there until it is raised
+static bool isCovered(const Window *window)
+{
+    const QList<Window *> &stack = workspace()->stackingOrder();
+    const RectF frame = window->frameGeometry();
+    for (qsizetype i = stack.indexOf(const_cast<Window *>(window)) + 1; i > 0 && i < stack.size(); ++i) {
+        const Window *other = stack[i];
+        if (other == mainWindow(other) && isOnStage(other, window->output()) && other->frameGeometry().intersects(frame)
+            && roleOf(other) == Role::Sunk) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static Role roleOf(const Window *window)
 {
     if (window->isDeleted() || window->isFullScreen() || window->isLockScreen() || window->isInternal()
@@ -86,12 +108,7 @@ static Role roleOf(const Window *window)
         return window->keepAbove() ? Role::Above : Role::Below;
     }
     const Window *active = workspace()->activeWindow();
-    return active && mainWindow(active) == window ? Role::Active : Role::Sunk;
-}
-
-static bool isOnStage(const Window *window, const LogicalOutput *output)
-{
-    return window->output() == output && window->isShown() && window->isOnCurrentDesktop() && window->isOnCurrentActivity();
+    return active && mainWindow(active) == window && !isCovered(window) ? Role::Active : Role::Sunk;
 }
 
 static bool touchesEdge(const Window *window)

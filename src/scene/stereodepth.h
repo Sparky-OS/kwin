@@ -32,6 +32,10 @@ class Window;
  * (Keep Above) stays at the popped limit and one pinned below (Keep Below) at the sunk limit,
  * whatever is active. Fullscreen windows and windows that are not part of
  * the desktop's own elements stay at the screen's level.
+ *
+ * Nothing is behind what it covers: the active window comes to the screen's level once it is on
+ * top of the windows it overlaps, so with a delayed raise it stays in their pile until it is
+ * raised.
  */
 class KWIN_EXPORT StereoDepth
 {

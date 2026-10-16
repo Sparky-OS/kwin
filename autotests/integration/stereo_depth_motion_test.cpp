@@ -51,6 +51,7 @@ private Q_SLOTS:
     void testMotionCurve();
     void testWindowsEase();
     void testPointerEases();
+    void testActiveWaitsForTheRaise();
     void testInstantWithoutAnimations();
     void testTwoDimensionalOutputIsUnchanged();
 };
@@ -416,6 +417,37 @@ void StereoDepthMotionTest::testPointerEases()
         }
         QVERIFY(middle >= 3);
     }
+}
+
+void StereoDepthMotionTest::testActiveWaitsForTheRaise()
+{
+    // b lies over a; a gets the focus without being raised, as with a delayed raise on hover
+    const TestWindow a = createWindow(Qt::red, QPoint(20, 20), QSize(160, 120));
+    const TestWindow b = createWindow(Qt::blue, QPoint(120, 60), QSize(160, 120));
+    QVERIFY(a.window && b.window);
+    workspace()->activateWindow(b.window);
+    auto image = captureSettled();
+    QVERIFY(image);
+    QCOMPARE(seenOn(*image, 40, a.color).parallax(), s_sunk);
+    QCOMPARE(seenOn(*image, 100, b.color).parallax(), 0);
+
+    QVERIFY(workspace()->requestFocus(a.window));
+    QCOMPARE(workspace()->activeWindow(), a.window);
+    QVERIFY(workspace()->stackingOrder().indexOf(a.window) < workspace()->stackingOrder().indexOf(b.window));
+    image = captureSettled();
+    QVERIFY(image);
+    // active but covered: a stays in the pile, under b, until it is raised
+    const int coveredA = seenOn(*image, 40, a.color).parallax();
+    const int coveringB = seenOn(*image, 100, b.color).parallax();
+    qInfo() << "measured focused but covered" << coveredA << "covering" << coveringB;
+    QVERIFY(coveredA < coveringB);
+    QVERIFY(coveringB <= 0);
+
+    workspace()->raiseWindow(a.window);
+    image = captureSettled();
+    QVERIFY(image);
+    QCOMPARE(seenOn(*image, 40, a.color).parallax(), 0);
+    QCOMPARE(seenOn(*image, 170, b.color).parallax(), s_sunk);
 }
 
 void StereoDepthMotionTest::testInstantWithoutAnimations()
