@@ -1205,6 +1205,7 @@ int drmModeCreatePropertyBlob(int fd, const void *data, size_t size, uint32_t *i
     }
     auto blob = std::make_unique<MockPropertyBlob>(gpu, data, size);
     *id = blob->id;
+    gpu->blobContents[blob->id] = QByteArray(static_cast<const char *>(data), size);
     gpu->propertyBlobs.push_back(std::move(blob));
     return 0;
 }

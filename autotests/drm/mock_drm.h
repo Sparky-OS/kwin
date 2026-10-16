@@ -11,6 +11,7 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
+#include <QHash>
 #include <QList>
 #include <QMap>
 #include <QRect>
@@ -200,6 +201,8 @@ public:
     QList<MockFb *> fbs;
     QList<QList<Prop>> atomicCommits;
     std::vector<std::unique_ptr<MockPropertyBlob>> propertyBlobs;
+    // the bytes of every blob created, kept after it is destroyed, for tests to read what was committed
+    QHash<uint32_t, QByteArray> blobContents;
 
     QList<drmModeResPtr> resPtrs;
     QList<drmModePropertyPtr> drmProps;

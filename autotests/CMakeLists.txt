@@ -370,6 +370,11 @@ target_link_libraries(testStereoPattern Qt::Test kwin)
 add_test(NAME kwin-testStereoPattern COMMAND testStereoPattern)
 ecm_mark_as_test(testStereoPattern)
 
+add_executable(testStereoDepthCoding test_stereo_depth_coding.cpp)
+target_link_libraries(testStereoDepthCoding Qt::Test kwin)
+add_test(NAME kwin-testStereoDepthCoding COMMAND testStereoDepthCoding)
+ecm_mark_as_test(testStereoDepthCoding)
+
 add_executable(testIzed3d test_ized3d.cpp)
 target_link_libraries(testIzed3d Qt::Test kwin)
 add_test(NAME kwin-testIzed3d COMMAND testIzed3d)

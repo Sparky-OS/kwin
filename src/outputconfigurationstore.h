@@ -91,6 +91,9 @@ private:
         std::optional<bool> stereoSwapEyes;
         std::optional<Ized3dMode> ized3dMode;
         std::optional<Ized3dTransfer> ized3dTransfer;
+        std::optional<SideBySideFullTiming> sideBySideFullTiming;
+        std::optional<StereoDepthSource> stereoDepthSource;
+        std::optional<uint32_t> stereoViewingDistance;
         std::optional<bool> detectedDdcCi;
         std::optional<bool> allowDdcCi;
         std::optional<uint32_t> maxBitsPerColor;

@@ -228,6 +228,28 @@ enum class Ized3dTransfer {
 };
 
 /**
+ * How a side by side (full) 3D mode is timed: with the whole line doubled, blanking included,
+ * as HDMI 1.4a, Appendix H, Figure H-4 does, or with the 2D horizontal blanking kept, as
+ * NVIDIA's driver does. The picture is the same; the signal and the pixel clock differ.
+ */
+enum class SideBySideFullTiming {
+    WholeLineDoubled,
+    BlankingKept,
+};
+
+/**
+ * What the depth picture of a picture and depth 3D mode (L + depth, L + depth + graphics +
+ * graphics-depth) shows: everything at the screen's depth, the desktop's depth levels with
+ * 3D content at the level of its window, or the desktop's levels and the depth of 3D content
+ * estimated from its two views.
+ */
+enum class StereoDepthSource {
+    Flat,
+    Desktop,
+    DesktopAndContent,
+};
+
+/**
  * The pictures of the HDMI 1.4a picture and depth structures, in the order they are sent: the
  * left eye's picture and its depth (L + depth, Appendix H, Figure H-5), then graphics and
  * their depth (L + depth + graphics + graphics-depth, Figure H-6).

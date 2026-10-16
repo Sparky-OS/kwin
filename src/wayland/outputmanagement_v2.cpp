@@ -15,6 +15,8 @@
 #include "utils/resource.h"
 #include "workspace.h"
 
+#include <limits>
+
 #include "qwayland-server-kde-output-management-v2.h"
 
 #include <KLocalizedString>
@@ -24,7 +26,7 @@
 namespace KWin
 {
 
-static const quint32 s_version = 27;
+static const quint32 s_version = 28;
 
 class OutputManagementV2InterfacePrivate : public QtWaylandServer::kde_output_management_v2
 {
@@ -85,6 +87,8 @@ protected:
     void kde_output_configuration_v2_set_stereo_formats(Resource *resource, wl_resource *outputdevice, uint32_t anaglyph, uint32_t otherStereoFormats) override;
     void kde_output_configuration_v2_set_stereo_swap_eyes(Resource *resource, wl_resource *outputdevice, uint32_t enabled) override;
     void kde_output_configuration_v2_set_ized3d_options(Resource *resource, wl_resource *outputdevice, uint32_t mode, uint32_t transfer) override;
+    void kde_output_configuration_v2_set_side_by_side_full_timing(Resource *resource, wl_resource *outputdevice, uint32_t timing) override;
+    void kde_output_configuration_v2_set_stereo_depth(Resource *resource, wl_resource *outputdevice, uint32_t source, uint32_t viewingDistance) override;
     void kde_output_configuration_v2_set_stereo_pair(Resource *resource, wl_resource *outputdevice, wl_resource *partner, uint32_t mode, uint32_t role, uint32_t reflection) override;
     void kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level) override;
 
@@ -592,6 +596,41 @@ void OutputConfigurationV2Interface::kde_output_configuration_v2_set_ized3d_opti
         auto props = config.changeSet(output->handle());
         props->ized3dMode = Ized3dMode(mode);
         props->ized3dTransfer = Ized3dTransfer(transfer);
+    } else {
+        invalid = true;
+    }
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_side_by_side_full_timing(Resource *resource, wl_resource *outputdevice, uint32_t timing)
+{
+    if (invalid) {
+        return;
+    }
+    if (timing > uint32_t(SideBySideFullTiming::BlankingKept)) {
+        failureReason = i18n("Invalid side by side (full) timing");
+        return;
+    }
+    if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
+        config.changeSet(output->handle())->sideBySideFullTiming = SideBySideFullTiming(timing);
+    } else {
+        invalid = true;
+    }
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_depth(Resource *resource, wl_resource *outputdevice, uint32_t source, uint32_t viewingDistance)
+{
+    if (invalid) {
+        return;
+    }
+    // the distance goes into the 16 bits of dref (HDMI 1.4a, Table H-4)
+    if (source > uint32_t(StereoDepthSource::DesktopAndContent) || viewingDistance > std::numeric_limits<uint16_t>::max()) {
+        failureReason = i18n("Invalid stereo depth setting");
+        return;
+    }
+    if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
+        auto props = config.changeSet(output->handle());
+        props->stereoDepthSource = StereoDepthSource(source);
+        props->stereoViewingDistance = viewingDistance;
     } else {
         invalid = true;
     }

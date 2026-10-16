@@ -8,11 +8,14 @@
 
 #include "core/output.h"
 #include "core/rect.h"
+#include "core/stereodepthcoding.h"
 
 #include <QPoint>
 #include <QSize>
 
 #include <xf86drmMode.h>
+
+#include <algorithm>
 
 namespace KWin
 {
@@ -231,6 +234,31 @@ inline QPoint stereoRightEyeOffset(const drmModeModeInfo &mode, StereoLayout lay
 inline QPoint stereoPlaneOffset(const drmModeModeInfo &mode, StereoPlane plane)
 {
     return QPoint(0, int(plane) * mode.vtotal);
+}
+
+/**
+ * The value of the "HDMI 3D metadata" connector property: struct drm_hdmi_3d_metadata of the
+ * edition's kernel (include/uapi/drm/drm_mode.h), which libdrm doesn't have yet. type is
+ * 3D_Metadata_type (HDMI 1.4a, Appendix H, Table H-4), length 3D_Metadata_Length, data
+ * 3D_Metadata_1 to 3D_Metadata_N as they are sent.
+ */
+struct DrmHdmi3dMetadata
+{
+    uint8_t type;
+    uint8_t length;
+    uint8_t data[30];
+};
+static_assert(sizeof(DrmHdmi3dMetadata) == 32);
+
+// the parallax information of ISO/IEC 23002-3 that the depth of a picture and depth mode is coded with
+inline DrmHdmi3dMetadata hdmi3dMetadata(const StereoDepthCoding &coding)
+{
+    DrmHdmi3dMetadata ret{};
+    const auto bytes = coding.metadata();
+    ret.type = 0;
+    ret.length = bytes.size();
+    std::copy(bytes.begin(), bytes.end(), ret.data);
+    return ret;
 }
 
 inline Rect frameSequentialSourceRect(const drmModeModeInfo &mode, StereoEye eye)

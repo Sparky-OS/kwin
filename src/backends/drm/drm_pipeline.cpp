@@ -436,6 +436,16 @@ bool DrmPipeline::prepareAtomicModeset(DrmAtomicCommit *commit)
             commit->addEnum(m_connector->abmLevel, drmValue);
         }
     }
+    if (m_connector->sideBySideFullTiming.isValid()) {
+        const auto timing = m_pending.sideBySideFullTiming == SideBySideFullTiming::BlankingKept ? DrmConnector::SideBySideFullTiming::BlankingKept : DrmConnector::SideBySideFullTiming::WholeLineDoubled;
+        if (m_connector->sideBySideFullTiming.hasEnum(timing)) {
+            commit->addEnum(m_connector->sideBySideFullTiming, timing);
+        }
+    }
+    if (m_connector->hdmi3dMetadata.isValid()) {
+        // the parallax information the depth of a picture and depth mode is coded with; none otherwise
+        commit->addBlob(m_connector->hdmi3dMetadata, createHdmi3dMetadata());
+    }
     if (m_pending.wcg) {
         if (!m_connector->colorspace.isValid() || !m_connector->colorspace.hasEnum(DrmConnector::Colorspace::BT2020_RGB)) {
             return false;
@@ -758,6 +768,16 @@ void DrmPipeline::setMaxBpc(uint32_t max)
     m_pending.maxBpc = max;
 }
 
+void DrmPipeline::setSideBySideFullTiming(SideBySideFullTiming timing)
+{
+    m_pending.sideBySideFullTiming = timing;
+}
+
+void DrmPipeline::setStereoDepthCoding(const std::optional<StereoDepthCoding> &coding)
+{
+    m_pending.stereoDepthCoding = coding;
+}
+
 void DrmPipeline::setContentType(DrmConnector::DrmContentType type)
 {
     m_pending.contentType = type;
@@ -813,6 +833,15 @@ std::shared_ptr<DrmBlob> DrmPipeline::createHdrMetadata(TransferFunction::Type t
             .max_fall = uint16_t(std::round(m_connector->edid()->desiredMaxFrameAverageLuminance().value_or(0))),
         },
     };
+    return DrmBlob::create(gpu(), &data, sizeof(data));
+}
+
+std::shared_ptr<DrmBlob> DrmPipeline::createHdmi3dMetadata() const
+{
+    if (!m_pending.mode || !isPictureAndDepth(stereoLayoutForMode(m_pending.mode->flags())) || !m_pending.stereoDepthCoding) {
+        return nullptr;
+    }
+    const DrmHdmi3dMetadata data = hdmi3dMetadata(*m_pending.stereoDepthCoding);
     return DrmBlob::create(gpu(), &data, sizeof(data));
 }
 

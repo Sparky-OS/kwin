@@ -202,6 +202,11 @@ DrmConnector::DrmConnector(DrmGpu *gpu, uint32_t connectorId)
                                                                              QByteArrayLiteral("bias max"),
                                                                              QByteArrayLiteral("max"),
                                                                          })
+    , sideBySideFullTiming(this, QByteArrayLiteral("side by side full timing"), {
+                                                                                    QByteArrayLiteral("whole line doubled"),
+                                                                                    QByteArrayLiteral("blanking kept"),
+                                                                                })
+    , hdmi3dMetadata(this, QByteArrayLiteral("HDMI 3D metadata"))
 {
 }
 
@@ -362,6 +367,8 @@ bool DrmConnector::updateProperties()
     colorspace.update(props);
     path.update(props);
     abmLevel.update(props);
+    sideBySideFullTiming.update(props);
+    hdmi3dMetadata.update(props);
 
     if (gpu()->atomicModeSetting() && !crtcId.isValid()) {
         qCWarning(KWIN_DRM) << "Failed to update the basic connector properties (CRTC_ID)";

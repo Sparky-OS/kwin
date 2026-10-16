@@ -120,6 +120,21 @@ bool DrmOutput::shouldDisableNonPrimaryPlanes() const
         || activeStereoLayout() != StereoLayout::None;
 }
 
+std::optional<StereoDepthCoding> DrmOutput::stereoDepthCoding(const State &state) const
+{
+    const auto mode = std::static_pointer_cast<DrmConnectorMode>(state.currentMode);
+    if (!mode || !isPictureAndDepth(stereoLayoutForMode(mode->flags()))) {
+        return std::nullopt;
+    }
+    const drmModeModeInfo *info = mode->nativeMode();
+    return StereoDepthCoding(QSize(info->hdisplay, info->vdisplay), m_connector->physicalSize(), state.stereoViewingDistance);
+}
+
+std::optional<StereoDepthCoding> DrmOutput::stereoDepthCoding() const
+{
+    return stereoDepthCoding(m_state);
+}
+
 StereoLayout DrmOutput::activeStereoLayout() const
 {
     if (isStereoPair()) {
@@ -309,6 +324,15 @@ BackendOutput::Capabilities DrmOutput::computeCapabilities() const
     }
     if (m_connector->abmLevel.isValid()) {
         capabilities |= Capability::AbmLevel;
+    }
+    if (m_connector->sideBySideFullTiming.isValid()) {
+        capabilities |= Capability::SideBySideFullTiming;
+    }
+    const auto modes = m_connector->modes();
+    if (std::ranges::any_of(modes, [](const auto &mode) {
+        return isPictureAndDepth(stereoLayoutForMode(mode->flags()));
+    })) {
+        capabilities |= Capability::StereoDepth;
     }
     return capabilities;
 }
@@ -632,6 +656,9 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
     m_nextState->ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
     m_nextState->ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
+    m_nextState->sideBySideFullTiming = props->sideBySideFullTiming.value_or(m_state.sideBySideFullTiming);
+    m_nextState->stereoDepthSource = props->stereoDepthSource.value_or(m_state.stereoDepthSource);
+    m_nextState->stereoViewingDistance = props->stereoViewingDistance.value_or(m_state.stereoViewingDistance);
     m_nextState->detectedDdcCi = props->detectedDdcCi.value_or(m_state.detectedDdcCi);
     m_nextState->allowDdcCi = props->allowDdcCi.value_or(m_state.allowDdcCi);
     if (m_nextState->allowSdrSoftwareBrightness != m_state.allowSdrSoftwareBrightness) {
@@ -697,6 +724,9 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
         const auto tradeoff = props->colorPowerTradeoff.value_or(m_state.colorPowerTradeoff);
         m_pipeline->setMaxBpc(decideAutomaticBpcLimit().value_or(tradeoff == ColorPowerTradeoff::PreferAccuracy ? 16 : 10));
     }
+
+    m_pipeline->setSideBySideFullTiming(m_nextState->sideBySideFullTiming);
+    m_pipeline->setStereoDepthCoding(stereoDepthCoding(*m_nextState));
 
     if (m_nextState->colorProfileSource != ColorProfileSource::ICC || (bt2020 && !hdr)) {
         m_pipeline->setIccProfile(nullptr);
@@ -919,7 +949,8 @@ void DrmOutput::maybeScheduleRepaints(const State &next)
     // TODO move the output layers to BackendOutput, and have it take care of this when updating State
     if (next.blendingColor != m_state.blendingColor || next.layerBlendingColor != m_state.layerBlendingColor
         || next.stereoSwapEyes != m_state.stereoSwapEyes
-        || next.ized3dMode != m_state.ized3dMode || next.ized3dTransfer != m_state.ized3dTransfer) {
+        || next.ized3dMode != m_state.ized3dMode || next.ized3dTransfer != m_state.ized3dTransfer
+        || next.stereoDepthSource != m_state.stereoDepthSource || next.stereoViewingDistance != m_state.stereoViewingDistance) {
         const auto layers = m_pipeline->layers();
         for (const auto &layer : layers) {
             layer->addDeviceRepaint(Region::infinite());

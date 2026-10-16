@@ -61,6 +61,7 @@ target_sources(kwin PRIVATE
     core/output.cpp
     core/outputbackend.cpp
     core/outputconfiguration.cpp
+    core/stereodepthcoding.cpp
     core/outputlayer.cpp
     core/rect.cpp
     core/region.cpp
@@ -590,6 +591,7 @@ install(FILES
     core/session_logind.h
     core/session_noop.h
     core/shmgraphicsbufferallocator.h
+    core/stereodepthcoding.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/kwin/core COMPONENT Devel)
 
 install(FILES

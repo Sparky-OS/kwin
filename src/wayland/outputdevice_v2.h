@@ -112,6 +112,8 @@ private:
     void updateStereoPair();
     void updateStereoSwapEyes();
     void updateIzed3dOptions();
+    void updateSideBySideFullTiming();
+    void updateStereoDepth();
 
     void scheduleDone();
 

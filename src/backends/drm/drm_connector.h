@@ -134,6 +134,11 @@ public:
         Max_Bias,
         Max,
     };
+    // "side by side full timing", HDMI connectors of kernels with the edition's HDMI 3D series
+    enum class SideBySideFullTiming : uint64_t {
+        WholeLineDoubled,
+        BlankingKept,
+    };
 
     DrmProperty crtcId;
     DrmProperty nonDesktop;
@@ -154,6 +159,9 @@ public:
     DrmEnumProperty<Colorspace> colorspace;
     DrmProperty path;
     DrmEnumProperty<AbmLevel> abmLevel;
+    DrmEnumProperty<SideBySideFullTiming> sideBySideFullTiming;
+    // "HDMI 3D metadata", a blob of struct drm_hdmi_3d_metadata (see drm_stereo.h)
+    DrmProperty hdmi3dMetadata;
 
     static DrmContentType kwinToDrmContentType(ContentType type);
     static OutputTransform toKWinTransform(PanelOrientation orientation);

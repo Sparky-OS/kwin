@@ -118,6 +118,9 @@ void VirtualOutput::applyChanges(const OutputConfiguration &config)
     next.stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
     next.ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
     next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
+    next.sideBySideFullTiming = props->sideBySideFullTiming.value_or(m_state.sideBySideFullTiming);
+    next.stereoDepthSource = props->stereoDepthSource.value_or(m_state.stereoDepthSource);
+    next.stereoViewingDistance = props->stereoViewingDistance.value_or(m_state.stereoViewingDistance);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
     next.headsetView = props->headsetView.value_or(m_state.headsetView);

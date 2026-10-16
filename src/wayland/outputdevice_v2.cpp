@@ -154,6 +154,12 @@ static uint32_t kwinCapabilitiesToOutputDeviceCapabilities(BackendOutput::Capabi
     if (caps & BackendOutput::Capability::StereoSwapEyes) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_stereo_swap_eyes;
     }
+    if (caps & BackendOutput::Capability::SideBySideFullTiming) {
+        ret |= QtWaylandServer::kde_output_device_v2::capability_side_by_side_full_timing;
+    }
+    if (caps & BackendOutput::Capability::StereoDepth) {
+        ret |= QtWaylandServer::kde_output_device_v2::capability_stereo_depth;
+    }
     if (caps & BackendOutput::Capability::VirtualStereo) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_virtual_stereo;
     }
@@ -229,6 +235,8 @@ public:
     void sendStereoPair(Resource *resource);
     void sendStereoSwapEyes(Resource *resource);
     void sendIzed3dOptions(Resource *resource);
+    void sendSideBySideFullTiming(Resource *resource);
+    void sendStereoDepth(Resource *resource);
     void sendAbmLevel(Resource *resource);
 
     OutputDeviceV2Interface *q;
@@ -423,6 +431,8 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     connect(handle, &BackendOutput::stereoPairChanged, this, &OutputDeviceV2Interface::updateStereoPair);
     connect(handle, &BackendOutput::stereoSwapEyesChanged, this, &OutputDeviceV2Interface::updateStereoSwapEyes);
     connect(handle, &BackendOutput::ized3dOptionsChanged, this, &OutputDeviceV2Interface::updateIzed3dOptions);
+    connect(handle, &BackendOutput::sideBySideFullTimingChanged, this, &OutputDeviceV2Interface::updateSideBySideFullTiming);
+    connect(handle, &BackendOutput::stereoDepthChanged, this, &OutputDeviceV2Interface::updateStereoDepth);
     connect(handle, &BackendOutput::abmLevelChanged, this, &OutputDeviceV2Interface::updateAbmLevel);
 
     // Delay the done event to batch property updates.
@@ -524,6 +534,8 @@ void OutputDeviceV2InterfacePrivate::kde_output_device_v2_bind_resource(Resource
     sendStereoPair(resource);
     sendStereoSwapEyes(resource);
     sendIzed3dOptions(resource);
+    sendSideBySideFullTiming(resource);
+    sendStereoDepth(resource);
     if (!m_uuid.isEmpty()) {
         sendDone(resource);
     }
@@ -1322,6 +1334,38 @@ void OutputDeviceV2Interface::updateIzed3dOptions()
     const auto resources = d->resourceMap();
     for (const auto &resource : resources) {
         d->sendIzed3dOptions(resource);
+    }
+    scheduleDone();
+}
+
+void OutputDeviceV2InterfacePrivate::sendSideBySideFullTiming(Resource *resource)
+{
+    if (resource->version() >= KDE_OUTPUT_DEVICE_V2_SIDE_BY_SIDE_FULL_TIMING_SINCE_VERSION) {
+        send_side_by_side_full_timing(resource->handle, uint32_t(m_handle->sideBySideFullTiming()));
+    }
+}
+
+void OutputDeviceV2Interface::updateSideBySideFullTiming()
+{
+    const auto resources = d->resourceMap();
+    for (const auto &resource : resources) {
+        d->sendSideBySideFullTiming(resource);
+    }
+    scheduleDone();
+}
+
+void OutputDeviceV2InterfacePrivate::sendStereoDepth(Resource *resource)
+{
+    if (resource->version() >= KDE_OUTPUT_DEVICE_V2_STEREO_DEPTH_SINCE_VERSION) {
+        send_stereo_depth(resource->handle, uint32_t(m_handle->stereoDepthSource()), m_handle->stereoViewingDistance());
+    }
+}
+
+void OutputDeviceV2Interface::updateStereoDepth()
+{
+    const auto resources = d->resourceMap();
+    for (const auto &resource : resources) {
+        d->sendStereoDepth(resource);
     }
     scheduleDone();
 }

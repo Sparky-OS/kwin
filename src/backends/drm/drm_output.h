@@ -8,6 +8,7 @@
 */
 #pragma once
 
+#include "core/stereodepthcoding.h"
 #include "drm_abstract_output.h"
 #include "drm_object.h"
 #include "drm_plane.h"
@@ -75,6 +76,10 @@ public:
      * any output; StereoLayout::None for 2D. The desktop is drawn into both eyes
      * (EglGbmLayerSurface).
      */
+    /**
+     * How the depth of the current picture and depth mode is coded, none for other modes.
+     */
+    std::optional<StereoDepthCoding> stereoDepthCoding() const;
     StereoLayout activeStereoLayout() const;
     bool hasStereoEyes() const override;
     bool frameSequentialNeedsNewFrame() const override;
@@ -97,6 +102,7 @@ private:
     void updateInformation();
     void unsetBrightnessDevice() override;
     void updateBrightness(double newBrightness, double newArtificialHdrHeadroom, double newDimming);
+    std::optional<StereoDepthCoding> stereoDepthCoding(const State &state) const;
     void maybeScheduleRepaints(const State &next);
     std::optional<uint32_t> decideAutomaticBpcLimit() const;
     void refreshModes(State *nextState) const;

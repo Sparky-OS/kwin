@@ -20,6 +20,7 @@
 #include "core/colorspace.h"
 #include "core/output.h"
 #include "core/renderloop_p.h"
+#include "core/stereodepthcoding.h"
 #include "drm_blob.h"
 #include "drm_connector.h"
 #include "drm_frame_sequential.h"
@@ -110,6 +111,8 @@ public:
     void setHighDynamicRange(bool hdr);
     void setWideColorGamut(bool wcg);
     void setMaxBpc(uint32_t max);
+    void setSideBySideFullTiming(SideBySideFullTiming timing);
+    void setStereoDepthCoding(const std::optional<StereoDepthCoding> &coding);
 
     enum class CommitMode {
         Test,
@@ -125,6 +128,7 @@ private:
     uint32_t calculateUnderscan();
     static Error errnoToError();
     std::shared_ptr<DrmBlob> createHdrMetadata(TransferFunction::Type transferFunction) const;
+    std::shared_ptr<DrmBlob> createHdmi3dMetadata() const;
 
     // legacy only
     Error presentLegacy(const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame);
@@ -166,6 +170,9 @@ private:
         bool hdr = false;
         bool wcg = false;
         uint32_t maxBpc = 10;
+        SideBySideFullTiming sideBySideFullTiming = SideBySideFullTiming::WholeLineDoubled;
+        // how the depth of a picture and depth mode is coded, for its 3D metadata
+        std::optional<StereoDepthCoding> stereoDepthCoding;
 
         QList<DrmPipelineLayer *> layers;
     };

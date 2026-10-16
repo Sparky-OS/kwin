@@ -432,6 +432,9 @@ void BackendOutput::applyChanges(const OutputConfiguration &config)
     next.stereoSwapEyes = props->stereoSwapEyes.value_or(m_state.stereoSwapEyes);
     next.ized3dMode = props->ized3dMode.value_or(m_state.ized3dMode);
     next.ized3dTransfer = props->ized3dTransfer.value_or(m_state.ized3dTransfer);
+    next.sideBySideFullTiming = props->sideBySideFullTiming.value_or(m_state.sideBySideFullTiming);
+    next.stereoDepthSource = props->stereoDepthSource.value_or(m_state.stereoDepthSource);
+    next.stereoViewingDistance = props->stereoViewingDistance.value_or(m_state.stereoViewingDistance);
     next.priority = props->priority.value_or(m_state.priority);
     next.deviceOffset = props->deviceOffset.value_or(m_state.deviceOffset);
     next.headsetView = props->headsetView.value_or(m_state.headsetView);
@@ -558,6 +561,12 @@ void BackendOutput::setState(const State &state)
     }
     if (oldState.ized3dMode != state.ized3dMode || oldState.ized3dTransfer != state.ized3dTransfer) {
         Q_EMIT ized3dOptionsChanged();
+    }
+    if (oldState.sideBySideFullTiming != state.sideBySideFullTiming) {
+        Q_EMIT sideBySideFullTimingChanged();
+    }
+    if (oldState.stereoDepthSource != state.stereoDepthSource || oldState.stereoViewingDistance != state.stereoViewingDistance) {
+        Q_EMIT stereoDepthChanged();
     }
     // detectedDdcCi is ignored here, it should result in capabilitiesChanged() instead
     if (oldState.allowDdcCi != state.allowDdcCi) {
@@ -842,6 +851,30 @@ Ized3dMode BackendOutput::ized3dMode() const
 Ized3dTransfer BackendOutput::ized3dTransfer() const
 {
     return m_state.ized3dTransfer;
+}
+
+SideBySideFullTiming BackendOutput::sideBySideFullTiming() const
+{
+    return m_state.sideBySideFullTiming;
+}
+
+StereoDepthSource BackendOutput::stereoDepthSource() const
+{
+    return m_state.stereoDepthSource;
+}
+
+uint32_t BackendOutput::stereoViewingDistance() const
+{
+    return m_state.stereoViewingDistance;
+}
+
+std::optional<StereoDepthCoding> BackendOutput::stereoDepthCoding() const
+{
+    const auto mode = m_state.currentMode;
+    if (!mode || !(mode->flags() & (OutputModeline::Flag::Stereo3DLDepth | OutputModeline::Flag::Stereo3DLDepthGraphics))) {
+        return std::nullopt;
+    }
+    return StereoDepthCoding(mode->size(), physicalSize(), m_state.stereoViewingDistance);
 }
 
 bool BackendOutput::isStereoPair() const

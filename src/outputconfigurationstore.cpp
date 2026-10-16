@@ -23,6 +23,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <limits>
 #include <ranges>
 
 namespace KWin
@@ -410,6 +411,9 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
             .stereoSwapEyes = output->stereoSwapEyes(),
             .ized3dMode = output->ized3dMode(),
             .ized3dTransfer = output->ized3dTransfer(),
+            .sideBySideFullTiming = output->sideBySideFullTiming(),
+            .stereoDepthSource = output->stereoDepthSource(),
+            .stereoViewingDistance = output->stereoViewingDistance(),
             .detectedDdcCi = output->detectedDdcCi(),
             .allowDdcCi = output->allowDdcCi(),
             .maxBitsPerColor = output->maxBitsPerColor(),
@@ -520,6 +524,9 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .stereoSwapEyes = state.stereoSwapEyes,
             .ized3dMode = state.ized3dMode,
             .ized3dTransfer = state.ized3dTransfer,
+            .sideBySideFullTiming = state.sideBySideFullTiming,
+            .stereoDepthSource = state.stereoDepthSource,
+            .stereoViewingDistance = state.stereoViewingDistance,
             .detectedDdcCi = state.detectedDdcCi,
             .allowDdcCi = state.allowDdcCi,
             .maxBitsPerColor = state.maxBitsPerColor,
@@ -706,6 +713,9 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             .stereoSwapEyes = existingData.stereoSwapEyes.value_or(false),
             .ized3dMode = existingData.ized3dMode.value_or(Ized3dMode::CF),
             .ized3dTransfer = existingData.ized3dTransfer.value_or(Ized3dTransfer::Linear),
+            .sideBySideFullTiming = existingData.sideBySideFullTiming.value_or(SideBySideFullTiming::WholeLineDoubled),
+            .stereoDepthSource = existingData.stereoDepthSource.value_or(StereoDepthSource::DesktopAndContent),
+            .stereoViewingDistance = existingData.stereoViewingDistance.value_or(0),
             .detectedDdcCi = existingData.detectedDdcCi.value_or(false),
             .allowDdcCi = existingData.allowDdcCi.value_or(!output->isDdcCiKnownBroken()),
             .maxBitsPerColor = existingData.maxBitsPerColor,
@@ -1271,6 +1281,24 @@ void OutputConfigurationStore::load()
                 state.ized3dTransfer = Ized3dTransfer(value);
             }
         }
+        if (const auto it = data.find("sideBySideFullTiming"); it != data.end()) {
+            const int value = it->toInt(-1);
+            if (value >= 0 && value <= int(SideBySideFullTiming::BlankingKept)) {
+                state.sideBySideFullTiming = SideBySideFullTiming(value);
+            }
+        }
+        if (const auto it = data.find("stereoDepthSource"); it != data.end()) {
+            const int value = it->toInt(-1);
+            if (value >= 0 && value <= int(StereoDepthSource::DesktopAndContent)) {
+                state.stereoDepthSource = StereoDepthSource(value);
+            }
+        }
+        if (const auto it = data.find("stereoViewingDistance"); it != data.end()) {
+            const int value = it->toInt(-1);
+            if (value >= 0 && value <= std::numeric_limits<uint16_t>::max()) {
+                state.stereoViewingDistance = value;
+            }
+        }
         if (const auto it = data.find("stereoSwapEyes"); it != data.end() && it->isBool()) {
             state.stereoSwapEyes = it->toBool();
         }
@@ -1624,6 +1652,15 @@ void OutputConfigurationStore::save()
         }
         if (output.ized3dTransfer) {
             o["ized3dTransfer"] = int(*output.ized3dTransfer);
+        }
+        if (output.sideBySideFullTiming) {
+            o["sideBySideFullTiming"] = int(*output.sideBySideFullTiming);
+        }
+        if (output.stereoDepthSource) {
+            o["stereoDepthSource"] = int(*output.stereoDepthSource);
+        }
+        if (output.stereoViewingDistance) {
+            o["stereoViewingDistance"] = int(*output.stereoViewingDistance);
         }
         if (output.stereoSwapEyes) {
             o["stereoSwapEyes"] = *output.stereoSwapEyes;

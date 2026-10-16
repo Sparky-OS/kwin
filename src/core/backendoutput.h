@@ -11,6 +11,7 @@
 #include "headsetview.h"
 
 #include "output.h"
+#include "stereodepthcoding.h"
 
 class QJsonArray;
 
@@ -86,6 +87,8 @@ public:
         VirtualStereo = 1 << 19,
         StereoSwapEyes = 1 << 20,
         Ized3dOptions = 1 << 21,
+        SideBySideFullTiming = 1 << 22,
+        StereoDepth = 1 << 23,
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -306,6 +309,17 @@ public:
     bool stereoSwapEyes() const;
     Ized3dMode ized3dMode() const;
     Ized3dTransfer ized3dTransfer() const;
+    SideBySideFullTiming sideBySideFullTiming() const;
+    StereoDepthSource stereoDepthSource() const;
+    /**
+     * The viewer's distance from the screen in centimetres for the 3D metadata of a picture
+     * and depth mode, 0 to derive it from the display's size.
+     */
+    uint32_t stereoViewingDistance() const;
+    /**
+     * How the depth picture of the current mode is coded, when it is a picture and depth mode.
+     */
+    std::optional<StereoDepthCoding> stereoDepthCoding() const;
     uint32_t maxBitsPerColor() const;
     struct BpcRange
     {
@@ -437,6 +451,8 @@ Q_SIGNALS:
     void stereoPairChanged();
     void stereoSwapEyesChanged();
     void ized3dOptionsChanged();
+    void sideBySideFullTimingChanged();
+    void stereoDepthChanged();
     void allowDdcCiChanged();
     void maxBitsPerColorChanged();
     void edrPolicyChanged();
@@ -530,6 +546,9 @@ protected:
         bool stereoSwapEyes = false;
         Ized3dMode ized3dMode = Ized3dMode::CF;
         Ized3dTransfer ized3dTransfer = Ized3dTransfer::Linear;
+        SideBySideFullTiming sideBySideFullTiming = SideBySideFullTiming::WholeLineDoubled;
+        StereoDepthSource stereoDepthSource = StereoDepthSource::DesktopAndContent;
+        uint32_t stereoViewingDistance = 0;
         bool detectedDdcCi = false;
         bool allowDdcCi = true;
         uint32_t maxBitsPerColor = 0;
