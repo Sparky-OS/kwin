@@ -38,6 +38,7 @@ namespace KWin
 {
 
 class KillPrompt;
+class X11StereoChildren;
 class XwaylandSurfaceV1Interface;
 
 class KWIN_EXPORT X11Window : public Window
@@ -102,6 +103,10 @@ public:
     QSizeF stereoClientScale() const;
     QSizeF stereoWindowScale() const;
     QSizeF programSizeScale() const;
+    /**
+     * The child windows that hold stereo content (_KDE_NET_WM_STEREO_CONTENT_CHILDREN).
+     */
+    X11StereoChildren *stereoChildren() const;
     QSizeF minSize() const override;
     QSizeF maxSize() const override;
 
@@ -283,6 +288,7 @@ protected:
 
 Q_SIGNALS:
     void shapeChanged();
+    void stereoChildrenChanged();
 
 private:
     void exportMappingState(int s); // ICCCM 4.1.3.1, 4.1.4, NETWM 2.5.1
@@ -317,6 +323,7 @@ private:
     Xcb::Property fetchStereoContentVersion() const;
     void readStereoContentVersion(Xcb::Property &property);
     void getStereoContentVersion();
+    void setupStereoChildren();
 
     void configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, qreal rh, int gravity, bool from_tool);
     void getSyncCounter();
@@ -366,6 +373,7 @@ private:
     QSizeF m_stereoClientScale = QSizeF(1, 1);
     QSizeF m_stereoWindowScale = QSizeF(1, 1);
     uint32_t m_stereoContentVersion = 0;
+    std::unique_ptr<X11StereoChildren> m_stereoChildren;
     // how much larger the program's own sizes are than its place on screen
     QSizeF m_programSizeScale = QSizeF(1, 1);
     // the program's own window size, as mapped or last asked for: a fullscreen

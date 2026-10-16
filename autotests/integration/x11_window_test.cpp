@@ -15,11 +15,14 @@
 #include "cursor.h"
 #include "pointer_input.h"
 #include "rules.h"
+#include "scene/surfaceitem_wayland.h"
+#include "scene/windowitem.h"
 #include "virtualdesktops.h"
 #include "wayland/surface.h"
 #include "wayland_server.h"
 #include "workspace.h"
 #include "x11eventfilter.h"
+#include "x11stereochildren.h"
 #include "x11window.h"
 
 #include <KWayland/Client/surface.h>
@@ -139,6 +142,9 @@ private Q_SLOTS:
     void testStereoContentDeclarationOneEyeWide();
     void testStereoContentDeclarationMalformed();
     void testStereoContentDeclarationRulePrecedence();
+    void testStereoChildWindow();
+    void testStereoChildWindowListedBeforeMapping();
+    void testStereoChildWindowOtherVisual();
 };
 
 void X11WindowTest::initTestCase_data()
@@ -3986,7 +3992,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 4u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 5u);
 
     const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -4145,6 +4151,222 @@ void X11WindowTest::testStereoContentDeclarationRulePrecedence()
 
     workspace()->rulebook()->setConfig(KSharedConfig::openConfig(QString(), KConfig::SimpleConfig));
     workspace()->slotReconfigure();
+}
+
+void X11WindowTest::testStereoChildWindow()
+{
+    // This test verifies that a child window that an X11 window declares in
+    // _KDE_NET_WM_STEREO_CONTENT_CHILDREN gets a surface of its own, shown at the child's place
+    // with the child's own stereo content, while the window itself stays 2D.
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200));
+    QVERIFY(window);
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+    QVERIFY(window->stereoChildren());
+
+    // the OpenGL area inside a frame, as a toolkit holds it
+    const xcb_window_t frame = xcb_generate_id(c.get());
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, frame, window->window(), 20, 30, 200, 150, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, 0, nullptr);
+    const xcb_window_t child = xcb_generate_id(c.get());
+    const uint32_t background = 0x00ff0000;
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, frame, 10, 5, 100, 80, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &background);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_map_window(c.get(), child);
+    xcb_map_window(c.get(), frame);
+
+    // another top-level window is no child: only the child is taken
+    const xcb_window_t other = xcb_generate_id(c.get());
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, other, rootWindow(), 0, 0, 50, 50, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, 0, nullptr);
+    QSignalSpy stereoChildrenChangedSpy(window, &X11Window::stereoChildrenChanged);
+    const xcb_window_t declared[] = {other, child};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 2, declared);
+    xcb_flush(c.get());
+    QVERIFY(stereoChildrenChangedSpy.wait());
+
+    const X11StereoChildren *children = window->stereoChildren();
+    QCOMPARE(children->children().size(), 1u);
+    const X11StereoChild *stereoChild = children->children().front().get();
+    QCOMPARE(stereoChild->window, child);
+    QCOMPARE(stereoChild->content, StereoContentSideBySideFull);
+    QCOMPARE(stereoChild->geometry, Xcb::fromXNative(Rect(30, 35, 100, 80)));
+    QVERIFY(stereoChild->mapped);
+
+    // Xwayland gives the redirected child a surface of its own
+    QTRY_VERIFY(stereoChild->surface);
+    QVERIFY(stereoChild->surface != window->surface());
+    QVERIFY(window->holdsStereoContent());
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+
+    // the scene shows it at the child's place, the size of the child, above the window's own
+    SurfaceItem *windowSurfaceItem = window->windowItem()->surfaceItem();
+    QVERIFY(windowSurfaceItem);
+    SurfaceItemXwaylandChild *childItem = nullptr;
+    QTRY_VERIFY([&]() {
+        for (Item *item : windowSurfaceItem->childItems()) {
+            if (auto candidate = qobject_cast<SurfaceItemXwaylandChild *>(item)) {
+                childItem = candidate;
+            }
+        }
+        return childItem != nullptr;
+    }());
+    QCOMPARE(childItem->surface(), stereoChild->surface.data());
+    QCOMPARE(childItem->position(), stereoChild->geometry.topLeft());
+    QCOMPARE(childItem->destinationSize(), stereoChild->geometry.size());
+    QCOMPARE(childItem->stereoContent(), StereoContentSideBySideFull);
+    QVERIFY(childItem->z() > 0);
+    QTRY_VERIFY(childItem->isVisible());
+
+    // moving the frame moves the child
+    const uint32_t position[] = {40, 50};
+    xcb_configure_window(c.get(), frame, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, position);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->geometry, Xcb::fromXNative(Rect(50, 55, 100, 80)));
+    QTRY_COMPARE(childItem->position(), stereoChild->geometry.topLeft());
+
+    // hiding the frame hides the child
+    xcb_unmap_window(c.get(), frame);
+    xcb_flush(c.get());
+    QTRY_VERIFY(!stereoChild->mapped);
+    QVERIFY(!window->holdsStereoContent());
+    xcb_map_window(c.get(), frame);
+    xcb_flush(c.get());
+    QTRY_VERIFY(stereoChild->mapped);
+
+    // moved to another parent in the window, the child is followed there
+    xcb_reparent_window(c.get(), child, window->window(), 5, 6);
+    xcb_flush(c.get());
+    QTRY_COMPARE(children->children().size(), 1u);
+    QTRY_COMPARE(children->children().front()->geometry, Xcb::fromXNative(Rect(5, 6, 100, 80)));
+    QVERIFY(children->children().front()->ancestors.isEmpty());
+    QTRY_VERIFY(children->children().front()->surface);
+
+    // taking the child out of the list gives it back to the window
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_children);
+    xcb_flush(c.get());
+    QTRY_VERIFY(children->children().empty());
+    QVERIFY(!window->holdsStereoContent());
+
+    // a child moved out of the window is no longer its child
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_flush(c.get());
+    QTRY_COMPARE(children->children().size(), 1u);
+    xcb_reparent_window(c.get(), child, rootWindow(), 0, 0);
+    xcb_flush(c.get());
+    QTRY_VERIFY(children->children().empty());
+
+    xcb_destroy_window(c.get(), other);
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+
+void X11WindowTest::testStereoChildWindowListedBeforeMapping()
+{
+    // This test verifies that a child listed while its X11 window is not mapped yet, as a
+    // toolkit does when it draws its OpenGL area before showing the window, is shown once the
+    // window is: the child gets no MapNotify of its own then.
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    xcb_window_t child = XCB_WINDOW_NONE;
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200), [&c, &child](xcb_window_t windowId) {
+        child = xcb_generate_id(c.get());
+        const uint32_t background = 0x00ff0000;
+        xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, windowId, 30, 35, 100, 80, 0,
+                          XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &background);
+        const uint32_t stereo = StereoContentSideBySideFull;
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &stereo);
+        xcb_map_window(c.get(), child);
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content_children,
+                            XCB_ATOM_WINDOW, 32, 1, &child);
+    });
+    QVERIFY(window);
+
+    const X11StereoChildren *children = window->stereoChildren();
+    QCOMPARE(children->children().size(), 1u);
+    const X11StereoChild *stereoChild = children->children().front().get();
+    QCOMPARE(stereoChild->window, child);
+    QVERIFY(stereoChild->mapped);
+    QTRY_VERIFY(stereoChild->surface);
+    QVERIFY(window->holdsStereoContent());
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+
+void X11WindowTest::testStereoChildWindowOtherVisual()
+{
+    // This test verifies that a child with another visual than its window's, an ARGB OpenGL area
+    // in an RGB window as ParaView's render view is, gets a surface of its own and is shown: the
+    // X server redirects such a child automatically, and KWin's manual redirection changes only
+    // its mode.
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    xcb_visualid_t argbVisual = XCB_NONE;
+    for (auto depths = xcb_screen_allowed_depths_iterator(xcb_setup_roots_iterator(xcb_get_setup(c.get())).data); depths.rem; xcb_depth_next(&depths)) {
+        if (depths.data->depth != 32) {
+            continue;
+        }
+        for (auto visuals = xcb_depth_visuals_iterator(depths.data); visuals.rem; xcb_visualtype_next(&visuals)) {
+            if (visuals.data->_class == XCB_VISUAL_CLASS_TRUE_COLOR) {
+                argbVisual = visuals.data->visual_id;
+                break;
+            }
+        }
+    }
+    QVERIFY(argbVisual != XCB_NONE);
+
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200));
+    QVERIFY(window);
+    const xcb_colormap_t colormap = xcb_generate_id(c.get());
+    xcb_create_colormap(c.get(), XCB_COLORMAP_ALLOC_NONE, colormap, rootWindow(), argbVisual);
+    const xcb_window_t child = xcb_generate_id(c.get());
+    const uint32_t values[] = {0xffff0000, 0, colormap};
+    xcb_create_window(c.get(), 32, child, window->window(), 30, 35, 100, 80, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, argbVisual,
+                      XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL | XCB_CW_COLORMAP, values);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_map_window(c.get(), child);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_flush(c.get());
+
+    const X11StereoChildren *children = window->stereoChildren();
+    QTRY_COMPARE(children->children().size(), 1u);
+    const X11StereoChild *stereoChild = children->children().front().get();
+    QTRY_VERIFY(stereoChild->surface);
+    QVERIFY(stereoChild->surface != window->surface());
+    QTRY_VERIFY(stereoChild->surface->isMapped());
+    QVERIFY(window->holdsStereoContent());
+
+    // given back, the child is drawn in its window again and leaves its surface
+    QPointer<SurfaceInterface> surface = stereoChild->surface;
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_children);
+    xcb_flush(c.get());
+    QTRY_VERIFY(children->children().empty());
+    QTRY_VERIFY(!surface);
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
 }
 
 WAYLANDTEST_MAIN(X11WindowTest)

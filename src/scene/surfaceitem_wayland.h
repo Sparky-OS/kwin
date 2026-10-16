@@ -69,6 +69,28 @@ private:
 
 #if KWIN_BUILD_X11
 /**
+ * The SurfaceItemXwaylandChild class represents the surface of a child window that holds
+ * stereo content, shown at the child's place in its X11 window.
+ */
+class KWIN_EXPORT SurfaceItemXwaylandChild : public SurfaceItemWayland
+{
+    Q_OBJECT
+
+public:
+    explicit SurfaceItemXwaylandChild(SurfaceInterface *surface, Item *parent = nullptr);
+
+    void setChildGeometry(const RectF &geometry);
+    void setMapped(bool mapped);
+
+private:
+    void updateDestinationSize();
+    void updateVisibility();
+
+    QSizeF m_childSize;
+    bool m_mapped = false;
+};
+
+/**
  * The SurfaceItemXwayland class represents an Xwayland surface in the scene.
  */
 class KWIN_EXPORT SurfaceItemXwayland : public SurfaceItemWayland
@@ -80,13 +102,16 @@ public:
 
     RegionF opaque() const override;
     RegionF shape() const override;
+    void freeze() override;
 
 private:
     void handleShapeChange();
     void updateDestinationSize();
+    void updateStereoChildren();
 
     X11Window *m_window;
     RegionF m_previousBufferShape;
+    std::vector<std::unique_ptr<SurfaceItemXwaylandChild>> m_stereoChildren;
 };
 #endif
 

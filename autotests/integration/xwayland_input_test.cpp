@@ -8,16 +8,20 @@
 */
 #include "kwin_wayland_test.h"
 
+#include "atoms.h"
 #include "core/output.h"
 #include "pointer_input.h"
+#include "utils/xcbutils.h"
 #include "wayland/seat.h"
 #include "wayland_server.h"
 #include "workspace.h"
+#include "x11stereochildren.h"
 #include "x11window.h"
 
 #include <QAbstractEventDispatcher>
 #include <QSocketNotifier>
 
+#include <linux/input-event-codes.h>
 #include <netwm.h>
 #include <xcb/xcb_icccm.h>
 
@@ -32,6 +36,7 @@ private Q_SLOTS:
     void init();
     void testPointerEnterLeaveSsd();
     void testPointerEventLeaveCsd();
+    void testPointerInStereoChild();
 };
 
 void XWaylandInputTest::initTestCase()
@@ -69,6 +74,7 @@ public:
 Q_SIGNALS:
     void entered(const QPoint &localPoint);
     void left(const QPoint &localPoint);
+    void pressed(quint32 window, const QPoint &localPoint);
 
 private:
     void processXcbEvents();
@@ -99,6 +105,11 @@ void X11EventReaderHelper::processXcbEvents()
         case XCB_LEAVE_NOTIFY: {
             auto leaveEvent = reinterpret_cast<xcb_leave_notify_event_t *>(event);
             Q_EMIT left(QPoint(leaveEvent->event_x, leaveEvent->event_y));
+            break;
+        }
+        case XCB_BUTTON_PRESS: {
+            auto pressEvent = reinterpret_cast<xcb_button_press_event_t *>(event);
+            Q_EMIT pressed(pressEvent->event, QPoint(pressEvent->event_x, pressEvent->event_y));
             break;
         }
         }
@@ -251,6 +262,95 @@ void XWaylandInputTest::testPointerEventLeaveCsd()
     QCOMPARE(leftSpy.last().first().toPoint(), QPoint(60, 105));
 
     // Destroy the window.
+    QSignalSpy windowClosedSpy(window, &X11Window::closed);
+    xcb_unmap_window(c.get(), windowId);
+    xcb_destroy_window(c.get(), windowId);
+    xcb_flush(c.get());
+    QVERIFY(windowClosedSpy.wait());
+}
+
+void XWaylandInputTest::testPointerInStereoChild()
+{
+    // This test verifies that the pointer reaches a child window that holds stereo content: the
+    // child has a surface of its own in the scene, while its X11 window keeps the input, and the X
+    // server gives the pointer on the child's place to the child, as it does before the child is
+    // declared.
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+    xcb_warp_pointer(connection(), XCB_WINDOW_NONE, kwinApp()->x11RootWindow(), 0, 0, 0, 0, 640, 512);
+    xcb_flush(connection());
+
+    X11EventReaderHelper eventReader(c.get());
+    QSignalSpy enteredSpy(&eventReader, &X11EventReaderHelper::entered);
+    QSignalSpy pressedSpy(&eventReader, &X11EventReaderHelper::pressed);
+
+    xcb_window_t windowId = xcb_generate_id(c.get());
+    const uint32_t values[] = {XCB_EVENT_MASK_ENTER_WINDOW | XCB_EVENT_MASK_LEAVE_WINDOW};
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, windowId, rootWindow(), 0, 0, 300, 200, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_EVENT_MASK, values);
+    xcb_size_hints_t hints{};
+    xcb_icccm_size_hints_set_position(&hints, 1, 0, 0);
+    xcb_icccm_size_hints_set_size(&hints, 1, 300, 200);
+    xcb_icccm_set_wm_normal_hints(c.get(), windowId, &hints);
+    Test::applyMotifHints(c.get(), windowId, Test::MotifHints{
+                                                 .flags = Test::MWM_HINTS_DECORATIONS,
+                                                 .decorations = 0,
+                                             });
+    NETWinInfo info(c.get(), windowId, rootWindow(), NET::WMAllProperties, NET::WM2AllProperties);
+    info.setWindowType(NET::Normal);
+
+    // the OpenGL area, a child declaring full side by side stereo
+    const xcb_window_t child = xcb_generate_id(c.get());
+    const uint32_t childValues[] = {0x00ff0000, XCB_EVENT_MASK_BUTTON_PRESS};
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, windowId, 30, 35, 100, 80, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK, childValues);
+    const uint32_t stereo = 3;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content, XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_map_window(c.get(), child);
+    xcb_map_window(c.get(), windowId);
+    xcb_flush(c.get());
+
+    QSignalSpy windowCreatedSpy(workspace(), &Workspace::windowAdded);
+    QVERIFY(windowCreatedSpy.wait());
+    X11Window *window = windowCreatedSpy.last().first().value<X11Window *>();
+    QVERIFY(window);
+    QVERIFY(Test::waitForWaylandSurface(window));
+
+    const QPointF childCenter = window->bufferGeometry().topLeft() + Xcb::fromXNative(Rect(30, 35, 100, 80)).center();
+    quint32 timestamp = 0;
+    auto click = [&]() {
+        input()->pointer()->warp(window->frameGeometry().bottomRight() + QPointF(100, 100));
+        enteredSpy.clear();
+        pressedSpy.clear();
+        input()->pointer()->warp(childCenter);
+        QCOMPARE(waylandServer()->seat()->focusedPointerSurface(), window->surface());
+        QVERIFY(enteredSpy.wait());
+        Test::pointerButtonPressed(BTN_LEFT, timestamp++);
+        Test::pointerButtonReleased(BTN_LEFT, timestamp++);
+        QVERIFY(pressedSpy.wait());
+        QCOMPARE(pressedSpy.last().at(0).value<quint32>(), child);
+        QCOMPARE(pressedSpy.last().at(1).toPoint(), QPoint(50, 40));
+    };
+
+    // before the child is declared
+    click();
+    if (QTest::currentTestFailed()) {
+        return;
+    }
+
+    // declared, the child has a surface of its own, and the pointer still reaches it
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content_children, XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_flush(c.get());
+    QTRY_COMPARE(window->stereoChildren()->children().size(), 1u);
+    const X11StereoChild *stereoChild = window->stereoChildren()->children().front().get();
+    QTRY_VERIFY(stereoChild->surface);
+    QVERIFY(window->holdsStereoContent());
+    click();
+    if (QTest::currentTestFailed()) {
+        return;
+    }
+
+    // destroy the window
     QSignalSpy windowClosedSpy(window, &X11Window::closed);
     xcb_unmap_window(c.get(), windowId);
     xcb_destroy_window(c.get(), windowId);

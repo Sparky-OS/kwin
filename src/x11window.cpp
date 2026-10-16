@@ -32,6 +32,7 @@
 #include "wayland/xwaylandshell_v1.h"
 #include "wayland_server.h"
 #include "workspace.h"
+#include "x11stereochildren.h"
 #include <KDecoration3/DecoratedWindow>
 #include <KDecoration3/Decoration>
 // KDE
@@ -190,6 +191,10 @@ void X11Window::releaseWindow(bool on_shutdown)
 {
     destroyWindowManagementInterface();
 
+    if (m_stereoChildren) {
+        m_stereoChildren->release();
+    }
+
     markAsDeleted();
     Q_EMIT closed();
 
@@ -339,6 +344,7 @@ bool X11Window::track(xcb_window_t w)
     getWmOpaqueRegion();
     getSkipCloseAnimation();
     updateShadow();
+    setupStereoChildren();
     setupItem();
     setReadyForPainting();
 
@@ -407,6 +413,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     readStereoContentVersion(stereoContentVersionCookie);
     readStereoContent(stereoContentCookie);
     readStereoContentClass(stereoContentClassCookie);
+    setupStereoChildren();
 
     setupWindowRules();
     connect(this, &X11Window::windowClassChanged, this, &X11Window::evaluateWindowRules);
@@ -4229,6 +4236,18 @@ void X11Window::getSkipCloseAnimation()
 {
     Xcb::Property property = fetchSkipCloseAnimation();
     readSkipCloseAnimation(property);
+}
+
+void X11Window::setupStereoChildren()
+{
+    m_stereoChildren = std::make_unique<X11StereoChildren>(this);
+    connect(m_stereoChildren.get(), &X11StereoChildren::changed, this, &X11Window::stereoChildrenChanged);
+    m_stereoChildren->update();
+}
+
+X11StereoChildren *X11Window::stereoChildren() const
+{
+    return m_stereoChildren.get();
 }
 
 Xcb::Property X11Window::fetchStereoContent() const

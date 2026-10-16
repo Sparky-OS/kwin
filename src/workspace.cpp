@@ -69,6 +69,7 @@
 #include "group.h"
 #include "netinfo.h"
 #include "utils/xcbutils.h"
+#include "x11stereochildren.h"
 #include "x11window.h"
 #include <KStartupInfo>
 #endif
@@ -2188,6 +2189,17 @@ X11Window *Workspace::findClient(xcb_window_t w) const
     return findClient([w](const X11Window *c) {
         return c->window() == w;
     });
+}
+
+X11Window *Workspace::findStereoChildOwner(xcb_window_t w) const
+{
+    for (Window *window : std::as_const(m_windows)) {
+        X11Window *x11Window = qobject_cast<X11Window *>(window);
+        if (x11Window && x11Window->stereoChildren() && x11Window->stereoChildren()->owns(w)) {
+            return x11Window;
+        }
+    }
+    return nullptr;
 }
 #endif
 

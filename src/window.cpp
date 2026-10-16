@@ -40,6 +40,10 @@
 #include "wayland/surface.h"
 #include "wayland_server.h"
 #include "workspace.h"
+#if KWIN_BUILD_X11
+#include "x11stereochildren.h"
+#include "x11window.h"
+#endif
 
 #include <KDecoration3/DecoratedWindow>
 #include <KDecoration3/Decoration>
@@ -4755,6 +4759,12 @@ bool Window::holdsStereoContent() const
             stereo = stereo || surface->stereoContent() != StereoContentNone;
         });
     }
+#if KWIN_BUILD_X11
+    // an X11 child window's surface is not a subsurface of the window's own
+    if (const auto x11Window = qobject_cast<const X11Window *>(this)) {
+        stereo = stereo || (x11Window->stereoChildren() && x11Window->stereoChildren()->holdsStereoContent());
+    }
+#endif
     return stereo;
 }
 

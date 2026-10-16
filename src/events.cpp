@@ -27,6 +27,7 @@
 #include "wayland/xwaylandshell_v1.h"
 #include "wayland_server.h"
 #include "workspace.h"
+#include "x11stereochildren.h"
 #include "x11window.h"
 
 #include <xcb/xcb_icccm.h>
@@ -137,6 +138,9 @@ void Workspace::workspaceEvent(xcb_generic_event_t *e)
             if (window->windowEvent(e)) {
                 return;
             }
+        } else if (X11Window *window = findStereoChildOwner(eventWindow)) {
+            window->stereoChildren()->handleEvent(e);
+            return;
         }
     }
 
@@ -548,6 +552,10 @@ void X11Window::propertyNotifyEvent(xcb_property_notify_event_t *e)
             getStereoContentClass();
         } else if (e->atom == atoms->kde_net_wm_stereo_content_version) {
             getStereoContentVersion();
+        } else if (e->atom == atoms->kde_net_wm_stereo_content_children) {
+            if (m_stereoChildren) {
+                m_stereoChildren->update();
+            }
         } else if (e->atom == atoms->xwayland_xrandr_emulation) {
             configure(Xcb::toXNative(m_bufferGeometry));
         }

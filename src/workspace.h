@@ -122,6 +122,11 @@ public:
     void forEachClient(std::function<void(X11Window *)> func);
     X11Window *findUnmanaged(std::function<bool(const X11Window *)> func) const;
     X11Window *findUnmanaged(xcb_window_t w) const;
+    /**
+     * The X11 window that declared @p w as a stereo child, or that has it between a stereo
+     * child and itself.
+     */
+    X11Window *findStereoChildOwner(xcb_window_t w) const;
 #endif
 
     Window *findWindow(const QUuid &internalId) const;

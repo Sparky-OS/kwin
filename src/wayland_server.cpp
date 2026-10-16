@@ -98,6 +98,7 @@
 #if KWIN_BUILD_X11
 #include "wayland/xwaylandkeyboardgrab_v1.h"
 #include "wayland/xwaylandshell_v1.h"
+#include "x11stereochildren.h"
 #include "x11window.h"
 #endif
 
@@ -372,6 +373,17 @@ bool WaylandServer::init()
         if (unmanaged) {
             unmanaged->associate(surface);
             return;
+        }
+
+        // the surface of a child window that holds stereo content
+        if (const std::optional<uint64_t> serial = surface->serial()) {
+            Window *owner = workspace()->findWindow([serial](const Window *window) {
+                const auto x11Window = qobject_cast<const X11Window *>(window);
+                return x11Window && x11Window->stereoChildren() && x11Window->stereoChildren()->hasSurfaceSerial(*serial);
+            });
+            if (owner) {
+                static_cast<X11Window *>(owner)->stereoChildren()->associate(surface);
+            }
         }
     });
 #endif

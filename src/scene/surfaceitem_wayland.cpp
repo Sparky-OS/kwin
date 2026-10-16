@@ -14,7 +14,10 @@
 #include "wayland/surface.h"
 #include "window.h"
 
+#include <algorithm>
+
 #if KWIN_BUILD_X11
+#include "x11stereochildren.h"
 #include "x11window.h"
 #endif
 
@@ -255,6 +258,43 @@ void SurfaceItemWayland::handleFramePainted(LogicalOutput *output, OutputFrame *
 }
 
 #if KWIN_BUILD_X11
+SurfaceItemXwaylandChild::SurfaceItemXwaylandChild(SurfaceInterface *surface, Item *parent)
+    : SurfaceItemWayland(surface, parent)
+{
+    // after SurfaceItemWayland's own handlers: the child's place decides the size and visibility
+    connect(surface, &SurfaceInterface::sizeChanged, this, &SurfaceItemXwaylandChild::updateDestinationSize);
+    connect(surface, &SurfaceInterface::mapped, this, &SurfaceItemXwaylandChild::updateVisibility);
+    connect(surface, &SurfaceInterface::unmapped, this, &SurfaceItemXwaylandChild::updateVisibility);
+    updateVisibility();
+}
+
+// The child window's place in its X11 window. Its buffer can be larger than the child, as it is
+// twice the child's width when it holds both eyes at full size; it is drawn at the child's size.
+void SurfaceItemXwaylandChild::setChildGeometry(const RectF &geometry)
+{
+    setPosition(geometry.topLeft());
+    m_childSize = geometry.size();
+    updateDestinationSize();
+}
+
+void SurfaceItemXwaylandChild::setMapped(bool mapped)
+{
+    m_mapped = mapped;
+    updateVisibility();
+}
+
+void SurfaceItemXwaylandChild::updateDestinationSize()
+{
+    if (!m_childSize.isEmpty()) {
+        setDestinationSize(m_childSize);
+    }
+}
+
+void SurfaceItemXwaylandChild::updateVisibility()
+{
+    setVisible(m_mapped && surface() && surface()->isMapped());
+}
+
 SurfaceItemXwayland::SurfaceItemXwayland(X11Window *window, Item *parent)
     : SurfaceItemWayland(window->surface(), parent)
     , m_window(window)
@@ -263,7 +303,47 @@ SurfaceItemXwayland::SurfaceItemXwayland(X11Window *window, Item *parent)
     connect(window->surface(), &SurfaceInterface::sizeChanged, this, &SurfaceItemXwayland::updateDestinationSize);
     connect(window, &X11Window::bufferGeometryChanged, this, &SurfaceItemXwayland::updateDestinationSize);
     connect(window, &X11Window::stereoContentChanged, this, &SurfaceItemXwayland::updateDestinationSize);
+    connect(window, &X11Window::stereoChildrenChanged, this, &SurfaceItemXwayland::updateStereoChildren);
     updateDestinationSize();
+    updateStereoChildren();
+}
+
+// The child windows that hold stereo content, each above the window's own surface at its place,
+// one view for each eye; the rest of the window is the same in both eyes.
+void SurfaceItemXwayland::updateStereoChildren()
+{
+    std::vector<std::unique_ptr<SurfaceItemXwaylandChild>> items;
+    if (const X11StereoChildren *children = m_window->stereoChildren()) {
+        for (const auto &child : children->children()) {
+            if (!child->surface) {
+                continue;
+            }
+            std::unique_ptr<SurfaceItemXwaylandChild> item;
+            auto it = std::ranges::find_if(m_stereoChildren, [&child](const std::unique_ptr<SurfaceItemXwaylandChild> &item) {
+                return item && item->surface() == child->surface;
+            });
+            if (it != m_stereoChildren.end()) {
+                item = std::move(*it);
+            } else {
+                item = std::make_unique<SurfaceItemXwaylandChild>(child->surface, this);
+            }
+            item->setChildGeometry(child->geometry);
+            item->setStereoContent(child->content);
+            item->setMapped(child->mapped);
+            item->setZ(int(items.size()) + 1);
+            items.push_back(std::move(item));
+        }
+    }
+    m_stereoChildren = std::move(items);
+}
+
+void SurfaceItemXwayland::freeze()
+{
+    disconnect(m_window, &X11Window::stereoChildrenChanged, this, &SurfaceItemXwayland::updateStereoChildren);
+    for (const auto &item : m_stereoChildren) {
+        item->freeze();
+    }
+    SurfaceItemWayland::freeze();
 }
 
 // A full-resolution stereo window's X11 window is larger than its place on screen: its buffer

@@ -305,6 +305,7 @@ if (KWIN_BUILD_X11)
             syncalarmx11filter.cpp
             window_property_notify_x11_filter.cpp
             x11eventfilter.cpp
+            x11stereochildren.cpp
             x11window.cpp
     )
     target_link_libraries(kwin
