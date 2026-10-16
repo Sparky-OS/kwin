@@ -99,11 +99,11 @@ void DesktopBackgroundItem::updateWindow()
     }
 
     QString activity = m_activity;
-    if (activity.isEmpty()) {
 #if KWIN_BUILD_ACTIVITIES
+    if (activity.isEmpty() && Workspace::self()->activities()) {
         activity = Workspace::self()->activities()->current();
-#endif
     }
+#endif
 
     Window *clientCandidate = nullptr;
 
