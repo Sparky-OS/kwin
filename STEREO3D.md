@@ -164,6 +164,9 @@ Tested on real hardware, with the kernel side in place, on a Sony KDL-46HX855 (a
 - **deep colour**, with new outputs preferring colour accuracy: 12 bpc, the TVs' maximum, on both.
 
 **On this branch, tested in containers (2026-10-03), not yet on a screen:** programs declaring their stereo themselves, through the X11 property `_KDE_NET_WM_STEREO_CONTENT` with its class companion and through the Wayland protocol `kde-stereo-content-v1` (layout, class and sub-class, double-buffered, synchronized subsurfaces); a shared client library for both, in our plasma-wayland-protocols branch; and area-filtered downscaling for stereo windows shrunk more than 2:1, checked pixel by pixel against reference averages.
+**X11 child windows, tested in containers (2026-10-16):** the 3D view of a program whose interface is 2D, Netgen's or gmsh's, is often a child window of its X11 window.
+Mesa lists a stereo child in its window's `_KDE_NET_WM_STEREO_CONTENT_CHILDREN`, KWin redirects it so Xwayland gives it a surface of its own, and KWin shows that surface one view per eye at the child's place, while the rest of the window is the same in both eyes.
+KWin announces this as version 5 of `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED`.
 **Anaglyph:** the same Dubois matrices (modern screens and CRT, in linear light) were tested in a game, Half-Life 2 handing its full side by side eyes to a gamescope effect, on the HX855 (2026-09-25, both profiles). In KWin it is built and switched by an environment variable for now; its first screen test comes with the toggle.
 **Planned, in this order:** the virtual 3D modes and their toggles, the other stereo formats, VR.
 
