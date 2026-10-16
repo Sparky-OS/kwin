@@ -157,7 +157,18 @@ qreal StereoDepth::level(const Window *window)
                 below += !found;
             }
         }
-        return found ? qreal(below + 1) / count : 1;
+        qreal level = found ? qreal(below + 1) / count : 1;
+        // nor behind what its own window popped up before it, which it was opened from: a sub-menu
+        // that ends up under its menu shares the menu's level
+        const Window *main = mainWindow(window);
+        const QList<Window *> &shown = workspace()->windows();
+        for (qsizetype i = 0, end = shown.indexOf(const_cast<Window *>(window)); i < end; ++i) {
+            const Window *other = shown[i];
+            if (mainWindow(other) == main && isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other)) {
+                level = std::max(level, StereoDepth::level(other));
+            }
+        }
+        return level;
     }
     case Role::Sunk: {
         // the sunk range is shared by the windows beneath the active one, the lowest at the limit

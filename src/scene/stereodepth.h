@@ -35,7 +35,7 @@ class Window;
  *
  * Nothing is behind what it covers: the active window comes to the screen's level once it is on
  * top of the windows it overlaps, so with a delayed raise it stays in their pile until it is
- * raised.
+ * raised, and a popped thing is never behind the popped thing it was opened from.
  */
 class KWIN_EXPORT StereoDepth
 {
