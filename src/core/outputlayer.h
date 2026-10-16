@@ -108,6 +108,15 @@ public:
     virtual std::optional<OutputLayerBeginFrameInfo> beginRightEyeFrame();
 
     /**
+     * The pictures a picture and depth 3D mode sends besides the one beginFrame() gives: the
+     * depth, and for L + depth + graphics + graphics-depth the graphics and their depth.
+     * Empty for other layers. beginStereoPlaneFrame(), called before endFrame(), gives the
+     * render target of each, one eye in size like beginFrame()'s.
+     */
+    virtual QList<StereoPlane> stereoPlanes() const;
+    virtual std::optional<OutputLayerBeginFrameInfo> beginStereoPlaneFrame(StereoPlane plane);
+
+    /**
      * Do checks if the current configuration of the layer could possibly work.
      * This can include checking things like color operations or offload transforms
      */

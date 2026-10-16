@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QMap>
 #include <QPointer>
+#include <array>
 #include <chrono>
 #include <optional>
 
@@ -75,6 +76,12 @@ public:
      * startRendering() and endRendering(); without it the left eye is shown in both.
      */
     std::optional<OutputLayerBeginFrameInfo> startRightEye();
+    /**
+     * The depth, graphics and graphics-depth pictures of the picture and depth layouts, one
+     * eye in size like the shadow buffer; call it between startRendering() and endRendering().
+     * A picture not drawn in a frame is sent black.
+     */
+    std::optional<OutputLayerBeginFrameInfo> startStereoPlane(StereoPlane plane);
 
     void destroyResources();
     EglGbmBackend *eglBackend() const;
@@ -125,6 +132,9 @@ private:
         std::shared_ptr<EglSwapchain> rightShadowSwapchain;
         std::shared_ptr<EglSwapchainSlot> currentRightShadowSlot;
         DamageJournal rightShadowDamageJournal;
+        // the depth, graphics and graphics-depth pictures of the picture and depth layouts
+        std::array<std::shared_ptr<EglSwapchain>, 3> planeSwapchains;
+        std::array<std::shared_ptr<EglSwapchainSlot>, 3> currentPlaneSlots;
         BackendOutput::ColorPowerTradeoff tradeoff = BackendOutput::ColorPowerTradeoff::PreferEfficiency;
 
         std::unique_ptr<GLRenderTimeQuery> compositingTimeQuery;
@@ -139,6 +149,7 @@ private:
     };
     bool drawStereoPattern(const QSize &fboSize, const Region &repaint);
     bool drawLineAlternative(const QSize &fboSize, const Region &repaint);
+    void drawPictureAndDepth(const QSize &fboSize, const OutputTransform &mapping, const QSize &rotatedSize);
     bool drawAnaglyph(const QSize &fboSize, const Region &repaint);
     bool drawIzed3d(const QSize &fboSize, const Region &repaint);
     bool checkSurface(const QSize &size, const FormatModifierMap &formats, BackendOutput::ColorPowerTradeoff tradeoff, uint32_t requiredAlphaBits);

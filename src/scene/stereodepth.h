@@ -75,6 +75,13 @@ public:
      */
     static bool isEnabled();
 
+    /**
+     * Whether @a window is part of what is drawn over the windows rather than a window of its
+     * own: panels, and what pops up (menus, tooltips, notifications, on-screen displays). The
+     * graphics picture of L + depth + graphics + graphics-depth carries these and the pointer.
+     */
+    static bool isDesktopChrome(const Window *window);
+
     static qreal level(const Window *window);
 
     /**

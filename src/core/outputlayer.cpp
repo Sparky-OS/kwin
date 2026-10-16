@@ -138,6 +138,16 @@ std::optional<OutputLayerBeginFrameInfo> OutputLayer::beginRightEyeFrame()
     return std::nullopt;
 }
 
+QList<StereoPlane> OutputLayer::stereoPlanes() const
+{
+    return {};
+}
+
+std::optional<OutputLayerBeginFrameInfo> OutputLayer::beginStereoPlaneFrame(StereoPlane plane)
+{
+    return std::nullopt;
+}
+
 void OutputLayer::setScanoutCandidate(SurfaceItem *item)
 {
     if (m_scanoutCandidate && item != m_scanoutCandidate) {

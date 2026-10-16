@@ -120,6 +120,11 @@ static bool touchesEdge(const Window *window)
         || frame.y() + frame.height() >= screen.y() + screen.height();
 }
 
+bool StereoDepth::isDesktopChrome(const Window *window)
+{
+    return window->isDock() || isPopup(window);
+}
+
 bool StereoDepth::isEnabled()
 {
     return options->stereoSunkLimit() > 0 || options->stereoPoppedLimit() > 0;

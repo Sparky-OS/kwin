@@ -170,6 +170,8 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayerSurface::startRendering(cons
         m_surface->currentShadowSlot.reset();
         m_surface->rightShadowSwapchain.reset();
         m_surface->currentRightShadowSlot.reset();
+        m_surface->planeSwapchains = {};
+        m_surface->currentPlaneSlots = {};
         return OutputLayerBeginFrameInfo{
             .renderTarget = RenderTarget(m_surface->currentSlot->framebuffer(), m_surface->blendingColor),
             .repaint = bufferAgeEnabled ? m_surface->damageJournal.accumulate(slot->age(), Region::infinite()) : Region::infinite(),
@@ -407,6 +409,48 @@ bool EglGbmLayerSurface::drawLineAlternative(const QSize &fboSize, const Region 
     return true;
 }
 
+// HDMI 1.4a, Figures H-5 and H-6: the picture, its depth, and the graphics and their depth, one
+// vtotal apart, the vertical blanking between them sent black
+void EglGbmLayerSurface::drawPictureAndDepth(const QSize &fboSize, const OutputTransform &mapping, const QSize &rotatedSize)
+{
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    const auto textureOf = [this](StereoPlane plane) -> std::shared_ptr<GLTexture> {
+        if (plane == StereoPlane::Picture) {
+            return m_surface->currentShadowSlot->texture();
+        }
+        const auto &slot = m_surface->currentPlaneSlots[size_t(plane) - 1];
+        return slot ? slot->texture() : nullptr;
+    };
+    const auto draw = [&](StereoPlane plane) {
+        const std::shared_ptr<GLTexture> texture = textureOf(plane);
+        if (!texture) {
+            return;
+        }
+        const RectF rect(mapping.map(Rect(int(plane) * m_rightEyeOffset, m_eyeSize), rotatedSize));
+        if (const auto vbo = uploadStereoGeometry(std::span(&rect, 1))) {
+            texture->bind();
+            vbo->render(GL_TRIANGLES);
+            texture->unbind();
+        }
+    };
+    // the pictures through the colour pipeline, as the eyes of the other layouts
+    draw(StereoPlane::Picture);
+    if (m_stereoLayout == StereoLayout::LDepthGraphics) {
+        draw(StereoPlane::Graphics);
+    }
+    // the depth pictures are samples, not colours: sent as they are
+    ShaderBinder samples(ShaderTrait::MapTexture);
+    QMatrix4x4 mat;
+    mat.scale(1, -1);
+    mat.ortho(QRectF(QPointF(), fboSize));
+    samples.shader()->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
+    draw(StereoPlane::Depth);
+    if (m_stereoLayout == StereoLayout::LDepthGraphics) {
+        draw(StereoPlane::GraphicsDepth);
+    }
+}
+
 bool EglGbmLayerSurface::drawIzed3d(const QSize &fboSize, const Region &repaint)
 {
     if (!m_surface->ized3dShader && !m_surface->ized3dShaderFailed) {
@@ -470,6 +514,35 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayerSurface::startRightEye()
     };
 }
 
+std::optional<OutputLayerBeginFrameInfo> EglGbmLayerSurface::startStereoPlane(StereoPlane plane)
+{
+    if (!m_surface || !m_surface->needsShadowBuffer || !m_surface->currentShadowSlot || plane == StereoPlane::Picture) {
+        return std::nullopt;
+    }
+    const size_t index = size_t(plane) - 1;
+    const QSize size = m_surface->shadowSwapchain->size();
+    const uint32_t format = m_surface->shadowSwapchain->format();
+    auto &swapchain = m_surface->planeSwapchains[index];
+    if (!swapchain || swapchain->size() != size || swapchain->format() != format) {
+        swapchain = EglSwapchain::create(m_eglBackend->drmDevice()->allocator(), m_eglBackend->openglContext(), size, format, {m_surface->shadowSwapchain->modifier()});
+        if (!swapchain) {
+            qCWarning(KWIN_DRM) << "Failed to create the swapchain of a picture and depth layout's picture" << int(plane);
+            return std::nullopt;
+        }
+    }
+    auto &slot = m_surface->currentPlaneSlots[index];
+    slot = swapchain->acquire();
+    if (!slot) {
+        return std::nullopt;
+    }
+    slot->texture()->setContentTransform(m_surface->currentShadowSlot->texture()->contentTransform());
+    // drawn whole every frame
+    return OutputLayerBeginFrameInfo{
+        .renderTarget = RenderTarget(slot->framebuffer(), m_surface->blendingColor),
+        .repaint = Region::infinite(),
+    };
+}
+
 void EglGbmLayerSurface::setStereoLayout(StereoLayout layout, const QSize &eyeSize, const QPoint &rightEyeOffset)
 {
     if ((layout != m_stereoLayout || eyeSize != m_eyeSize || rightEyeOffset != m_rightEyeOffset) && m_surface) {
@@ -518,6 +591,7 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
     const bool anaglyph = isAnaglyph(m_stereoLayout) && m_surface->needsShadowBuffer;
     const bool stereo = m_stereoLayout != StereoLayout::None && m_surface->needsShadowBuffer;
     const bool lineAlternative = m_stereoLayout == StereoLayout::LineAlternative && m_surface->needsShadowBuffer;
+    const bool pictureAndDepth = isPictureAndDepth(m_stereoLayout) && m_surface->needsShadowBuffer;
     const Region scanoutDamage = stereo ? Region(Rect(QPoint(), m_surface->gbmSwapchain->size())) : damagedDeviceRegion;
     if (m_surface->needsShadowBuffer) {
         const Region deviceRepaint = scanoutDamage | m_surface->damageJournal.accumulate(m_surface->currentSlot->age(), Region::infinite());
@@ -557,6 +631,8 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             // The pattern is anchored to scanout pixels.
         } else if (lineAlternative && drawLineAlternative(fbo->size(), repaint)) {
             // So are the lines of line alternative.
+        } else if (pictureAndDepth) {
+            drawPictureAndDepth(fbo->size(), mapping, rotatedSize);
         } else if (stereo && !anaglyph && !spatial) {
             // the desktop into both eyes, left eye first: left half and right half for
             // side by side, top half and bottom half for top and bottom, each eye in full
@@ -604,6 +680,12 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
         if (m_surface->currentRightShadowSlot) {
             m_surface->rightShadowSwapchain->release(m_surface->currentRightShadowSlot, fence.fileDescriptor().duplicate());
             m_surface->currentRightShadowSlot.reset();
+        }
+        for (size_t i = 0; i < m_surface->currentPlaneSlots.size(); ++i) {
+            if (m_surface->currentPlaneSlots[i]) {
+                m_surface->planeSwapchains[i]->release(m_surface->currentPlaneSlots[i], fence.fileDescriptor().duplicate());
+                m_surface->currentPlaneSlots[i].reset();
+            }
         }
         m_surface->shadowSwapchain->release(m_surface->currentShadowSlot, fence.takeFileDescriptor());
         GLFramebuffer::popFramebuffer();

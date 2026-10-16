@@ -191,6 +191,7 @@ target_sources(kwin PRIVATE
     scene/scene.cpp
     scene/shadowitem.cpp
     scene/stereodepth.cpp
+    scene/stereodepthestimator.cpp
     scene/surfaceitem.cpp
     scene/surfaceitem_internal.cpp
     scene/surfaceitem_wayland.cpp

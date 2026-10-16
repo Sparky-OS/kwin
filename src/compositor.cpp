@@ -445,6 +445,66 @@ static bool showsStereoContent(RenderView *view)
     });
 }
 
+// A picture and depth output (HDMI 1.4a, Appendix H, L + depth and L + depth + graphics +
+// graphics-depth): the scene in the picture's eye, then the depth of what it shows. With graphics,
+// the picture leaves the desktop's chrome out, and the chrome and the pointer make the graphics,
+// with their own depth. The other eye's view is drawn only for estimating the depth of 3D content;
+// with the eyes swapped the picture is the right eye's and the parallax runs the other way.
+static void renderPictureAndDepth(RenderView *view, BackendOutput *backendOutput, const QList<StereoPlane> &planes, const RenderTarget &renderTarget, const Region &bufferDamage, const Region &surfaceDamage)
+{
+    WorkspaceScene *scene = kwinApp()->scene();
+    ItemRenderer *renderer = scene->renderer();
+    const auto coding = backendOutput->stereoDepthCoding();
+    const StereoDepthSource source = backendOutput->stereoDepthSource();
+    const StereoEye pictureEye = backendOutput->stereoSwapEyes() ? StereoEye::Right : StereoEye::Left;
+    const StereoEye otherEye = pictureEye == StereoEye::Left ? StereoEye::Right : StereoEye::Left;
+    const bool graphics = planes.contains(StereoPlane::Graphics);
+
+    scene->setStereoPlane(graphics ? std::optional(StereoPlane::Picture) : std::nullopt);
+    renderer->setStereoEye(pictureEye);
+    view->paint(renderTarget, view->renderOffset(), bufferDamage);
+    GLTexture *other = nullptr;
+    if (source == StereoDepthSource::DesktopAndContent) {
+        if (auto otherInfo = view->layer()->beginRightEyeFrame()) {
+            const Region otherDamage = surfaceDamage.united(otherInfo->repaint).intersected(otherInfo->renderTarget.transformedRect());
+            renderer->setStereoEye(otherEye);
+            view->paint(otherInfo->renderTarget, view->renderOffset(), otherDamage);
+            other = otherInfo->renderTarget.texture();
+        }
+    }
+    renderer->setStereoEye(StereoEye::None);
+    if (coding) {
+        if (auto depth = view->layer()->beginStereoPlaneFrame(StereoPlane::Depth)) {
+            scene->paintStereoDepth(depth->renderTarget, view->renderOffset(), WorkspaceScene::StereoDepthPass{
+                                                                                   .coding = *coding,
+                                                                                   .source = source,
+                                                                                   .pictureEye = pictureEye,
+                                                                                   .picture = renderTarget.texture(),
+                                                                                   .other = other,
+                                                                               });
+        }
+    }
+    if (graphics) {
+        scene->setStereoPlane(StereoPlane::Graphics);
+        if (auto graphicsInfo = view->layer()->beginStereoPlaneFrame(StereoPlane::Graphics)) {
+            renderer->setStereoEye(pictureEye);
+            view->paint(graphicsInfo->renderTarget, view->renderOffset(), graphicsInfo->renderTarget.transformedRect());
+            renderer->setStereoEye(StereoEye::None);
+        }
+        if (coding) {
+            if (auto graphicsDepth = view->layer()->beginStereoPlaneFrame(StereoPlane::GraphicsDepth)) {
+                // the chrome has no 3D content to estimate: its levels
+                scene->paintStereoDepth(graphicsDepth->renderTarget, view->renderOffset(), WorkspaceScene::StereoDepthPass{
+                                                                                               .coding = *coding,
+                                                                                               .source = source == StereoDepthSource::Flat ? source : StereoDepthSource::Desktop,
+                                                                                               .pictureEye = pictureEye,
+                                                                                           });
+            }
+        }
+    }
+    scene->setStereoPlane(std::nullopt);
+}
+
 static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendOutput *backendOutput, const std::shared_ptr<OutputFrame> &frame, const Region &surfaceDamage)
 {
     auto beginInfo = view->layer()->beginFrame();
@@ -453,7 +513,10 @@ static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendO
     }
     auto &[renderTarget, repaint] = beginInfo.value();
     const Region bufferDamage = surfaceDamage.united(repaint).intersected(renderTarget.transformedRect());
-    if (view->layer()->hasStereoEyes() && (showsStereoContent(view) || StereoDepth::isEnabled() || StereoDepth::effectsEnabled())) {
+    const QList<StereoPlane> stereoPlanes = view->layer()->stereoPlanes();
+    if (backendOutput && !stereoPlanes.isEmpty()) {
+        renderPictureAndDepth(view, backendOutput, stereoPlanes, renderTarget, bufferDamage, surfaceDamage);
+    } else if (view->layer()->hasStereoEyes() && (showsStereoContent(view) || StereoDepth::isEnabled() || StereoDepth::effectsEnabled())) {
         // stereo content or depth on a 3D or anaglyph output: the scene once per eye, each stereo
         // window showing that eye's view, each window at its level and everything else the same in both
         ItemRenderer *renderer = kwinApp()->scene()->renderer();

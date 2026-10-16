@@ -110,6 +110,26 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::beginRightEyeFrame()
     return m_surface.startRightEye();
 }
 
+QList<StereoPlane> EglGbmLayer::stereoPlanes() const
+{
+    if (m_type != OutputLayerType::Primary) {
+        return {};
+    }
+    switch (drmOutput()->activeStereoLayout()) {
+    case StereoLayout::LDepth:
+        return {StereoPlane::Depth};
+    case StereoLayout::LDepthGraphics:
+        return {StereoPlane::Depth, StereoPlane::Graphics, StereoPlane::GraphicsDepth};
+    default:
+        return {};
+    }
+}
+
+std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::beginStereoPlaneFrame(StereoPlane plane)
+{
+    return m_surface.startStereoPlane(plane);
+}
+
 bool EglGbmLayer::preparePresentationTest()
 {
     if (m_type != OutputLayerType::Primary && drmOutput()->shouldDisableNonPrimaryPlanes()) {

@@ -11,8 +11,10 @@
 #include "core/region.h"
 #include "effect/globals.h"
 
+#include <QColor>
 #include <QMatrix4x4>
 #include <memory>
+#include <optional>
 
 class QPainter;
 
@@ -68,11 +70,20 @@ public:
     StereoEye stereoEye() const;
     void setStereoEye(StereoEye eye);
 
+    /**
+     * The depth picture of a picture and depth output: with a colour set, every item but
+     * shadows is drawn as that one opaque colour, the sample of its depth (a shadow lies on
+     * what it falls on). Without one, items are drawn as they are.
+     */
+    std::optional<QColor> depthColor() const;
+    void setDepthColor(const std::optional<QColor> &color);
+
     bool stereoCapture() const;
     void setStereoCapture(bool enabled);
 
 private:
     StereoEye m_stereoEye = StereoEye::None;
+    std::optional<QColor> m_depthColor;
     bool m_stereoCapture = false;
 };
 

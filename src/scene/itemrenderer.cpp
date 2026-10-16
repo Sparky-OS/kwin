@@ -44,6 +44,16 @@ void ItemRenderer::setStereoEye(StereoEye eye)
     m_stereoEye = eye;
 }
 
+std::optional<QColor> ItemRenderer::depthColor() const
+{
+    return m_depthColor;
+}
+
+void ItemRenderer::setDepthColor(const std::optional<QColor> &color)
+{
+    m_depthColor = color;
+}
+
 bool ItemRenderer::stereoCapture() const
 {
     return m_stereoCapture;

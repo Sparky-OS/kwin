@@ -65,6 +65,8 @@
 #include "effect/effecthandler.h"
 #include "opengl/eglbackend.h"
 #include "opengl/eglcontext.h"
+#include "opengl/glframebuffer.h"
+#include "opengl/gltexture.h"
 #include "options.h"
 #include "scene/backgroundeffectitem.h"
 #include "scene/decorationitem.h"
@@ -73,6 +75,7 @@
 #include "scene/rootitem.h"
 #include "scene/shadowitem.h"
 #include "scene/stereodepth.h"
+#include "scene/stereodepthestimator.h"
 #include "scene/surfaceitem.h"
 #include "scene/windowitem.h"
 #include "utils/envvar.h"
@@ -621,6 +624,7 @@ void WorkspaceScene::preparePaintGenericScreen()
             .deviceRegion = Region::infinite(),
             .deviceOpaque = Region{},
             .mask = data.mask,
+            .transformedByEffect = bool(data.mask & PAINT_WINDOW_TRANSFORMED),
         });
     }
 }
@@ -650,6 +654,7 @@ void WorkspaceScene::preparePaintSimpleScreen()
         data.mask = m_paintContext.mask;
 
         effects->prePaintWindow(painted_delegate, windowItem->effectWindow(), data);
+        const bool transformedByEffect = data.mask & PAINT_WINDOW_TRANSFORMED;
 
         if (stereoDepthPainted(window)) {
             // each eye shows the window at its own place, and its shadow at the places of what it falls on
@@ -665,6 +670,7 @@ void WorkspaceScene::preparePaintSimpleScreen()
             .deviceRegion = Region{},
             .deviceOpaque = std::move(opaque),
             .mask = data.mask,
+            .transformedByEffect = transformedByEffect,
         });
     }
 }
@@ -780,6 +786,9 @@ void WorkspaceScene::paintGenericScreen(const RenderTarget &renderTarget, const 
 // The pointer, and the drag-and-drop icon that follows it, at the level of what is under the pointer
 void WorkspaceScene::paintOverlay(const RenderTarget &renderTarget, const RenderViewport &viewport, const Region &deviceRegion)
 {
+    if (!showsOverlayInStereoPlane()) {
+        return;
+    }
     WindowPaintData data;
     Rect bounds = viewport.mapToDeviceCoordinates(m_overlayItem->mapToScene(m_overlayItem->boundingRect())).toRect();
     const StereoEye eye = m_renderer->stereoEye();
@@ -811,7 +820,8 @@ void WorkspaceScene::paintSimpleScreen(const RenderTarget &renderTarget, const R
         Phase2Data *data = &m_paintContext.phase2Data[i];
         data->deviceRegion = visible & viewport.deviceRect();
 
-        if (!(data->mask & PAINT_WINDOW_TRANSFORMED)) {
+        // what is drawn in the other stereo plane covers nothing in this one
+        if (!(data->mask & PAINT_WINDOW_TRANSFORMED) && showsInStereoPlane(data->item->window())) {
             data->deviceRegion &= viewport.mapToDeviceCoordinatesAligned(data->item->mapToScene(data->item->boundingRect()));
 
             // TODO change effects API, so occlusion culling is per item, rather than per window
@@ -860,6 +870,9 @@ void WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
     if (deviceRegion.isEmpty()) { // completely clipped
         return;
     }
+    if (!showsInStereoPlane(item->window())) {
+        return;
+    }
 
     WindowPaintData data;
     EffectWindow *effectWindow = item->effectWindow();
@@ -897,6 +910,134 @@ void WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
 void WorkspaceScene::finalPaintWindow(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const Region &deviceRegion, WindowPaintData &data)
 {
     effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+}
+
+void WorkspaceScene::setStereoPlane(std::optional<StereoPlane> plane)
+{
+    m_stereoPlane = plane;
+}
+
+bool WorkspaceScene::showsInStereoPlane(const Window *window) const
+{
+    if (!m_stereoPlane) {
+        return true;
+    }
+    return StereoDepth::isDesktopChrome(window) == (*m_stereoPlane == StereoPlane::Graphics);
+}
+
+// the pointer is part of the graphics, over everything
+bool WorkspaceScene::showsOverlayInStereoPlane() const
+{
+    return !m_stereoPlane || *m_stereoPlane == StereoPlane::Graphics;
+}
+
+// In the depth picture each window drawn in this plane is one sample: that of its level's parallax
+// between the eyes, at its place in the picture's eye (the renderer draws it in its depth colour,
+// its shadow left out, since a shadow lies on what it falls on). Windows with 3D content, and
+// windows an effect moves, show what their two views tell when the source asks for the content's
+// depth: the depth of their pixels is estimated from the picture against the other eye, and
+// where the views don't tell it (a plain area matches at every parallax) they keep their level.
+// On a screen an effect transforms, nothing is where the levels put it, so all of it is
+// estimated, or at the screen's depth where the views don't tell.
+bool WorkspaceScene::paintStereoDepth(const RenderTarget &renderTarget, const QPoint &deviceOffset, const StereoDepthPass &pass)
+{
+    if (!painted_delegate || !renderTarget.framebuffer() || !openglContext()) {
+        return false;
+    }
+    const QSize size = renderTarget.size();
+    if (!m_depthDesktop || m_depthDesktop->size() != size) {
+        m_depthDesktopFramebuffer.reset();
+        m_depthDesktop = GLTexture::allocate(GL_RGBA8, size);
+        if (!m_depthDesktop) {
+            return false;
+        }
+        m_depthDesktopFramebuffer = std::make_unique<GLFramebuffer>(m_depthDesktop.get());
+        if (!m_depthDesktopFramebuffer->valid()) {
+            m_depthDesktopFramebuffer.reset();
+            m_depthDesktop.reset();
+            return false;
+        }
+    }
+    if (!m_depthEstimator) {
+        m_depthEstimator = std::make_unique<StereoDepthEstimator>();
+    }
+    m_depthDesktop->setContentTransform(renderTarget.transform());
+    const RenderTarget desktopTarget(m_depthDesktopFramebuffer.get());
+    const RenderViewport viewport(painted_delegate->viewport(), painted_delegate->scale(), desktopTarget, deviceOffset);
+
+    // StereoDepth's parallax is positive in front of the screen, where the left eye's copy is to
+    // the right of the right eye's; the coding's is the other eye's position minus the picture's
+    const auto colorOf = [&pass](int parallax) {
+        const int sample = pass.coding.sample(pass.pictureEye == StereoEye::Right ? parallax : -parallax);
+        return QColor(sample, sample, sample, 255);
+    };
+    // alpha zero asks for the estimate there, the colour is the sample where the views don't tell
+    const auto estimatedAt = [&colorOf](int parallax) {
+        QColor color = colorOf(parallax);
+        color.setAlpha(0);
+        return color;
+    };
+    const bool canEstimate = pass.source == StereoDepthSource::DesktopAndContent && pass.picture && pass.other;
+    const bool transformed = m_paintContext.mask & (PAINT_SCREEN_TRANSFORMED | PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS);
+    bool estimate = transformed && canEstimate;
+
+    m_renderer->beginFrame(desktopTarget, viewport);
+    const QColor background = estimate ? estimatedAt(0) : colorOf(0);
+    glClearColor(background.redF(), background.greenF(), background.blueF(), background.alphaF());
+    glClear(GL_COLOR_BUFFER_BIT);
+    if (!transformed && pass.source != StereoDepthSource::Flat) {
+        const auto filter = [this](Item *item) {
+            return !painted_delegate->shouldRenderItem(item);
+        };
+        const auto holeFilter = [this](Item *item) {
+            return painted_delegate->shouldRenderHole(item);
+        };
+        for (const Phase2Data &paintData : std::as_const(m_paintContext.phase2Data)) {
+            Window *window = paintData.item->window();
+            if (!showsInStereoPlane(window)) {
+                continue;
+            }
+            const int parallax = stereoParallax(window);
+            // a window at a depth level is where its level puts it; one an effect moves is not
+            const bool content = canEstimate && (window->holdsStereoContent() || paintData.transformedByEffect);
+            estimate |= content;
+            m_renderer->setDepthColor(content ? estimatedAt(parallax) : colorOf(parallax));
+            // at its place in the picture's eye, as paintWindow() puts it
+            WindowPaintData data;
+            const int shift = StereoDepth::eyeShift(parallax, pass.pictureEye);
+            if (shift) {
+                data.translate(shift / viewport.scale());
+            }
+            if (shift && window->isDesktop()) {
+                const int extra = 2 * ((std::abs(parallax) + 1) / 2);
+                const qreal width = window->frameGeometry().width() * viewport.scale();
+                data.setXScale((width + extra) / width);
+                data.translate(-extra / 2 / viewport.scale());
+            }
+            m_renderer->renderItem(desktopTarget, viewport, paintData.item, paintData.mask, Region::infinite(), data, filter, holeFilter);
+        }
+        if (showsOverlayInStereoPlane()) {
+            const int parallax = StereoDepth::isEnabled() && painted_screen && painted_screen->hasStereoEyes() ? pointerParallax() : 0;
+            m_renderer->setDepthColor(colorOf(parallax));
+            WindowPaintData data;
+            data.translate(StereoDepth::eyeShift(parallax, pass.pictureEye) / viewport.scale());
+            m_renderer->renderItem(desktopTarget, viewport, m_overlayItem.get(), PAINT_SCREEN_TRANSFORMED, Region::infinite(), data, filter, holeFilter);
+        }
+    }
+    m_renderer->setDepthColor(std::nullopt);
+    m_renderer->endFrame();
+
+    if (estimate) {
+        // the output's right, in pixels of the pictures with their first line at the bottom
+        const QSizeF bounds = renderTarget.transformedSize();
+        const QPointF right = renderTarget.transform().map(QPointF(1, 0), bounds) - renderTarget.transform().map(QPointF(0, 0), bounds);
+        const int range = std::max(4, int(std::round(StereoDepthCoding::s_range1920 * painted_delegate->deviceRect().width() / 1920)));
+        estimate = m_depthEstimator->estimate(pass.picture, pass.other, QVector2D(right.x(), -right.y()), range);
+    }
+    GLFramebuffer::pushFramebuffer(renderTarget.framebuffer());
+    const bool ok = m_depthEstimator->compose(size, m_depthDesktop.get(), estimate, pass.coding);
+    GLFramebuffer::popFramebuffer();
+    return ok;
 }
 
 void WorkspaceScene::repaintStereoDepth()

@@ -216,7 +216,7 @@ void ItemRendererOpenGL::createRenderNode(Item *item, RenderContext *context, co
     RenderGeometry geometry = clipQuads(item, context);
 
     if (auto shadowItem = qobject_cast<ShadowItem *>(item)) {
-        if (!geometry.isEmpty()) {
+        if (!geometry.isEmpty() && !context->depthColor) {
             const auto ninePatch = static_cast<NinePatchOpenGL *>(shadowItem->ninePatch());
             if (ninePatch->texture()) {
                 RenderNode &renderNode = context->renderNodes.emplace_back(RenderNode{
@@ -405,6 +405,7 @@ void ItemRendererOpenGL::renderItem(const RenderTarget &renderTarget, const Rend
         .renderOffset = viewport.renderOffset(),
         .stereoEye = stereoEye(),
         .stereoCapture = stereoCapture(),
+        .depthColor = depthColor(),
     };
 
     renderContext.transformStack.push(QMatrix4x4());
@@ -477,7 +478,11 @@ void ItemRendererOpenGL::renderItem(const RenderTarget &renderTarget, const Rend
             }
         }
 
-        if (renderNode.paintHole) {
+        if (renderContext.depthColor) {
+            // the depth picture: the item's place in one opaque sample, nothing blended
+            traits = ShaderTrait::UniformColor;
+            setBlendEnabled(false);
+        } else if (renderNode.paintHole) {
             traits = (traits & ShaderTrait::RoundedCorners) | ShaderTrait::UniformColor;
             glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             setBlendEnabled(true);
@@ -529,11 +534,14 @@ void ItemRendererOpenGL::renderItem(const RenderTarget &renderTarget, const Rend
             shader->setUniform(GLShader::IntUniform::Thickness, renderNode.borderThickness);
             shader->setUniform(GLShader::ColorUniform::Color, renderNode.borderColor);
         }
-        if (renderNode.paintHole) {
+        const bool solid = renderNode.paintHole || renderContext.depthColor;
+        if (renderContext.depthColor) {
+            shader->setUniform(GLShader::ColorUniform::Color, *renderContext.depthColor);
+        } else if (renderNode.paintHole) {
             shader->setUniform(GLShader::ColorUniform::Color, QColor(0, 0, 0, 255));
         }
 
-        for (int i = 0; i < renderNode.textures.count() && !renderNode.paintHole; ++i) {
+        for (int i = 0; i < renderNode.textures.count() && !solid; ++i) {
             glActiveTexture(GL_TEXTURE0 + i);
             renderNode.textures[i]->bind();
         }
@@ -541,7 +549,7 @@ void ItemRendererOpenGL::renderItem(const RenderTarget &renderTarget, const Rend
         vbo->draw(scissorRegion, GL_TRIANGLES, renderNode.firstVertex,
                   renderNode.vertexCount, renderContext.hardwareClipping);
 
-        for (int i = 0; i < renderNode.textures.count() && !renderNode.paintHole; ++i) {
+        for (int i = 0; i < renderNode.textures.count() && !solid; ++i) {
             glActiveTexture(GL_TEXTURE0 + i);
             renderNode.textures[i]->unbind();
         }

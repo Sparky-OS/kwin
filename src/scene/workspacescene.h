@@ -10,6 +10,7 @@
 #pragma once
 
 #include "core/renderviewport.h"
+#include "core/stereodepthcoding.h"
 #include "scene/scene.h"
 #include "scene/stereodepth.h"
 
@@ -21,6 +22,9 @@ namespace KWin
 class DragAndDropIconItem;
 class EffectWindow;
 class EglContext;
+class GLFramebuffer;
+class GLTexture;
+class StereoDepthEstimator;
 class Item;
 class Window;
 class WindowItem;
@@ -71,6 +75,32 @@ public:
 
     void setLayerDebugging(bool enable);
 
+    /**
+     * What paint() draws on an output that sends graphics apart from its picture (L + depth +
+     * graphics + graphics-depth): the picture (everything but the desktop's chrome), or the
+     * graphics (the desktop's chrome and the pointer). Nothing set draws everything.
+     */
+    void setStereoPlane(std::optional<StereoPlane> plane);
+
+    struct StereoDepthPass
+    {
+        StereoDepthCoding coding;
+        StereoDepthSource source = StereoDepthSource::DesktopAndContent;
+        // the eye the picture was drawn for: the left one, the right one with the eyes swapped
+        StereoEye pictureEye = StereoEye::Left;
+        // the picture as drawn and the other eye's view, for estimating the depth of 3D content
+        GLTexture *picture = nullptr;
+        GLTexture *other = nullptr;
+    };
+
+    /**
+     * Paints the depth picture of what the last paint() drew in the current stereo plane: each
+     * window at the sample of its level, 3D content at the sample of its estimated depth when
+     * the source asks for it and the other eye was drawn, and everything at the screen's depth
+     * for StereoDepthSource::Flat. Call it between prePaint() and postPaint().
+     */
+    bool paintStereoDepth(const RenderTarget &renderTarget, const QPoint &deviceOffset, const StereoDepthPass &pass);
+
 Q_SIGNALS:
     void preFrameRender();
     void frameRendered();
@@ -102,6 +132,8 @@ protected:
         Region deviceRegion;
         Region deviceOpaque;
         int mask = 0;
+        // an effect moves the window (mask also says transformed for a window at a depth level)
+        bool transformedByEffect = false;
     };
 
     struct PaintContext
@@ -120,6 +152,8 @@ protected:
 
 private:
     void paintOverlay(const RenderTarget &renderTarget, const RenderViewport &viewport, const Region &deviceRegion);
+    bool showsInStereoPlane(const Window *window) const;
+    bool showsOverlayInStereoPlane() const;
     void repaintStereoDepth();
     void updateStereoDepth();
     bool stereoDepthPainted(const Window *window) const;
@@ -141,6 +175,10 @@ private:
     std::unique_ptr<DragAndDropIconItem> m_dndIcon;
     std::unique_ptr<CursorItem> m_cursorItem;
     bool m_layerDebugging = false;
+    std::optional<StereoPlane> m_stereoPlane;
+    std::unique_ptr<StereoDepthEstimator> m_depthEstimator;
+    std::unique_ptr<GLTexture> m_depthDesktop;
+    std::unique_ptr<GLFramebuffer> m_depthDesktopFramebuffer;
 };
 
 } // namespace

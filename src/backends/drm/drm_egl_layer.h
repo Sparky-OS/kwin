@@ -32,6 +32,8 @@ public:
     bool doEndFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame) override;
     bool hasStereoEyes() const override;
     std::optional<OutputLayerBeginFrameInfo> beginRightEyeFrame() override;
+    QList<StereoPlane> stereoPlanes() const override;
+    std::optional<OutputLayerBeginFrameInfo> beginStereoPlaneFrame(StereoPlane plane) override;
     bool preparePresentationTest() override;
     std::shared_ptr<DrmFramebuffer> currentBuffer() const override;
     void releaseBuffers() override;

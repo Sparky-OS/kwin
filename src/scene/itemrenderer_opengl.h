@@ -64,6 +64,7 @@ public:
         const QPoint renderOffset;
         const StereoEye stereoEye;
         const bool stereoCapture;
+        const std::optional<QColor> depthColor;
     };
 
     ItemRendererOpenGL(EglDisplay *eglDisplay);
