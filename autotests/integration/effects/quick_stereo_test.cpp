@@ -224,7 +224,10 @@ void QuickStereoTest::init()
 {
     options->setStereoPoppedLimit(0);
     options->setStereoSunkLimit(0);
+    options->setStereoEffectPoppedLimit(0);
+    options->setStereoEffectSunkLimit(0);
     QVERIFY(!StereoDepth::isEnabled());
+    QVERIFY(!StereoDepth::effectsEnabled());
     Test::setOutputConfig({Test::OutputInfo{
         .geometry = Rect(QPoint(), s_outputSize),
         .modes = {OutputModeline(s_outputSize, 120000, OutputModeline::Flag::Stereo3DSequentialLeftFirst)},
