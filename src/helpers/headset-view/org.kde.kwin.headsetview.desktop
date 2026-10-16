@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Headset View
-Comment=Choose fit, pan or zoom for a headset display
+Name=Throw view
+Comment=Choose fit, pan or zoom for a Throw view
 Exec=kwin-headset-view
 Icon=video-display
 Categories=Qt;KDE;Settings;HardwareSettings;

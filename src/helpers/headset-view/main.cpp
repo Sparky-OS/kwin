@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     KLocalizedString::setApplicationDomain("kwin");
     QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"), QStringLiteral("org.kde.KWin"));
     QDialog dialog;
-    dialog.setWindowTitle(i18n("Headset View"));
+    dialog.setWindowTitle(i18n("Throw view"));
     auto layout = new QFormLayout(&dialog);
     auto outputs = new QComboBox(&dialog);
     auto mode = new QComboBox(&dialog);
@@ -79,13 +79,13 @@ int main(int argc, char **argv)
     QObject::connect(outputs, &QComboBox::currentIndexChanged, &dialog, load);
     load();
     buttons->button(QDialogButtonBox::Apply)->setEnabled(outputs->count() > 0);
-    status->setText(outputs->count() ? i18n("These settings affect the headset's mirrored view. The real monitor and its windows keep their placement.")
-                                    : i18n("Connect a headset display, then open this window again."));
+    status->setText(outputs->count() ? i18n("These settings affect the headset’s mirrored Throw view. The real monitor and its windows keep their placement.")
+                                    : i18n("Start Throwing to a headset, then open this window again."));
     QObject::connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked, &dialog, [&] {
         const QDBusReply<bool> result = kwin.call(QStringLiteral("setHeadsetView"), outputs->currentData().toString(),
                                                 mode->currentIndex(), zoom->value(), horizontal->value() / 100,
                                                 vertical->value() / 100, follow->isChecked(), active->isChecked());
-        status->setText(result.isValid() && result.value() ? i18n("Headset view saved.") : i18n("The headset view could not be saved. Check that it is still connected."));
+        status->setText(result.isValid() && result.value() ? i18n("Throw view saved.") : i18n("The Throw view could not be saved. Check that the headset is still connected."));
     });
     QObject::connect(preview, &QPushButton::clicked, &dialog, [&] {
         const auto state = outputs->currentData(Qt::UserRole + 1).toMap();
@@ -107,7 +107,7 @@ int main(int argc, char **argv)
         painter.drawRect(crop);
         painter.end();
         QDialog previewDialog(&dialog);
-        previewDialog.setWindowTitle(i18n("Headset view preview"));
+        previewDialog.setWindowTitle(i18n("Throw view preview"));
         QVBoxLayout layout(&previewDialog);
         QLabel image;
         image.setPixmap(picture);
