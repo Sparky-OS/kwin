@@ -71,16 +71,17 @@ vec4 sampleStereo(vec2 uv)
 vec4 stereoAreaSample()
 {
     vec2 footprint = max(fwidth(texcoord0) * stereoTextureSize, vec2(1.0));
+    vec2 center = texcoord0 * stereoTextureSize;
+    vec2 eyeLow = stereoEyeBounds.xy * stereoTextureSize + vec2(0.5);
+    vec2 eyeHigh = max(eyeLow, stereoEyeBounds.zw * stereoTextureSize - vec2(0.5));
     if (max(footprint.x, footprint.y) <= 1.0) {
-        return sampleStereo(texcoord0);
+        // Bilinear, without reaching into the other eye at its edge.
+        return sampleStereo(clamp(center, eyeLow, eyeHigh) / stereoTextureSize);
     }
     // Any shrink integrates the covered texel areas, clamping within this eye only;
     // an axis that is not shrunk covers one texel, which is bilinear.
-    vec2 center = texcoord0 * stereoTextureSize;
     vec2 low = center - footprint * 0.5;
     vec2 high = center + footprint * 0.5;
-    vec2 eyeLow = stereoEyeBounds.xy * stereoTextureSize + vec2(0.5);
-    vec2 eyeHigh = max(eyeLow, stereoEyeBounds.zw * stereoTextureSize - vec2(0.5));
     vec4 sum = vec4(0.0);
     // Subsampled chroma can change slope inside a luma texel pair.
 #if TRAIT_MAP_MULTI_PLANE_TEXTURE

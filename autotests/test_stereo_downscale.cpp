@@ -48,6 +48,8 @@ private Q_SLOTS:
         QTest::addRow("address 1.5x") << QSizeF(1.5, 1.5) << int(StereoContentSideBySideFull) << true;
         // a shrink in one axis is integrated while the other one is magnified
         QTest::addRow("address 1.5x by 0.75x") << QSizeF(1.5, 0.75) << int(StereoContentSideBySideFull) << true;
+        // a magnified eye takes no sample of the other eye at its edge
+        QTest::addRow("address 0.5x") << QSizeF(0.5, 0.5) << int(StereoContentSideBySideFull) << true;
     }
 
     void downscale()
