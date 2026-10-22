@@ -604,6 +604,8 @@ void DrmGpu::addDefunctCommit(std::unique_ptr<DrmCommit> &&commit)
 
 DrmPipeline::Error DrmGpu::presentStereoPair(DrmOutput *output, const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame)
 {
+    // An output scans out its own buffer, unless it is the second of a pair below.
+    output->setSharedPrimaryBuffer(nullptr);
     DrmOutput *partner = nullptr;
     if (output->isStereoPair()) {
         for (DrmOutput *candidate : std::as_const(m_drmOutputs)) {
