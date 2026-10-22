@@ -130,6 +130,7 @@ public:
     void addDefunctCommit(std::unique_ptr<DrmCommit> &&commit);
 
     DrmPipeline::Error presentStereoPair(DrmOutput *output, const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame);
+    void releaseStereoPair(DrmOutput *output);
 
 Q_SIGNALS:
     void activeChanged(bool active);
