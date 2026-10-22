@@ -57,7 +57,10 @@ static FormatSwitchBufferPtr createBuffer(int device, bool nv12)
 {
     constexpr int width = 64;
     constexpr int height = 64;
-    constexpr int bytes = width * height * 4;
+    // the rows of both formats 256 bytes apart: linear buffers on some GPUs, AMD's among them,
+    // need that pitch to be imported
+    constexpr int pitch = width * 4;
+    constexpr int bytes = pitch * height * 3 / 2;
     FileDescriptor memory(memfd_create("kwin-dmabuf-format-test", MFD_CLOEXEC | MFD_ALLOW_SEALING));
     if (!memory.isValid() || ftruncate(memory.get(), bytes) != 0) {
         return nullptr;
@@ -73,10 +76,10 @@ static FormatSwitchBufferPtr createBuffer(int device, bool nv12)
         const uint8_t levels[] = {16, 89, 162, 235};
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
-                data[y * width + x] = levels[(y >= height / 2) * 2 + (x >= width / 2)];
+                data[y * pitch + x] = levels[(y >= height / 2) * 2 + (x >= width / 2)];
             }
         }
-        std::fill(data + width * height, data + width * height * 3 / 2, 128);
+        std::fill(data + pitch * height, data + pitch * height * 3 / 2, 128);
     } else {
         const QRgb colors[] = {qRgb(255, 0, 0), qRgb(0, 255, 0), qRgb(0, 0, 255), qRgb(255, 255, 255)};
         auto pixels = reinterpret_cast<QRgb *>(data);
@@ -105,12 +108,12 @@ static FormatSwitchBufferPtr createBuffer(int device, bool nv12)
     attributes.modifier = DRM_FORMAT_MOD_LINEAR;
     attributes.planeCount = nv12 ? 2 : 1;
     attributes.device = 0;
-    attributes.pitch[0] = nv12 ? width : width * 4;
+    attributes.pitch[0] = pitch;
     attributes.fd[0] = std::move(dma);
     if (nv12) {
         attributes.fd[1] = attributes.fd[0].duplicate();
-        attributes.offset[1] = width * height;
-        attributes.pitch[1] = width;
+        attributes.offset[1] = pitch * height;
+        attributes.pitch[1] = pitch;
     }
     return buffer;
 }
