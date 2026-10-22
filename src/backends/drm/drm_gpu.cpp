@@ -503,7 +503,8 @@ DrmPipeline::Error DrmGpu::testPipelines()
                 layer->setTargetRect(Rect(QPoint(0, 0), pipeline->mode()->size()));
                 layer->setSourceRect(Rect(QPoint(0, 0), pipeline->mode()->size()));
                 layer->setEnabled(true);
-                // ensure we have suitable buffers for the test
+                // ensure we have suitable buffers for the test, not the buffer of a stereo pair's partner
+                layer->clearSharedBuffer();
                 if (!layer->preparePresentationTest()) {
                     return DrmPipeline::Error::InvalidArguments;
                 }
