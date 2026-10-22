@@ -605,6 +605,7 @@ void DrmGpu::addDefunctCommit(std::unique_ptr<DrmCommit> &&commit)
 DrmPipeline::Error DrmGpu::presentStereoPair(DrmOutput *output, const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame)
 {
     if (!output->isStereoPair()) {
+        releaseStereoPair(output);
         return output->pipeline()->present(layersToUpdate, frame);
     }
     DrmOutput *partner = nullptr;
@@ -683,9 +684,24 @@ DrmPipeline::Error DrmGpu::presentStereoPair(DrmOutput *output, const QList<Outp
     return DrmPipeline::Error::None;
 }
 
+void DrmGpu::releaseStereoPair(DrmOutput *output)
+{
+    // A frame waiting for a partner that changed or went away would never be presented,
+    // and its output would never render again. Dropping it lets its render loop continue.
+    const QString uuid = output->uuid();
+    for (auto it = m_pendingStereoPairs.begin(); it != m_pendingStereoPairs.end();) {
+        if (it->output == output || it.key().split(QLatin1Char('\n')).contains(uuid)) {
+            it = m_pendingStereoPairs.erase(it);
+        } else {
+            it++;
+        }
+    }
+}
+
 void DrmGpu::removeOutput(DrmOutput *output)
 {
     qCDebug(KWIN_DRM) << "Removing output" << output;
+    releaseStereoPair(output);
     m_drmOutputs.removeOne(output);
     Q_EMIT outputRemoved(output);
     m_pipelines.removeOne(output->pipeline());

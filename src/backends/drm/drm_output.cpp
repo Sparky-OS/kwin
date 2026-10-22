@@ -753,6 +753,10 @@ void DrmOutput::applyQueuedChanges(const std::shared_ptr<OutputChangeSet> &props
     maybeScheduleRepaints(*m_nextState);
     const bool nextOff = m_nextState->dpmsMode != DpmsMode::On;
     const bool currentOff = m_state.dpmsMode != DpmsMode::On;
+    if (m_nextState->stereoPartner != m_state.stereoPartner || m_nextState->stereoPairMode != m_state.stereoPairMode
+        || m_nextState->enabled != m_state.enabled || nextOff != currentOff) {
+        m_gpu->releaseStereoPair(this);
+    }
     if (nextOff != currentOff) {
         if (m_nextState->dpmsMode == DpmsMode::On) {
             m_renderLoop->uninhibit();
