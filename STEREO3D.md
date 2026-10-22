@@ -36,7 +36,7 @@ A new kind of 3D screen needs one new output filter, and every stereo program al
 
 ## One format inside
 
-**KWin talks full side by side:** both eyes at full size, left eye first, at any resolution.
+**KWin talks full side by side:** the two eyes as separate pictures next to each other, left eye first, each at the resolution it has.
 It is not a new format.
 It is HDMI 1.4's 3D structure 3 ("side by side full"), and the layout SteamVR writes its stereo screenshots in.
 
@@ -194,6 +194,11 @@ Tested on real hardware, with the kernel side in place, on a Sony KDL-46HX855 (a
 **X11 child windows, tested in containers (2026-10-16):** the 3D view of a program whose interface is 2D, Netgen's or gmsh's, is often a child window of its X11 window.
 Mesa lists a stereo child in its window's `_KDE_NET_WM_STEREO_CONTENT_CHILDREN`, KWin redirects it so Xwayland gives it a surface of its own, and KWin shows that surface one view per eye at the child's place, while the rest of the window is the same in both eyes.
 KWin announces this as version 5 of `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED`.
+**X11 views at their own resolution, tested in containers (2026-10-22):** an X11 window's buffer is its own pixmap, so on X11 the size a view is shown at is declared apart from its resolution, as a Wayland program sets its `wp_viewport` destination.
+A program lists it in `_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE` (CARDINAL/32, the width and the height one view is shown at, in display pixels): the two 1920x540 views of a half top-and-bottom 1920x1080 video make a 3840x540 X11 window whose place on screen is one view at 1920x1080.
+The X11 window keeps the program's own size, KWin resizes each view once, to the window's place, and the pointer reaches the first view at that place; a new declared size resizes the place, and maximizing or resizing the window changes only the size the views are drawn at.
+KWin announces this as version 6 of `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED`.
+**Every shrink is integrated (2026-10-22):** a view drawn smaller than its resolution, on either axis, is the average of the samples each pixel covers, taken within its own view; a view drawn at its size or larger is bilinear.
 **Anaglyph:** the same Dubois matrices (modern screens and CRT, in linear light) were tested in a game, Half-Life 2 handing its full side by side eyes to a gamescope effect, on the HX855 (2026-09-25, both profiles). In KWin it is built and switched by an environment variable for now; its first screen test comes with the toggle.
 **Planned, in this order:** the virtual 3D modes and their toggles, the other stereo formats, VR.
 
