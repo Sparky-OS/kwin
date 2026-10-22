@@ -604,19 +604,20 @@ void DrmGpu::addDefunctCommit(std::unique_ptr<DrmCommit> &&commit)
 
 DrmPipeline::Error DrmGpu::presentStereoPair(DrmOutput *output, const QList<OutputLayer *> &layersToUpdate, const std::shared_ptr<OutputFrame> &frame)
 {
-    if (!output->isStereoPair()) {
-        releaseStereoPair(output);
-        return output->pipeline()->present(layersToUpdate, frame);
-    }
     DrmOutput *partner = nullptr;
-    for (DrmOutput *candidate : std::as_const(m_drmOutputs)) {
-        if (candidate != output && candidate->uuid() == output->stereoPartner() && candidate->isEnabled()) {
-            partner = candidate;
-            break;
+    if (output->isStereoPair()) {
+        for (DrmOutput *candidate : std::as_const(m_drmOutputs)) {
+            if (candidate != output && candidate->uuid() == output->stereoPartner() && candidate->isEnabled()) {
+                partner = candidate;
+                break;
+            }
         }
     }
     if (!partner || partner->stereoPartner() != output->uuid() || partner->stereoPairMode() != output->stereoPairMode()) {
-        return DrmPipeline::Error::InvalidArguments;
+        // Not paired, or the partner is on another GPU or gone: the pair can't share
+        // one commit, so this output shows its own eye from its own buffer.
+        releaseStereoPair(output);
+        return output->pipeline()->present(layersToUpdate, frame);
     }
     QString firstUuid = output->uuid();
     QString secondUuid = partner->uuid();
