@@ -371,7 +371,7 @@ void DrmCommitThread::setModeInfo(uint32_t maximum, std::chrono::nanoseconds vbl
     m_safetyMargin = m_baseSafetyMargin + m_additionalSafetyMargin;
 }
 
-void DrmCommitThread::pageFlipped(std::chrono::nanoseconds timestamp)
+void DrmCommitThread::pageFlipped(std::chrono::nanoseconds timestamp, const DrmCommit *commit)
 {
     std::unique_lock lock(m_mutex);
     if (m_pageflipTimeoutDetected) {
@@ -379,7 +379,9 @@ void DrmCommitThread::pageFlipped(std::chrono::nanoseconds timestamp)
         m_pageflipTimeoutDetected = false;
     }
     m_lastPageflip = TimePoint(timestamp);
-    m_committed.reset();
+    if (!commit || m_committed.get() == commit) {
+        m_committed.reset();
+    }
     if (!m_commits.empty()) {
         m_targetPageflipTime = estimateNextVblank(std::chrono::steady_clock::now());
         m_commitPending.notify_all();

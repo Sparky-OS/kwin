@@ -683,7 +683,10 @@ DrmPipeline::Error DrmGpu::presentStereoPair(DrmOutput *output, const QList<Outp
         }
         pipeline->m_next.needsModesetProperties = pipeline->m_pending.needsModesetProperties = false;
     }
-    first.output->pipeline()->commitThread()->addCommit(std::move(commit));
+    // Both outputs' page flips complete this commit, so it always goes to the same one of
+    // their commit threads, which then never has it in flight beside a commit of the other.
+    DrmOutput *owner = output->uuid() == firstUuid ? output : partner;
+    owner->pipeline()->commitThread()->addCommit(std::move(commit));
     return DrmPipeline::Error::None;
 }
 
