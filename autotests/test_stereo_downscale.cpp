@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <QElapsedTimer>
 #include <QTest>
+#include <algorithm>
 #include <cmath>
 
 #include "core/rendertarget.h"
@@ -37,32 +38,44 @@ class StereoDownscaleTest : public QObject
 private Q_SLOTS:
     void downscale_data()
     {
-        QTest::addColumn<double>("factor");
+        QTest::addColumn<QSizeF>("factor");
         QTest::addColumn<int>("layout");
-        for (double factor : {1.0, 2.0, 3.5, 4.0, 8.0}) {
-            QTest::addRow("%.1fx", factor) << factor << int(StereoContentSideBySideFull);
+        QTest::addColumn<bool>("address");
+        for (double factor : {1.0, 1.5, 2.0, 3.5, 4.0, 8.0}) {
+            QTest::addRow("%.1fx", factor) << QSizeF(factor, factor) << int(StereoContentSideBySideFull) << false;
         }
+        // every sample carries its eye, column and row, wrapping at 256 like a ramp that jumps
+        QTest::addRow("address 1.5x") << QSizeF(1.5, 1.5) << int(StereoContentSideBySideFull) << true;
+        // a shrink in one axis is integrated while the other one is magnified
+        QTest::addRow("address 1.5x by 0.75x") << QSizeF(1.5, 0.75) << int(StereoContentSideBySideFull) << true;
     }
 
     void downscale()
     {
-        QFETCH(double, factor);
+        QFETCH(QSizeF, factor);
         QFETCH(int, layout);
+        QFETCH(bool, address);
         const auto display = EglDisplay::create(eglGetDisplay(EGL_DEFAULT_DISPLAY), nullptr);
         QVERIFY(display);
         const auto context = EglContext::create(display.get(), EGL_NO_CONFIG_KHR, nullptr);
         QVERIFY(context);
         QVERIFY(context->makeCurrent());
-        const QSize destination(32, 24);
-        const QSize eyeSize = destination * factor;
+        const QSize destination = address ? QSize(256, 192) : QSize(32, 24);
+        const QSize eyeSize(std::round(destination.width() * factor.width()), std::round(destination.height() * factor.height()));
         const auto content = StereoContent(layout);
         const bool sbs = isSideBySideStereoContent(content);
         QImage input(sbs ? QSize(eyeSize.width() * 2, eyeSize.height()) : QSize(eyeSize.width(), eyeSize.height() * 2), QImage::Format_RGBA8888_Premultiplied);
         for (int y = 0; y < input.height(); ++y) {
             for (int x = 0; x < input.width(); ++x) {
                 const bool second = sbs ? x >= eyeSize.width() : y >= eyeSize.height();
-                const int value = (((x % eyeSize.width()) % 4 == 0) != ((y % eyeSize.height()) % 4 == 0)) ? 255 : 0;
-                input.setPixel(x, y, second ? qRgb(0, value, 0) : qRgb(value, 0, 0));
+                const int ex = x % eyeSize.width();
+                const int ey = y % eyeSize.height();
+                if (address) {
+                    input.setPixel(x, y, qRgb(ex & 255, ey & 255, (second << 7) | ((ex >> 8) << 3) | (ey >> 8)));
+                } else {
+                    const int value = ((ex % 4 == 0) != (ey % 4 == 0)) ? 255 : 0;
+                    input.setPixel(x, y, second ? qRgb(0, value, 0) : qRgb(value, 0, 0));
+                }
             }
         }
         ItemRendererOpenGL renderer(display.get());
@@ -86,30 +99,37 @@ private Q_SLOTS:
             QImage reference(destination, QImage::Format_RGBA8888_Premultiplied);
             const bool second = eye == StereoEye::Right;
             const QPoint offset = second ? (sbs ? QPoint(eyeSize.width(), 0) : QPoint(0, eyeSize.height())) : QPoint();
+            // the area each pixel covers in the eye, at least one sample wide (a magnified axis is
+            // then bilinear), with the eye's own edge samples repeated beyond it
+            const QSizeF window(std::max(factor.width(), 1.0), std::max(factor.height(), 1.0));
             for (int y = 0; y < destination.height(); ++y) {
                 for (int x = 0; x < destination.width(); ++x) {
-                    double sumR = 0, sumG = 0;
-                    const double left = x * factor;
-                    const double top = y * factor;
-                    for (int sy = std::floor(top); sy < std::ceil(top + factor); ++sy) {
-                        for (int sx = std::floor(left); sx < std::ceil(left + factor); ++sx) {
-                            const double wx = std::min(double(sx + 1), left + factor) - std::max(double(sx), left);
-                            const double wy = std::min(double(sy + 1), top + factor) - std::max(double(sy), top);
-                            const QRgb pixel = input.pixel(offset.x() + sx, offset.y() + sy);
+                    double sumR = 0, sumG = 0, sumB = 0;
+                    const double left = (x + 0.5) * factor.width() - window.width() / 2;
+                    const double top = (y + 0.5) * factor.height() - window.height() / 2;
+                    for (int sy = std::floor(top); sy < std::ceil(top + window.height()); ++sy) {
+                        for (int sx = std::floor(left); sx < std::ceil(left + window.width()); ++sx) {
+                            const double wx = std::min(double(sx + 1), left + window.width()) - std::max(double(sx), left);
+                            const double wy = std::min(double(sy + 1), top + window.height()) - std::max(double(sy), top);
+                            const QRgb pixel = input.pixel(offset.x() + std::clamp(sx, 0, eyeSize.width() - 1),
+                                                           offset.y() + std::clamp(sy, 0, eyeSize.height() - 1));
                             sumR += qRed(pixel) * wx * wy;
                             sumG += qGreen(pixel) * wx * wy;
+                            sumB += qBlue(pixel) * wx * wy;
                         }
                     }
-                    reference.setPixel(x, y, qRgb(qRound(sumR / (factor * factor)), qRound(sumG / (factor * factor)), 0));
+                    const double area = window.width() * window.height();
+                    reference.setPixel(x, y, qRgb(qRound(sumR / area), qRound(sumG / area), qRound(sumB / area)));
                     const QRgb pixel = actual.pixel(x, y);
-                    QVERIFY2(std::abs(qRed(pixel) - qRound(double(sumR) / (factor * factor))) <= 1, "red differs from reference area average");
-                    QVERIFY2(std::abs(qGreen(pixel) - qRound(double(sumG) / (factor * factor))) <= 1, "green differs from reference area average");
-                    QCOMPARE(qBlue(pixel), 0);
+                    const QRgb expected = reference.pixel(x, y);
+                    if (std::abs(qRed(pixel) - qRed(expected)) > 1 || std::abs(qGreen(pixel) - qGreen(expected)) > 1 || std::abs(qBlue(pixel) - qBlue(expected)) > 1) {
+                        QFAIL(qPrintable(QStringLiteral("pixel %1,%2 is %3, the area average is %4").arg(x).arg(y).arg(pixel & 0xffffff, 6, 16, QLatin1Char('0')).arg(expected & 0xffffff, 6, 16, QLatin1Char('0'))));
+                    }
                 }
             }
             const QString artifacts = qEnvironmentVariable("STEREO_TEST_ARTIFACT_DIR");
-            if (!artifacts.isEmpty() && layout == 3 && (factor == 4 || factor == 8)) {
-                const QString stem = artifacts + QStringLiteral("/%1x-eye-%2").arg(factor).arg(int(eye));
+            if (!artifacts.isEmpty() && layout == 3 && (address || factor.width() == 4 || factor.width() == 8)) {
+                const QString stem = artifacts + QStringLiteral("/%1-eye-%2").arg(QLatin1StringView(QTest::currentDataTag())).arg(int(eye));
                 QVERIFY(input.save(stem + QStringLiteral("-input.png")));
                 QVERIFY(actual.save(stem + QStringLiteral("-actual.png")));
                 QVERIFY(reference.save(stem + QStringLiteral("-reference.png")));
