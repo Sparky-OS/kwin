@@ -4,10 +4,13 @@
 
 #include "core/gpumanager.h"
 #include "core/outputconfiguration.h"
+#include "core/renderloop.h"
 #include "core/session.h"
 #include "main.h"
 #include "drm_backend.h"
 #include "drm_buffer.h"
+#include "drm_commit.h"
+#include "drm_commit_thread.h"
 #include "drm_crtc.h"
 #include "drm_egl_layer.h"
 #include "drm_gpu.h"
@@ -78,6 +81,11 @@ class MockStereoPairTest : public QObject
 private Q_SLOTS:
     void atomicCommitReadsEachEye_data();
     void atomicCommitReadsEachEye();
+    void pairAcrossGpusShowsEachEye();
+    void unpairingReleasesWaitingFrame();
+    void removedPartnerReleasesWaitingFrame();
+    void pairCommitUsesOneCommitThread();
+    void pairPageflipKeepsPartnerCommit();
 };
 
 static std::unique_ptr<MockGpu> findRenderDevice()
@@ -243,6 +251,232 @@ void MockStereoPairTest::atomicCommitReadsEachEye()
     QCOMPARE(rotationProperty(planeB->id()), secondReflection == StereoPairReflection::Horizontal ? uint64_t(36)
                                              : secondReflection == StereoPairReflection::Vertical ? uint64_t(33) : uint64_t(1));
 
+}
+
+// Two outputs paired as left and right eye, on one GPU or on two, with a mode set and a layer each.
+class PairRig
+{
+public:
+    explicit PairRig(bool twoGpus)
+    {
+        mockGpus[0] = findRenderDevice();
+        mockGpus[1] = twoGpus ? findRenderDevice() : nullptr;
+        if (!mockGpus[0] || (twoGpus && !mockGpus[1])) {
+            return;
+        }
+        for (int i = 0; i < 2; i++) {
+            MockGpu *mockGpu = mockGpus[twoGpus ? i : 0].get();
+            connectors[i] = std::make_shared<MockConnector>(mockGpu);
+            connectors[i]->addMode(1920, 1080, 60);
+            mockGpu->connectors.push_back(connectors[i]);
+        }
+        session = Session::create(Session::Type::Noop);
+        backend = std::make_unique<DrmBackend>(session.get());
+        renderBackend = backend->createQPainterBackend();
+        for (int g = 0; g < (twoGpus ? 2 : 1); g++) {
+            gpus[g] = std::make_unique<DrmGpu>(backend.get(), mockGpus[g]->fd, DrmDevice::open(mockGpus[g]->devNode));
+            if (!gpus[g]->updateOutputs()) {
+                return;
+            }
+        }
+        for (int i = 0; i < 2; i++) {
+            const int g = twoGpus ? i : 0;
+            const int pipe = twoGpus ? 0 : i;
+            gpuOf[i] = gpus[g].get();
+            outputs[i] = gpuOf[i]->drmOutputs().value(pipe);
+            if (!outputs[i]) {
+                return;
+            }
+            planes[i] = std::make_unique<DrmPlane>(gpuOf[i], mockGpus[g]->planes[pipe]->id);
+            crtcs[i] = std::make_unique<DrmCrtc>(gpuOf[i], mockGpus[g]->crtcs[pipe]->id, pipe, planes[i].get());
+            if (!planes[i]->init() || !crtcs[i]->init()) {
+                return;
+            }
+            auto *mockFb = new MockFb(mockGpus[g].get(), 3840, 1080);
+            framebuffers[i] = std::make_shared<DrmFramebuffer>(std::make_shared<DrmFramebufferData>(gpuOf[i], mockFb->id, nullptr), nullptr, FileDescriptor{});
+            layers[i] = std::make_unique<PairLayer>(planes[i].get(), framebuffers[i]);
+            layers[i]->setEnabled(true);
+            layers[i]->setSourceRect(Rect(QPoint(0, 0), QSize(3840, 1080)));
+            layers[i]->setTargetRect(Rect(QPoint(0, 0), QSize(1920, 1080)));
+            DrmPipeline *pipeline = outputs[i]->pipeline();
+            pipeline->setCrtc(crtcs[i].get());
+            pipeline->setMode(outputs[i]->connector()->modes().front());
+            pipeline->setEnable(true);
+            pipeline->setActive(true);
+            pipeline->setLayers({layers[i].get()});
+        }
+        setPair(true);
+        for (int g = 0; g < (twoGpus ? 2 : 1); g++) {
+            QList<DrmPipeline *> pipelines;
+            for (int i = 0; i < 2; i++) {
+                if (gpuOf[i] == gpus[g].get()) {
+                    pipelines.push_back(outputs[i]->pipeline());
+                }
+            }
+            if (DrmPipeline::commitPipelines(pipelines, gpus[g].get(), DrmPipeline::CommitMode::CommitModeset) != DrmPipeline::Error::None) {
+                return;
+            }
+            mockGpus[g]->atomicCommits.clear();
+        }
+        valid = true;
+    }
+
+    // pairs (or unpairs) the two outputs the way the output configuration does
+    void setPair(bool paired)
+    {
+        OutputConfiguration configuration;
+        for (int i = 0; i < 2; i++) {
+            const auto change = configuration.changeSet(outputs[i]);
+            change->enabled = true;
+            change->uuid = i == 0 ? QStringLiteral("A") : QStringLiteral("B");
+            const QString partner = i == 0 ? QStringLiteral("B") : QStringLiteral("A");
+            change->stereoPartner = paired ? partner : QString();
+            change->stereoPairMode = paired ? StereoPairMode::DualProjection : StereoPairMode::None;
+            change->stereoPairRole = i == 0 ? StereoPairRole::Left : StereoPairRole::Right;
+        }
+        for (int i = 0; i < 2; i++) {
+            const auto change = configuration.changeSet(outputs[i]);
+            if (outputs[i]->queueChanges(change)) {
+                outputs[i]->applyQueuedChanges(change);
+            }
+        }
+    }
+
+    std::shared_ptr<OutputFrame> frame(int i)
+    {
+        outputs[i]->renderLoop()->prepareNewFrame();
+        return std::make_shared<OutputFrame>(outputs[i]->renderLoop(), std::chrono::nanoseconds(16'666'667));
+    }
+
+    DrmPipeline::Error present(int i, const std::shared_ptr<OutputFrame> &frame)
+    {
+        return gpuOf[i]->presentStereoPair(outputs[i], {layers[i].get()}, frame);
+    }
+
+    // SRC_X of output i's plane in the last atomic commit of its GPU that has it
+    std::optional<uint64_t> committedSourceX(int i) const
+    {
+        MockGpu *mockGpu = mockGpus[gpuOf[i] == gpus[0].get() ? 0 : 1].get();
+        const uint32_t prop = mockGpu->findPlane(planes[i]->id())->getPropId(QStringLiteral("SRC_X"));
+        for (auto commit = mockGpu->atomicCommits.crbegin(); commit != mockGpu->atomicCommits.crend(); ++commit) {
+            for (const Prop &value : *commit) {
+                if (value.obj == planes[i]->id() && value.prop == prop) {
+                    return value.value;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    struct ManagerScope
+    {
+        ManagerScope()
+        {
+            GpuManager::s_self = std::make_unique<GpuManager>();
+        }
+        ~ManagerScope()
+        {
+            GpuManager::s_self.reset();
+        }
+    } manager;
+    bool valid = false;
+    std::unique_ptr<MockGpu> mockGpus[2];
+    std::unique_ptr<Session> session;
+    std::unique_ptr<DrmBackend> backend;
+    std::unique_ptr<QPainterBackend> renderBackend;
+    std::unique_ptr<DrmGpu> gpus[2];
+    DrmGpu *gpuOf[2] = {};
+    DrmOutput *outputs[2] = {};
+    std::unique_ptr<DrmPlane> planes[2];
+    std::unique_ptr<DrmCrtc> crtcs[2];
+    std::shared_ptr<DrmFramebuffer> framebuffers[2];
+    std::unique_ptr<PairLayer> layers[2];
+    std::shared_ptr<MockConnector> connectors[2];
+};
+
+void MockStereoPairTest::pairAcrossGpusShowsEachEye()
+{
+    // A pair whose outputs sit on two GPUs cannot share one atomic commit:
+    // each output still has to show its own eye, and never fail to present.
+    PairRig rig(true);
+    QVERIFY(rig.valid);
+    QVERIFY(rig.outputs[0]->isStereoPair());
+    QVERIFY(rig.outputs[1]->isStereoPair());
+    for (int i = 0; i < 2; i++) {
+        QCOMPARE(rig.present(i, rig.frame(i)), DrmPipeline::Error::None);
+    }
+    QTRY_VERIFY(rig.committedSourceX(0).has_value());
+    QTRY_VERIFY(rig.committedSourceX(1).has_value());
+    QCOMPARE(*rig.committedSourceX(0), uint64_t(0));
+    QCOMPARE(*rig.committedSourceX(1), uint64_t(1920) << 16);
+}
+
+void MockStereoPairTest::unpairingReleasesWaitingFrame()
+{
+    // The first output of a pair to present waits for its partner. When the
+    // pair is undone before the partner presents, the waiting frame has to be
+    // released, or that output never renders again.
+    PairRig rig(false);
+    QVERIFY(rig.valid);
+    std::weak_ptr<OutputFrame> waiting;
+    {
+        const auto frame = rig.frame(0);
+        waiting = frame;
+        QCOMPARE(rig.present(0, frame), DrmPipeline::Error::None);
+    }
+    QVERIFY(!waiting.expired());
+    rig.setPair(false);
+    QVERIFY(!rig.outputs[0]->isStereoPair());
+    QCOMPARE(rig.present(1, rig.frame(1)), DrmPipeline::Error::None);
+    QVERIFY(waiting.expired());
+}
+
+void MockStereoPairTest::removedPartnerReleasesWaitingFrame()
+{
+    PairRig rig(false);
+    QVERIFY(rig.valid);
+    std::weak_ptr<OutputFrame> waiting;
+    {
+        const auto frame = rig.frame(0);
+        waiting = frame;
+        QCOMPARE(rig.present(0, frame), DrmPipeline::Error::None);
+    }
+    QVERIFY(!waiting.expired());
+    rig.mockGpus[0]->connectors.removeOne(rig.connectors[1]);
+    QVERIFY(rig.gpus[0]->updateOutputs());
+    QCOMPARE(rig.gpus[0]->drmOutputs().size(), 1);
+    QVERIFY(waiting.expired());
+}
+
+void MockStereoPairTest::pairCommitUsesOneCommitThread()
+{
+    // Whichever output of a pair presents first, the pair's commit has to go
+    // to the same commit thread, so that the two threads never have commits
+    // for the same planes in flight at once.
+    PairRig rig(false);
+    QVERIFY(rig.valid);
+    QCOMPARE(rig.present(1, rig.frame(1)), DrmPipeline::Error::None);
+    QCOMPARE(rig.present(0, rig.frame(0)), DrmPipeline::Error::None);
+    QVERIFY(rig.outputs[0]->pipeline()->commitThread()->pageflipsPending());
+    QVERIFY(!rig.outputs[1]->pipeline()->commitThread()->pageflipsPending());
+}
+
+void MockStereoPairTest::pairPageflipKeepsPartnerCommit()
+{
+    // The page flip of a pair's commit must not release a commit that the
+    // partner's own commit thread has in flight.
+    PairRig rig(false);
+    QVERIFY(rig.valid);
+    DrmPipeline *partner = rig.outputs[1]->pipeline();
+    partner->commitThread()->setPendingCommit(std::make_unique<DrmLegacyCommit>(partner, rig.framebuffers[1], rig.frame(1)));
+    QVERIFY(partner->commitThread()->pageflipsPending());
+    auto pairCommit = std::make_unique<DrmAtomicCommit>(QList<DrmPipeline *>{rig.outputs[0]->pipeline(), partner});
+    pairCommit->pageFlipped(std::chrono::steady_clock::now().time_since_epoch(), std::nullopt);
+    pairCommit->pageFlipped(std::chrono::steady_clock::now().time_since_epoch(), std::nullopt);
+    const bool kept = partner->commitThread()->pageflipsPending();
+    // complete the partner's own commit, which releases its frame
+    partner->pageFlipped(std::chrono::steady_clock::now().time_since_epoch(), std::nullopt, std::nullopt);
+    QVERIFY(kept);
 }
 
 int main(int argc, char **argv)
