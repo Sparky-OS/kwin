@@ -207,9 +207,14 @@ void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp, std::optio
     // The commit thread that owns this commit destroys it in pageFlipped(). The pipelines
     // of a stereo pair's commit release only this commit, not one their other thread has in flight.
     const DrmCommit *pairCommit = !m_modeset && m_pipelines.size() > 1 ? this : nullptr;
+    const QList<DrmPipeline *> gpuPipelines = m_gpu->pipelines();
     QList<std::pair<DrmPipeline *, std::optional<StereoEye>>> completedPipelines;
     completedPipelines.reserve(m_pipelines.size());
     for (const auto pipeline : std::as_const(m_pipelines)) {
+        // an output of a stereo pair can be removed while their commit is in flight
+        if (pairCommit && !gpuPipelines.contains(pipeline)) {
+            continue;
+        }
         completedPipelines.emplace_back(pipeline, frameSequentialEye(pipeline));
     }
     for (const auto &[pipeline, eye] : std::as_const(completedPipelines)) {
