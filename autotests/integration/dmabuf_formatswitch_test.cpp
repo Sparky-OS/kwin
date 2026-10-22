@@ -43,7 +43,17 @@ public:
     }
 };
 
-static std::unique_ptr<FormatSwitchBuffer> createBuffer(int device, bool nv12)
+// a GraphicsBuffer is dropped, never deleted
+struct DropBuffer
+{
+    void operator()(GraphicsBuffer *buffer) const
+    {
+        buffer->drop();
+    }
+};
+using FormatSwitchBufferPtr = std::unique_ptr<FormatSwitchBuffer, DropBuffer>;
+
+static FormatSwitchBufferPtr createBuffer(int device, bool nv12)
 {
     constexpr int width = 64;
     constexpr int height = 64;
@@ -87,7 +97,7 @@ static std::unique_ptr<FormatSwitchBuffer> createBuffer(int device, bool nv12)
     if (!dma.isValid()) {
         return nullptr;
     }
-    auto buffer = std::make_unique<FormatSwitchBuffer>();
+    FormatSwitchBufferPtr buffer(new FormatSwitchBuffer);
     auto &attributes = buffer->attributes;
     attributes.width = width;
     attributes.height = height;
@@ -137,7 +147,7 @@ private Q_SLOTS:
         if (!device.isValid()) {
             QSKIP("This regression requires the isolated guest's udmabuf device");
         }
-        std::vector<std::unique_ptr<FormatSwitchBuffer>> buffers;
+        std::vector<FormatSwitchBufferPtr> buffers;
         std::vector<wl_buffer *> clientBuffers;
         const auto cleanup = qScopeGuard([&] {
             for (auto buffer : clientBuffers) {
@@ -163,7 +173,7 @@ private Q_SLOTS:
             QSignalSpy rendered(kwinApp()->scene(), &WorkspaceScene::frameRendered);
             surface->attachBuffer(clientBuffer);
             surface->damage(QRect(0, 0, 64, 64));
-            surface->commit();
+            surface->commit(KWayland::Client::Surface::CommitFlag::None);
             if (!window) {
                 window = Test::waitForWaylandWindowShown();
                 QVERIFY(window);
