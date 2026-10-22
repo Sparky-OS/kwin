@@ -386,6 +386,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     auto stereoContentCookie = fetchStereoContent();
     auto stereoContentClassCookie = fetchStereoContentClass();
     auto stereoContentVersionCookie = fetchStereoContentVersion();
+    auto stereoContentOneViewSizeCookie = fetchStereoContentOneViewSize();
     auto transientCookie = fetchTransient();
     auto activitiesCookie = fetchActivities();
     auto applicationMenuServiceNameCookie = fetchApplicationMenuServiceName();
@@ -411,6 +412,7 @@ bool X11Window::manage(xcb_window_t w, bool isMapped)
     getSyncCounter();
     setCaption(readName());
     readStereoContentVersion(stereoContentVersionCookie);
+    readStereoContentOneViewSize(stereoContentOneViewSizeCookie);
     readStereoContent(stereoContentCookie);
     readStereoContentClass(stereoContentClassCookie);
     setupStereoChildren();
@@ -3147,20 +3149,41 @@ QSizeF X11Window::stereoClientScale() const
 
 // The X11 window against its place on screen: it holds both views of a full-resolution stereo
 // window, unless the program declares version 4 of the declaration, keeps its X11 window one
-// eye wide and presents a buffer twice as wide, holding both eyes.
+// eye wide and presents a buffer twice as wide, holding both eyes. A program that declares the
+// size one view is shown at has its views at their own resolution (stereoViewScale()).
 QSizeF X11Window::stereoWindowScale() const
 {
+    const QSizeF view = stereoViewScale();
     if (m_stereoContentVersion >= 4 && declaredStereoContent() == stereoContent()) {
-        return QSizeF(1, 1);
+        return view;
     }
-    return stereoClientScale();
+    const QSizeF layout = stereoClientScale();
+    return QSizeF(layout.width() * view.width(), layout.height() * view.height());
 }
 
 // The units of a program's own sizes against its place on screen: one view for a program
 // that declares stereo itself, the X11 window for one declared by a window rule.
 QSizeF X11Window::programSizeScale() const
 {
-    return declaredStereoContent() == stereoContent() ? QSizeF(1, 1) : stereoClientScale();
+    return declaredStereoContent() == stereoContent() ? stereoViewScale() : stereoClientScale();
+}
+
+// A program that declares stereo itself can declare the size one view is shown at, as a Wayland
+// surface's viewport destination: its X11 window keeps the program's own size, so its views keep
+// their own resolution, and its place on screen is one view at that size, which KWin resizes once.
+bool X11Window::hasStereoOneViewSize() const
+{
+    return !m_stereoOneViewSize.isEmpty() && !m_programSize.isEmpty() && stereoContent() != StereoContentNone
+        && declaredStereoContent() == stereoContent();
+}
+
+// One view of the program's own size against the size it is shown at.
+QSizeF X11Window::stereoViewScale() const
+{
+    if (!hasStereoOneViewSize()) {
+        return QSizeF(1, 1);
+    }
+    return QSizeF(m_programSize.width() / m_stereoOneViewSize.width(), m_programSize.height() / m_stereoOneViewSize.height());
 }
 
 // Input on a full-resolution stereo window goes to its left view: one view of the X11
@@ -3317,8 +3340,10 @@ void X11Window::configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, q
     if (value_mask & XCB_CONFIG_WINDOW_HEIGHT) {
         m_programSize.setHeight(rh);
     }
-    rw /= m_programSizeScale.width();
-    rh /= m_programSizeScale.height();
+    // a window that declares the size one view is shown at keeps that place for any size of its own
+    const QSizeF programScale = hasStereoOneViewSize() ? programSizeScale() : m_programSizeScale;
+    rw /= programScale.width();
+    rh /= programScale.height();
 
     // "maximized" is a user setting -> we do not allow the client to resize itself
     // away from this & against the users explicit wish
@@ -3714,9 +3739,10 @@ void X11Window::configure(const Rect &nativeGeometry)
         }
     }
     if (m_stereoClientScale != QSizeF(1, 1)) {
-        if (isFullScreen() && !m_programSize.isEmpty()) {
+        if ((isFullScreen() || hasStereoOneViewSize()) && !m_programSize.isEmpty()) {
             // fullscreen keeps the program's own frame (its rendering stays at full size)
-            // and the output's 3D mode scales it, whatever its resolution
+            // and the output's 3D mode scales it, whatever its resolution; so does a window
+            // that declares the size one view is shown at, which KWin resizes to its place
             effectiveGeometry.setSize(Xcb::toXNative(QSizeF(m_programSize.width() * m_stereoWindowScale.width() / m_programSizeScale.width(),
                                                             m_programSize.height() * m_stereoWindowScale.height() / m_programSizeScale.height())));
         } else {
@@ -4056,7 +4082,8 @@ void X11Window::doInteractiveResizeSync(const RectF &rect)
         return;
     }
 
-    if (!m_syncRequest.enabled) {
+    // the X11 window of a window that declares the size one view is shown at keeps its own size
+    if (!m_syncRequest.enabled || hasStereoOneViewSize()) {
         moveResize(rect);
     } else {
         setMoveResizeGeometry(moveResizeFrameGeometry);
@@ -4310,6 +4337,32 @@ void X11Window::getStereoContentVersion()
 {
     auto property = fetchStereoContentVersion();
     readStereoContentVersion(property);
+    handleStereoContentChanged();
+}
+
+Xcb::Property X11Window::fetchStereoContentOneViewSize() const
+{
+    return Xcb::Property(false, window(), atoms->kde_net_wm_stereo_content_one_view_size, XCB_ATOM_CARDINAL, 0, 2);
+}
+
+void X11Window::readStereoContentOneViewSize(Xcb::Property &property)
+{
+    // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE: CARDINAL/32, exactly two values, the width and the
+    // height one view is shown at, in display pixels. Absent, malformed, zero or beyond X11's
+    // coordinates means none: the views are shown at the program's own size.
+    const auto values = property.array<uint32_t>();
+    if (!values || values->size() != 2 || property.data()->bytes_after != 0
+        || (*values)[0] == 0 || (*values)[1] == 0 || (*values)[0] > 32767 || (*values)[1] > 32767) {
+        m_stereoOneViewSize = QSizeF();
+        return;
+    }
+    m_stereoOneViewSize = Xcb::fromXNative(QSize((*values)[0], (*values)[1]));
+}
+
+void X11Window::getStereoContentOneViewSize()
+{
+    auto property = fetchStereoContentOneViewSize();
+    readStereoContentOneViewSize(property);
     handleStereoContentChanged();
 }
 

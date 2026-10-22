@@ -552,6 +552,8 @@ void X11Window::propertyNotifyEvent(xcb_property_notify_event_t *e)
             getStereoContentClass();
         } else if (e->atom == atoms->kde_net_wm_stereo_content_version) {
             getStereoContentVersion();
+        } else if (e->atom == atoms->kde_net_wm_stereo_content_one_view_size) {
+            getStereoContentOneViewSize();
         } else if (e->atom == atoms->kde_net_wm_stereo_content_children) {
             if (m_stereoChildren) {
                 m_stereoChildren->update();

@@ -125,8 +125,12 @@ RootInfo *RootInfo::create()
     // the X11 window of a program that declares version 4 in
     // _KDE_NET_WM_STEREO_CONTENT_VERSION one eye wide: its buffer holds both;
     // 5 also shows the child windows a window lists in
-    // _KDE_NET_WM_STEREO_CONTENT_CHILDREN, each by its own declaration).
-    const uint32_t stereoContentSupported = 5;
+    // _KDE_NET_WM_STEREO_CONTENT_CHILDREN, each by its own declaration;
+    // 6 also takes the size one view is shown at from
+    // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE: the X11 window keeps the
+    // program's own size, its views at their own resolution, and its place on
+    // screen is one view at that size, as a Wayland surface's viewport destination).
+    const uint32_t stereoContentSupported = 6;
     xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, kwinApp()->x11RootWindow(),
                         atoms->kde_net_wm_stereo_content_supported, XCB_ATOM_CARDINAL, 32, 1, &stereoContentSupported);
 

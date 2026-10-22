@@ -141,6 +141,8 @@ private Q_SLOTS:
     void testStereoContentDeclarationOneEyeWide_data();
     void testStereoContentDeclarationOneEyeWide();
     void testStereoContentDeclarationMalformed();
+    void testStereoContentOneViewSize_data();
+    void testStereoContentOneViewSize();
     void testStereoContentDeclarationRulePrecedence();
     void testStereoChildWindow();
     void testStereoChildWindowListedBeforeMapping();
@@ -3992,7 +3994,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 5u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 6u);
 
     const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -4065,6 +4067,93 @@ void X11WindowTest::testStereoContentDeclarationOneEyeWide()
 
     Xcb::WindowGeometry geometry(window->window());
     QCOMPARE(geometry.rect().size(), QSize(x11Width, 100));
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoContentOneViewSize_data()
+{
+    QTest::addColumn<QSize>("programSize");
+    QTest::addColumn<QSize>("oneViewSize");
+
+    // a half top and bottom picture: two views of 200x50, each shown at 200x100
+    QTest::addRow("half top and bottom") << QSize(200, 50) << QSize(200, 100);
+    // a half side by side picture: two views of 100x100, each shown at 200x100
+    QTest::addRow("half side by side") << QSize(100, 100) << QSize(200, 100);
+}
+
+void X11WindowTest::testStereoContentOneViewSize()
+{
+    // This test verifies that a program declaring the size one view is shown at, in
+    // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE, keeps its X11 window at its views' own
+    // resolution, both views side by side, while its place on screen, the size its views are
+    // drawn at and its input are one view at the declared size, and that the place follows the
+    // property when it changes.
+
+    QFETCH(QSize, programSize);
+    QFETCH(QSize, oneViewSize);
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    const uint32_t value = StereoContentSideBySideFull;
+    const uint32_t viewSize[] = {uint32_t(oneViewSize.width()), uint32_t(oneViewSize.height())};
+    X11Window *window = createWindow(c.get(), Rect(QPoint(0, 0), programSize), [&](xcb_window_t windowId) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &value);
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content_one_view_size,
+                            XCB_ATOM_CARDINAL, 32, 2, viewSize);
+    });
+    QVERIFY(window);
+    QCOMPARE(window->stereoContent(), StereoContentSideBySideFull);
+
+    const auto x11Size = [&]() {
+        UniqueCPtr<xcb_get_geometry_reply_t> geometry(xcb_get_geometry_reply(c.get(), xcb_get_geometry(c.get(), window->window()), nullptr));
+        return geometry ? QSize(geometry->width, geometry->height) : QSize();
+    };
+    const QSize bothViews(programSize.width() * 2, programSize.height());
+
+    // the place on screen is one view at the declared size; the X11 window holds both views
+    // at the program's own resolution
+    QCOMPARE(window->clientSize(), Xcb::fromXNative(oneViewSize));
+    QTRY_COMPARE(x11Size(), bothViews);
+    // the program draws into its larger window, and Xwayland commits it
+    const uint32_t background = 0x00ff0000;
+    xcb_change_window_attributes(c.get(), window->window(), XCB_CW_BACK_PIXEL, &background);
+    xcb_clear_area(c.get(), true, window->window(), 0, 0, 0, 0);
+    xcb_flush(c.get());
+
+    // each view is drawn at its place, and the pointer over it reaches the first view
+    QTRY_VERIFY(window->surface() && window->windowItem() && window->windowItem()->surfaceItem());
+    SurfaceItem *surfaceItem = window->windowItem()->surfaceItem();
+    QTRY_COMPARE(window->surface()->size(), Xcb::fromXNative(bothViews));
+    QCOMPARE(surfaceItem->destinationSize(), Xcb::fromXNative(oneViewSize));
+    const QPointF onScreen = window->bufferGeometry().topLeft() + QPointF(window->clientSize().width() * 3 / 4, window->clientSize().height() * 3 / 4);
+    QCOMPARE(window->mapToLocal(onScreen), QPointF(Xcb::fromXNative(programSize.width()) * 3 / 4, Xcb::fromXNative(programSize.height()) * 3 / 4));
+    QVERIFY(window->isShownSurfacePoint(window->mapToLocal(onScreen)));
+
+    // a new size for the views moves the place, and the X11 window keeps the program's size
+    const uint32_t larger[] = {uint32_t(oneViewSize.width() * 3 / 2), uint32_t(oneViewSize.height() * 3 / 2)};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_one_view_size,
+                        XCB_ATOM_CARDINAL, 32, 2, larger);
+    xcb_flush(c.get());
+    QTRY_COMPARE(window->clientSize(), Xcb::fromXNative(QSize(larger[0], larger[1])));
+    QTRY_COMPARE(surfaceItem->destinationSize(), Xcb::fromXNative(QSize(larger[0], larger[1])));
+    QCOMPARE(x11Size(), bothViews);
+
+    // a place the user gives the window is where its views are drawn, still at their own resolution
+    const QSizeF placed = Xcb::fromXNative(QSize(300, 120));
+    window->moveResize(RectF(window->frameGeometry().topLeft(), window->clientSizeToFrameSize(placed)));
+    QTRY_COMPARE(window->clientSize(), placed);
+    QTRY_COMPARE(surfaceItem->destinationSize(), placed);
+    QCOMPARE(x11Size(), bothViews);
+
+    // without the size the window is one view of the program's own size again
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_one_view_size);
+    xcb_flush(c.get());
+    QTRY_COMPARE(x11Size(), Xcb::toXNative(QSizeF(window->clientSize().width() * 2, window->clientSize().height())));
 
     xcb_unmap_window(c.get(), window->window());
     xcb_destroy_window(c.get(), window->window());

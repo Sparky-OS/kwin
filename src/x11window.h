@@ -323,6 +323,11 @@ private:
     Xcb::Property fetchStereoContentVersion() const;
     void readStereoContentVersion(Xcb::Property &property);
     void getStereoContentVersion();
+    Xcb::Property fetchStereoContentOneViewSize() const;
+    void readStereoContentOneViewSize(Xcb::Property &property);
+    void getStereoContentOneViewSize();
+    bool hasStereoOneViewSize() const;
+    QSizeF stereoViewScale() const;
     void setupStereoChildren();
 
     void configureRequest(int value_mask, qreal rx, qreal ry, qreal rw, qreal rh, int gravity, bool from_tool);
@@ -373,6 +378,8 @@ private:
     QSizeF m_stereoClientScale = QSizeF(1, 1);
     QSizeF m_stereoWindowScale = QSizeF(1, 1);
     uint32_t m_stereoContentVersion = 0;
+    // the size one view is shown at, as the program declares it
+    QSizeF m_stereoOneViewSize;
     std::unique_ptr<X11StereoChildren> m_stereoChildren;
     // how much larger the program's own sizes are than its place on screen
     QSizeF m_programSizeScale = QSizeF(1, 1);
