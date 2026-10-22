@@ -180,9 +180,9 @@ void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp, std::optio
             m_firstPageflipTimestamp = timestamp;
         }
         --m_pendingPageflips;
-        if (m_pendingPageflips > 0) {
-            return;
-        }
+        return;
+    }
+    if (m_firstPageflipTimestamp) {
         qCDebug(KWIN_DRM) << "Stereo pair pageflip gap"
                           << std::chrono::duration_cast<std::chrono::microseconds>(timestamp - *m_firstPageflipTimestamp).count() << "us";
     }
