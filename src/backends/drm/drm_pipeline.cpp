@@ -566,7 +566,7 @@ DrmGpu *DrmPipeline::gpu() const
     return m_connector->gpu();
 }
 
-void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence, std::optional<StereoEye> submittedEye)
+void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<uint32_t> sequence, std::optional<StereoEye> submittedEye, const DrmCommit *commit)
 {
     const StereoLayout stereoLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
     if (sequence && submittedEye && isFrameSequential(stereoLayout)) {
@@ -580,7 +580,7 @@ void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<
     if (m_output) {
         RenderLoopPrivate::get(m_output->renderLoop())->notifyVblank(timestamp);
     }
-    m_commitThread->pageFlipped(timestamp);
+    m_commitThread->pageFlipped(timestamp, commit);
     // the commit thread adjusts the safety margin on every commit
     if (m_output) {
         m_output->renderLoop()->setPresentationSafetyMargin(m_commitThread->safetyMargin());

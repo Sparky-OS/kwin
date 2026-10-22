@@ -36,7 +36,7 @@ public:
     void setPendingCommit(std::unique_ptr<DrmLegacyCommit> &&commit);
 
     void setModeInfo(uint32_t maximum, std::chrono::nanoseconds vblankTime);
-    void pageFlipped(std::chrono::nanoseconds timestamp);
+    void pageFlipped(std::chrono::nanoseconds timestamp, const DrmCommit *commit = nullptr);
     bool pageflipsPending();
     /**
      * @return how long before the desired presentation timestamp the commit has to be added
