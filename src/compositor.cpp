@@ -18,12 +18,18 @@
 #include "core/outputlayer.h"
 #include "core/renderbackend.h"
 #include "core/renderloop.h"
+#include "core/stereoeyepair.h"
+#include "core/syncobjtimeline.h"
 #include "cursor.h"
 #include "cursorsource.h"
 #include "dbusinterface.h"
 #include "effect/effecthandler.h"
 #include "ftrace.h"
 #include "opengl/eglbackend.h"
+#include "opengl/eglcontext.h"
+#include "opengl/eglnativefence.h"
+#include "opengl/eglswapchain.h"
+#include "opengl/glframebuffer.h"
 #include "opengl/glplatform.h"
 #include "qpainter/qpainterbackend.h"
 #include "renderloopdrivenqanimationdriver.h"
@@ -56,6 +62,10 @@
 
 namespace KWin
 {
+
+// KWIN_STEREO_REPLICA_COPY=0: every output paints the scene itself, also when it replicates an output
+// with stereo eyes (KWin's mirroring as it was, one scene pass per output and eye)
+static const bool s_stereoReplicaCopy = environmentVariableBoolValue("KWIN_STEREO_REPLICA_COPY").value_or(true);
 
 Compositor *Compositor::create(QObject *parent)
 {
@@ -505,21 +515,95 @@ static void renderPictureAndDepth(RenderView *view, BackendOutput *backendOutput
     scene->setStereoPlane(std::nullopt);
 }
 
-static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendOutput *backendOutput, const std::shared_ptr<OutputFrame> &frame, const Region &surfaceDamage)
+// Copies one eye of a scene another output composed into the render target of this view's layer,
+// scaled once into the place the view shows the scene at (the rest, around a mirror that does not
+// fill the output, black). The copy is a blit: no scene pass.
+static bool copyEye(const StereoEyePair &eyes, bool rightEye, RenderView *view, const RenderTarget &target)
+{
+    const auto &source = (rightEye && eyes.right) ? eyes.right : eyes.left;
+    GLFramebuffer *destination = target.framebuffer();
+    if (!source || !source->framebuffer() || !destination) {
+        return false;
+    }
+    const Rect place = target.transform().map(view->deviceRect(), target.transformedSize()) & Rect(QPoint(), target.size());
+    if (place.isEmpty()) {
+        return false;
+    }
+    if (place != Rect(QPoint(), target.size())) {
+        GLFramebuffer::pushFramebuffer(destination);
+        glClearColor(0, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        GLFramebuffer::popFramebuffer();
+    }
+    GLFramebuffer::pushFramebuffer(source->framebuffer());
+    destination->blitFromFramebuffer(Rect(), place, GL_LINEAR);
+    GLFramebuffer::popFramebuffer();
+    return true;
+}
+
+// The reads of the copies are in the GL queue; the composing output's swapchains wait for them
+// before they paint over the eyes again.
+static void fenceEyeReaders(const StereoEyePair &eyes)
+{
+    EglContext *context = EglContext::currentContext();
+    if (!context) {
+        return;
+    }
+    EGLNativeFence fence(context->displayObject());
+    if (!fence.isValid()) {
+        return;
+    }
+    if (eyes.leftHold) {
+        eyes.leftHold->addReleaseFence(fence.fileDescriptor());
+    }
+    if (eyes.rightHold) {
+        eyes.rightHold->addReleaseFence(fence.fileDescriptor());
+    }
+}
+
+static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendOutput *backendOutput, const std::shared_ptr<OutputFrame> &frame, const Region &surfaceDamage, const StereoEyePair *copiedEyes = nullptr)
 {
     auto beginInfo = view->layer()->beginFrame();
     if (!beginInfo) {
         return false;
     }
     auto &[renderTarget, repaint] = beginInfo.value();
+    if (copiedEyes) {
+        // An output that replicates one with stereo eyes does not paint the scene again: the
+        // scene is composed once, as the two eyes, and this output copies them and applies its own
+        // filter (STEREO3D.md, outputs are filters). Both eyes change as a whole, so the whole
+        // output is damaged.
+        const bool stereo = view->layer()->hasStereoEyes();
+        const bool swap = backendOutput && backendOutput->stereoSwapEyes();
+        bool copied = copyEye(*copiedEyes, !stereo && swap, view, renderTarget);
+        int copies = copied ? 1 : 0;
+        if (copied && stereo && copiedEyes->right) {
+            if (auto rightInfo = view->layer()->beginRightEyeFrame()) {
+                copied = copyEye(*copiedEyes, true, view, rightInfo->renderTarget);
+                copies += copied ? 1 : 0;
+            } else {
+                qCWarning(KWIN_CORE, "Rendering the right eye failed, showing the left eye in both");
+            }
+        }
+        if (copied) {
+            fenceEyeReaders(*copiedEyes);
+            qCDebug(KWIN_CORE, "stereo-replica: %s scene passes 0, eye copies %d", qPrintable(backendOutput->name()), copies);
+            const Region whole = renderTarget.transformedRect();
+            return view->layer()->endFrame(whole, whole, frame.get());
+        }
+        // nothing to copy from after all: paint the scene as usual
+        qCWarning(KWIN_CORE, "Could not copy the eyes of the output this one replicates, painting the scene");
+    }
     const Region bufferDamage = surfaceDamage.united(repaint).intersected(renderTarget.transformedRect());
     const QList<StereoPlane> stereoPlanes = view->layer()->stereoPlanes();
     if (backendOutput && !stereoPlanes.isEmpty()) {
+        qCDebug(KWIN_CORE, "stereo-replica: %s scene pass (picture and depth)", backendOutput ? qPrintable(backendOutput->name()) : "");
         renderPictureAndDepth(view, backendOutput, stereoPlanes, renderTarget, bufferDamage, surfaceDamage);
     } else if (view->layer()->hasStereoEyes() && (showsStereoContent(view) || StereoDepth::isEnabled() || StereoDepth::effectsEnabled())) {
         // stereo content or depth on a 3D or anaglyph output: the scene once per eye, each stereo
         // window showing that eye's view, each window at its level and everything else the same in both
         ItemRenderer *renderer = kwinApp()->scene()->renderer();
+        qCDebug(KWIN_CORE, "stereo-replica: %s scene passes (one per eye)", backendOutput ? qPrintable(backendOutput->name()) : "");
         renderer->setStereoEye(StereoEye::Left);
         view->paint(renderTarget, view->renderOffset(), bufferDamage);
         if (auto rightInfo = view->layer()->beginRightEyeFrame()) {
@@ -532,6 +616,7 @@ static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendO
         renderer->setStereoEye(StereoEye::None);
     } else {
         ItemRenderer *renderer = kwinApp()->scene()->renderer();
+        qCDebug(KWIN_CORE, "stereo-replica: %s scene pass (one)", backendOutput ? qPrintable(backendOutput->name()) : "");
         if (backendOutput && !view->layer()->hasStereoEyes() && backendOutput->stereoSwapEyes()) {
             renderer->setStereoEye(StereoEye::Right);
         }
@@ -847,6 +932,40 @@ void Compositor::composite(RenderLoop *renderLoop)
 
     QList<OutputLayer *> unusedOutputLayers = m_backend->compatibleOutputLayers(output);
 
+    // Replication of an output with stereo eyes: the output that has the logical output composes
+    // the scene once, as two eyes; the outputs that replicate it copy the eyes.
+    std::shared_ptr<StereoEyePair> copiedEyes;
+    bool hasReplicasOfThis = false;
+    {
+        SceneView *sourceView = nullptr;
+        bool hasReplicas = false;
+        for (const auto &[loop, view] : m_primaryViews) {
+            if (view.get() == primaryView || view->logicalOutput() != logicalOutput) {
+                continue;
+            }
+            if (view->backendOutput() == logicalOutput->backendOutput()) {
+                sourceView = view.get();
+            }
+            hasReplicas = true;
+        }
+        hasReplicasOfThis = s_stereoReplicaCopy && hasReplicas && logicalOutput->backendOutput() == output;
+        if (s_stereoReplicaCopy && logicalOutput->backendOutput() != output && sourceView) {
+            OutputLayer *const sourceLayer = sourceView->layer();
+            OutputLayer *const ownPrimary = findLayer(unusedOutputLayers, OutputLayerType::Primary);
+            if (sourceLayer->hasStereoEyes()) {
+                if (!sourceLayer->eyesWanted()) {
+                    // the first frame of the replication: have the output that composes keep its
+                    // eyes, and compose them again for this one; this frame is painted as usual
+                    sourceLayer->setEyesWanted(true);
+                    sourceView->addDeviceRepaint(Region::infinite());
+                } else if (const auto eyes = sourceLayer->composedEyes(); eyes && ownPrimary && ownPrimary->canCopyEyes(*eyes)) {
+                    copiedEyes = eyes;
+                }
+            }
+        }
+    }
+    output->setReplicatesEyes(copiedEyes != nullptr);
+
     const bool overlaysAllowed = m_allowOverlaysEnv.value_or(output->recommendsOverlayUse());
     QList<OutputLayer *> allowedOutputLayers = unusedOutputLayers | std::views::filter([this, renderLoop, overlaysAllowed](OutputLayer *layer) {
         return (!m_brokenCursors.contains(renderLoop) || layer->type() != OutputLayerType::CursorOnly)
@@ -913,8 +1032,11 @@ void Compositor::composite(RenderLoop *renderLoop)
             layer.surfaceDamage |= layer.view->collectDamage();
             layer.surfaceDamage |= layer.view->layer()->deviceRepaints();
             layer.view->layer()->resetRepaints();
+            if (layer.view == primaryView) {
+                layer.view->layer()->setEyesWanted(hasReplicasOfThis);
+            }
             if (layer.view->layer()->isEnabled() && !layer.directScanout) {
-                result &= renderLayer(layer.view, logicalOutput, output, frame, layer.surfaceDamage);
+                result &= renderLayer(layer.view, logicalOutput, output, frame, layer.surfaceDamage, layer.view == primaryView ? copiedEyes.get() : nullptr);
                 if (!result) {
                     qCWarning(KWIN_CORE, "Rendering a layer failed!");
                     break;
@@ -989,6 +1111,18 @@ void Compositor::composite(RenderLoop *renderLoop)
     scene->frame(primaryView, frame.get());
     primaryView->postPaint();
 
+    // The eyes this output composed are new: the outputs that replicate it show them next.
+    if (hasReplicasOfThis) {
+        if (const auto eyes = primaryView->layer()->composedEyes(); eyes && m_eyesGeneration[renderLoop] != eyes->generation) {
+            m_eyesGeneration[renderLoop] = eyes->generation;
+            for (const auto &[loop, view] : m_primaryViews) {
+                if (view.get() != primaryView && view->logicalOutput() == logicalOutput && view->backendOutput() != output) {
+                    view->addDeviceRepaint(Region::infinite());
+                }
+            }
+        }
+    }
+
     // the layers have to stay valid until after postPaint, so this needs to happen after it
     if (!result) {
         qCWarning(KWIN_CORE, "Failed to find a working output layer configuration! Enabled layers:");
@@ -1046,6 +1180,7 @@ void Compositor::removeOutput(BackendOutput *output)
     m_overlayViews.erase(output->renderLoop());
     m_primaryViews.erase(output->renderLoop());
     m_brokenCursors.erase(output->renderLoop());
+    m_eyesGeneration.erase(output->renderLoop());
 }
 
 void Compositor::assignOutputLayers(LogicalOutput *logicalOutput, BackendOutput *backendOutput)

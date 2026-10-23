@@ -31,6 +31,9 @@ public:
     std::optional<OutputLayerBeginFrameInfo> doBeginFrame() override;
     bool doEndFrame(const Region &renderedDeviceRegion, const Region &damagedDeviceRegion, OutputFrame *frame) override;
     bool hasStereoEyes() const override;
+    void setEyesWanted(bool wanted) override;
+    std::shared_ptr<StereoEyePair> composedEyes() const override;
+    bool canCopyEyes(const StereoEyePair &eyes) const override;
     std::optional<OutputLayerBeginFrameInfo> beginRightEyeFrame() override;
     QList<StereoPlane> stereoPlanes() const override;
     std::optional<OutputLayerBeginFrameInfo> beginStereoPlaneFrame(StereoPlane plane) override;

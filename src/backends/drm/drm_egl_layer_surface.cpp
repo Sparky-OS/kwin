@@ -68,8 +68,27 @@ EglGbmLayerSurface::Surface::~Surface()
     }
 }
 
+void EglGbmLayerSurface::setShareEyes(bool share)
+{
+    m_shareEyes = share;
+    if (!share) {
+        m_composedEyes.reset();
+    }
+}
+
+std::shared_ptr<StereoEyePair> EglGbmLayerSurface::composedEyes() const
+{
+    return m_composedEyes;
+}
+
+bool EglGbmLayerSurface::isSameDevice(const void *owner) const
+{
+    return owner && m_eglBackend->openglContext() == owner;
+}
+
 void EglGbmLayerSurface::destroyResources()
 {
+    m_composedEyes.reset();
     m_surface = {};
     m_oldSurface = {};
 }
@@ -675,6 +694,25 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             m_surface->currentShadowSlot->texture()->bind();
             vbo->render(GL_TRIANGLES);
             m_surface->currentShadowSlot->texture()->unbind();
+        }
+        if (m_shareEyes && stereo && !pictureAndDepth && !m_surface->iccProfile) {
+            // the eyes stay as they are for outputs that replicate this one: holding the release
+            // points keeps the swapchains from reusing the buffers until the pair is let go
+            auto eyes = std::make_shared<StereoEyePair>();
+            eyes->left = m_surface->currentShadowSlot;
+            eyes->right = m_surface->currentRightShadowSlot;
+            eyes->size = m_surface->shadowSwapchain->size();
+            eyes->transform = m_surface->currentShadowSlot->texture()->contentTransform();
+            eyes->blendingColor = m_surface->blendingColor;
+            eyes->owner = m_surface->context.get();
+            eyes->generation = ++m_eyesGeneration;
+            eyes->leftHold = m_surface->currentShadowSlot->releasePoint();
+            if (m_surface->currentRightShadowSlot) {
+                eyes->rightHold = m_surface->currentRightShadowSlot->releasePoint();
+            }
+            m_composedEyes = std::move(eyes);
+        } else {
+            m_composedEyes.reset();
         }
         EGLNativeFence fence(m_surface->context->displayObject());
         if (m_surface->currentRightShadowSlot) {

@@ -96,6 +96,21 @@ Two toggles per output, both off by default, so the mode list stays as it is unt
 
 Each row of the table "Displays decide the format" in [awesome-stereoscopy](https://github.com/danielcamposramos/awesome-stereoscopy#displays-decide-the-format) is one filter.
 
+## An output that replicates another one copies, it does not paint again
+
+**The scene is composed once, as the two eyes, and every output on the way out is a filter.**
+When an output replicates one with stereo eyes (a 3D television beside an anaglyph panel, a projector copying a 3D monitor, a 2D screen copying the left eye), the output that has the logical output composes the scene, and each replica takes what it composed:
+- the composing output keeps the two eyes of each frame (the buffers it painted the scene into, one picture per eye, at its own pixels) while any replica asks for them, and gives them up when none does;
+- a replica copies each eye into the eye buffers it would have painted the scene into, scaled once into the place its view shows the scene (black around a mirror that does not fill the output), and applies only its own layout: frame packing, anaglyph, half side by side, rows, columns, checkerboard, or the left eye for a 2D screen;
+- the copy is a blit: the replica makes no scene pass, so a mirror costs one scene pass per eye in all, not one per output and eye;
+- the composing output wakes its replicas when it has new eyes; a replica that finds no eyes yet (the first frame of the mirror) paints the scene once as KWin always did;
+- the eyes' buffers stay out of the swapchain's reuse while the pair is held, and a replica adds its fence to their release points after its copy.
+
+What a replica needs from the eyes, else it paints the scene itself as before: the same GPU, an unrotated output, the same blending colour space, no ICC profile, and a layout that takes its eyes from the shadow buffers (not frame sequential, not a stereo pair of two outputs, not the picture and depth layouts, which are composed differently).
+The source needs stereo eyes too; a 2D source with a stereo replica keeps painting the scene for the replica (the replica needs both eyes, the source composes one).
+Where the replica copies, the pointer and the overlays are already in the eyes, so the replica uses its primary plane only, as an output with stereo eyes does.
+`KWIN_STEREO_REPLICA_COPY=0` makes every output paint the scene itself, as before; a mirror of two 2D outputs never copies and is unchanged either way.
+
 ## Every HDMI 3D structure, picture and depth included
 
 **The display's 3D modes are every structure of HDMI 1.4a** (Appendix H, Table H-2): frame packing, field alternative, line alternative, side by side (full and half), top and bottom, and the two picture and depth structures.

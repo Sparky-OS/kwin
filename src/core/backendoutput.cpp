@@ -277,6 +277,16 @@ bool BackendOutput::hasStereoEyes() const
     return false;
 }
 
+void BackendOutput::setReplicatesEyes(bool replicates)
+{
+    m_replicatesEyes = replicates;
+}
+
+bool BackendOutput::replicatesEyes() const
+{
+    return m_replicatesEyes;
+}
+
 bool BackendOutput::frameSequentialNeedsNewFrame() const
 {
     return true;

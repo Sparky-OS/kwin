@@ -117,7 +117,7 @@ bool DrmOutput::shouldDisableNonPrimaryPlanes() const
     // In 3D every plane would reach only one eye, so only the primary plane is used and
     // the cursor is drawn into the desktop, which goes to both
     return m_desiredPresentationMode == PresentationMode::Async || m_desiredPresentationMode == PresentationMode::AdaptiveAsync
-        || activeStereoLayout() != StereoLayout::None;
+        || activeStereoLayout() != StereoLayout::None || replicatesEyes();
 }
 
 std::optional<StereoDepthCoding> DrmOutput::stereoDepthCoding(const State &state) const

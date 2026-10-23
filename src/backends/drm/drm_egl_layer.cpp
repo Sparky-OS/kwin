@@ -16,6 +16,7 @@
 #include "drm_crtc.h"
 #include "drm_egl_backend.h"
 #include "drm_gpu.h"
+#include "drm_logging.h"
 #include "drm_output.h"
 #include "drm_pipeline.h"
 #include "scene/surfaceitem_wayland.h"
@@ -105,6 +106,52 @@ bool EglGbmLayer::hasStereoEyes() const
     return m_type == OutputLayerType::Primary && drmOutput()->activeStereoLayout() != StereoLayout::None;
 }
 
+void EglGbmLayer::setEyesWanted(bool wanted)
+{
+    DrmPipelineLayer::setEyesWanted(wanted);
+    m_surface.setShareEyes(wanted && m_type == OutputLayerType::Primary);
+}
+
+std::shared_ptr<StereoEyePair> EglGbmLayer::composedEyes() const
+{
+    return m_surface.composedEyes();
+}
+
+// The copy lands in the shadow buffers this layer would have painted the scene into, and
+// everything after them (the layout, the eye swap, the colour wire) stays this layer's own, so
+// the eyes only have to be in the orientation and colour space of this layer's own scene.
+bool EglGbmLayer::canCopyEyes(const StereoEyePair &eyes) const
+{
+    const auto no = [this](const char *why) {
+        qCDebug(KWIN_DRM, "stereo-replica: %s cannot copy the eyes: %s", qPrintable(drmOutput()->name()), why);
+        return false;
+    };
+    if (m_type != OutputLayerType::Primary) {
+        return no("not the primary layer");
+    }
+    if (!m_surface.isSameDevice(eyes.owner)) {
+        return no("another device");
+    }
+    if (drmOutput()->isStereoPair() || !stereoPlanes().isEmpty()) {
+        return no("stereo pair or picture and depth layout");
+    }
+    if (isFrameSequential(drmOutput()->activeStereoLayout())) {
+        return no("frame sequential layout");
+    }
+    if (drmOutput()->transform() != OutputTransform::Kind::Normal || eyes.transform != OutputTransform(OutputTransform::Kind::Normal).combine(OutputTransform::FlipY)) {
+        return no("transformed output");
+    }
+    if (pipeline()->iccProfile()) {
+        return no("ICC profile");
+    }
+    // the eyes are in the colour space the composing layer blends in; this layer's wire stage
+    // reads its own shadow buffers as blendingColor
+    if (!eyes.blendingColor || !drmOutput()->blendingColor() || !(*eyes.blendingColor == *drmOutput()->blendingColor())) {
+        return no("another colour space");
+    }
+    return true;
+}
+
 std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::beginRightEyeFrame()
 {
     return m_surface.startRightEye();
@@ -158,6 +205,10 @@ bool EglGbmLayer::earlyScanoutChecks()
     if (gpu()->needsModeset()) {
         // don't do direct scanout with modeset, it might lead to locking
         // the hardware to some buffer format we can't switch away from
+        return false;
+    }
+    if (drmOutput()->replicatesEyes()) {
+        // the scene comes from another output's eyes, not from a client's buffer
         return false;
     }
     if (drmOutput()->needsShadowBuffer()) {

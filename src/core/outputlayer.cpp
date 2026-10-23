@@ -133,6 +133,26 @@ bool OutputLayer::hasStereoEyes() const
     return false;
 }
 
+void OutputLayer::setEyesWanted(bool wanted)
+{
+    m_eyesWanted = wanted;
+}
+
+bool OutputLayer::eyesWanted() const
+{
+    return m_eyesWanted;
+}
+
+std::shared_ptr<StereoEyePair> OutputLayer::composedEyes() const
+{
+    return nullptr;
+}
+
+bool OutputLayer::canCopyEyes(const StereoEyePair &eyes) const
+{
+    return false;
+}
+
 std::optional<OutputLayerBeginFrameInfo> OutputLayer::beginRightEyeFrame()
 {
     return std::nullopt;

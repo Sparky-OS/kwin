@@ -10,6 +10,7 @@
 #include "core/colorpipeline.h"
 #include "core/drm_formats.h"
 #include "core/rendertarget.h"
+#include "core/stereoeyepair.h"
 #include "kwin_export.h"
 
 #include <QObject>
@@ -117,6 +118,22 @@ public:
     virtual std::optional<OutputLayerBeginFrameInfo> beginStereoPlaneFrame(StereoPlane plane);
 
     /**
+     * Outputs that replicate this one copy its eyes instead of painting the scene again. A layer
+     * with stereo eyes, asked with setEyesWanted(true), keeps the two eyes of each frame it
+     * composes, and composedEyes() gives the latest pair (null before the first frame, and for a
+     * layer that composes no eye buffers of its own).
+     */
+    virtual void setEyesWanted(bool wanted);
+    bool eyesWanted() const;
+    virtual std::shared_ptr<StereoEyePair> composedEyes() const;
+    /**
+     * Whether this layer can take the eyes of another layer as the scene for its next frame:
+     * the copy lands in the eye buffers beginFrame() and beginRightEyeFrame() give, so the
+     * buffers must be compatible (same device, orientation and colour space).
+     */
+    virtual bool canCopyEyes(const StereoEyePair &eyes) const;
+
+    /**
      * Do checks if the current configuration of the layer could possibly work.
      * This can include checking things like color operations or offload transforms
      */
@@ -195,6 +212,7 @@ protected:
     QPointer<BackendOutput> m_output;
     uint32_t m_requiredAlphaBits = 0;
     bool m_repaintScheduled = false;
+    bool m_eyesWanted = false;
     RenderLoop *m_renderLoop = nullptr;
     int m_zpos = 0;
     int m_minZpos = 0;

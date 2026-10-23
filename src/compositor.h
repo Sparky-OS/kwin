@@ -131,6 +131,8 @@ protected:
     std::unordered_map<RenderLoop *, std::unique_ptr<SceneView>> m_primaryViews;
     std::unordered_map<RenderLoop *, std::unordered_map<OutputLayer *, std::unique_ptr<ItemView>>> m_overlayViews;
     std::unordered_set<RenderLoop *> m_brokenCursors;
+    // the generation of the last pair of eyes each output composed, to wake the outputs that replicate it once per pair
+    std::unordered_map<RenderLoop *, quint64> m_eyesGeneration;
     std::optional<bool> m_allowOverlaysEnv;
     RenderLoopDrivenQAnimationDriver *m_renderLoopDrivenAnimationDriver;
 };

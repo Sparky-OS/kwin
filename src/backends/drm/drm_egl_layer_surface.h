@@ -16,6 +16,7 @@
 #include <optional>
 
 #include "core/outputlayer.h"
+#include "core/stereoeyepair.h"
 #include "drm_plane.h"
 #include "drm_stereo.h"
 #include "opengl/gltexture.h"
@@ -82,6 +83,15 @@ public:
      * A picture not drawn in a frame is sent black.
      */
     std::optional<OutputLayerBeginFrameInfo> startStereoPlane(StereoPlane plane);
+
+    /**
+     * With stereo eyes and a shadow buffer, keeps the eyes of each frame for outputs that
+     * replicate this one (see StereoEyePair); false lets the buffers go back to the swapchain.
+     */
+    void setShareEyes(bool share);
+    std::shared_ptr<StereoEyePair> composedEyes() const;
+    /** whether the eyes' buffers were made on this surface's device */
+    bool isSameDevice(const void *owner) const;
 
     void destroyResources();
     EglGbmBackend *eglBackend() const;
@@ -169,6 +179,9 @@ private:
     DrmGpu *const m_gpu;
     EglGbmBackend *const m_eglBackend;
     StereoLayout m_stereoLayout = StereoLayout::None;
+    bool m_shareEyes = false;
+    std::shared_ptr<StereoEyePair> m_composedEyes;
+    quint64 m_eyesGeneration = 0;
     // frame packing and side by side full: one eye's size, and where the right eye starts
     QSize m_eyeSize;
     QPoint m_rightEyeOffset;

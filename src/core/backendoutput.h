@@ -181,6 +181,13 @@ public:
      * Returns @c true if the output sends separate images to the viewer's eyes.
      */
     virtual bool hasStereoEyes() const;
+    /**
+     * Set while this output shows the eyes of another output's scene by copying them (see
+     * StereoEyePair): the picture then holds the pointer and any overlay already, so the
+     * output uses its primary plane only, as an output with stereo eyes does.
+     */
+    void setReplicatesEyes(bool replicates);
+    bool replicatesEyes() const;
 
     /**
      * Returns whether the next frame-sequential refresh is the first eye of a pair.
@@ -465,6 +472,7 @@ Q_SIGNALS:
     void abmLevelChanged();
 
 protected:
+    bool m_replicatesEyes = false;
     struct Information
     {
         QString name;
