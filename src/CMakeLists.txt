@@ -45,6 +45,7 @@ target_sources(kwin PRIVATE
     core/backendoutput.cpp
     core/colorlut3d.cpp
     core/colorpipeline.cpp
+    core/colorconversion.cpp
     core/colorpipelinestage.cpp
     core/colorspace.cpp
     core/colortransformation.cpp
@@ -561,6 +562,7 @@ install(FILES
     core/backendoutput.h
     core/colorlut3d.h
     core/colorpipeline.h
+    core/colorconversion.h
     core/colorpipelinestage.h
     core/colorspace.h
     core/colortransformation.h

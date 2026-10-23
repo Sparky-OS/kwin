@@ -246,6 +246,17 @@ add_test(NAME kwin-testColorspaces COMMAND testColorspaces)
 ecm_mark_as_test(testColorspaces)
 
 ########################################################
+# Test the conversion table of a pair of colour descriptions
+########################################################
+add_executable(testColorConversion test_colorconversion.cpp)
+target_link_libraries(testColorConversion
+    Qt::Test
+    kwin
+)
+add_test(NAME kwin-testColorConversion COMMAND testColorConversion)
+ecm_mark_as_test(testColorConversion)
+
+########################################################
 # Test UInt32Serial
 ########################################################
 add_executable(testSerial serial_test.cpp)

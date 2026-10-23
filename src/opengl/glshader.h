@@ -22,6 +22,7 @@
 namespace KWin
 {
 
+class ColorConversionTable;
 class EglContext;
 
 class KWIN_EXPORT GLShader
@@ -138,6 +139,8 @@ public:
     bool setUniform(ColorUniform uniform, const QColor &value);
 
     void setColorspaceUniforms(const std::shared_ptr<ColorDescription> &src, const std::shared_ptr<ColorDescription> &dst, RenderingIntent intent);
+    /** The same, from a conversion table that was built once for the pair of descriptions. */
+    void setColorspaceUniforms(const ColorConversionTable &table);
 
 protected:
     bool load(const QByteArray &vertexSource, const QByteArray &fragmentSource);

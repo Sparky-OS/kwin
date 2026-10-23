@@ -9,6 +9,7 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 #include "glshader.h"
+#include "core/colorconversion.h"
 #include "glplatform.h"
 #include "glutils.h"
 #include "utils/common.h"
@@ -512,33 +513,26 @@ QMatrix4x4 GLShader::getUniformMatrix4x4(const char *name)
     }
 }
 
-static bool s_disableTonemapping = qEnvironmentVariableIntValue("KWIN_DISABLE_TONEMAPPING") == 1;
-
 void GLShader::setColorspaceUniforms(const std::shared_ptr<ColorDescription> &src, const std::shared_ptr<ColorDescription> &dst, RenderingIntent intent)
 {
-    setUniform(Mat4Uniform::ColorimetryTransformation, src->toOther(*dst, intent));
-    setUniform(IntUniform::SourceNamedTransferFunction, src->transferFunction().type);
-    if (src->transferFunction().type == TransferFunction::BT1886) {
-        setUniform(Vec2Uniform::SourceTransferFunctionParams, QVector2D(src->transferFunction().bt1886B(), src->transferFunction().bt1886A()));
-    } else {
-        setUniform(Vec2Uniform::SourceTransferFunctionParams, QVector2D(src->transferFunction().minLuminance, src->transferFunction().maxLuminance - src->transferFunction().minLuminance));
-    }
-    setUniform(FloatUniform::SourceReferenceLuminance, src->referenceLuminance());
-    setUniform(IntUniform::DestinationNamedTransferFunction, dst->transferFunction().type);
-    if (dst->transferFunction().type == TransferFunction::BT1886) {
-        setUniform(Vec2Uniform::DestinationTransferFunctionParams, QVector2D(dst->transferFunction().bt1886B(), dst->transferFunction().bt1886A()));
-    } else {
-        setUniform(Vec2Uniform::DestinationTransferFunctionParams, QVector2D(dst->transferFunction().minLuminance, dst->transferFunction().maxLuminance - dst->transferFunction().minLuminance));
-    }
-    setUniform(FloatUniform::DestinationReferenceLuminance, dst->referenceLuminance());
-    setUniform(FloatUniform::MaxDestinationLuminance, dst->maxHdrLuminance().value_or(10'000));
-    if (!s_disableTonemapping && intent == RenderingIntent::Perceptual) {
-        setUniform(FloatUniform::MaxTonemappingLuminance, src->maxHdrLuminance().value_or(src->referenceLuminance()) * dst->referenceLuminance() / src->referenceLuminance());
-    } else {
-        setUniform(FloatUniform::MaxTonemappingLuminance, dst->maxHdrLuminance().value_or(10'000));
-    }
-    setUniform(Mat4Uniform::DestinationToLMS, dst->containerColorimetry().toLMS());
-    setUniform(Mat4Uniform::LMSToDestination, dst->containerColorimetry().fromLMS());
+    // the conversion of a pair of descriptions is built once and reused
+    setColorspaceUniforms(*ColorConversionTable::get(src, dst, intent));
+}
+
+void GLShader::setColorspaceUniforms(const ColorConversionTable &table)
+{
+    const auto &p = table.shaderParameters();
+    setUniform(Mat4Uniform::ColorimetryTransformation, p.colorimetry);
+    setUniform(IntUniform::SourceNamedTransferFunction, p.sourceTransferFunction);
+    setUniform(Vec2Uniform::SourceTransferFunctionParams, p.sourceTransferFunctionParameters);
+    setUniform(FloatUniform::SourceReferenceLuminance, p.sourceReferenceLuminance);
+    setUniform(IntUniform::DestinationNamedTransferFunction, p.destinationTransferFunction);
+    setUniform(Vec2Uniform::DestinationTransferFunctionParams, p.destinationTransferFunctionParameters);
+    setUniform(FloatUniform::DestinationReferenceLuminance, p.destinationReferenceLuminance);
+    setUniform(FloatUniform::MaxDestinationLuminance, p.maxDestinationLuminance);
+    setUniform(FloatUniform::MaxTonemappingLuminance, p.maxTonemappingLuminance);
+    setUniform(Mat4Uniform::DestinationToLMS, p.destinationToLMS);
+    setUniform(Mat4Uniform::LMSToDestination, p.lmsToDestination);
 }
 
 }
