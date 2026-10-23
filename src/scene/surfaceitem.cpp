@@ -165,7 +165,13 @@ void SurfaceItem::addDamage(const Region &region)
     m_lastDamage = now;
     m_damage += region;
 
-    const RectF sourceBox = m_bufferToSurfaceTransform.map(m_bufferSourceBox, m_bufferSize);
+    RectF sourceBox = m_bufferToSurfaceTransform.map(m_bufferSourceBox, m_bufferSize);
+    if (isSideBySideStereoContent(m_stereoContent)) {
+        // The buffer holds both eyes, each covering the whole surface: the scale of a view is the
+        // eye's pixels to the surface, not both eyes'. Twice that scale would grow the damage by
+        // a pixel on each side and repaint the output next to a full screen stereo window.
+        sourceBox.setWidth(sourceBox.width() / 2);
+    }
     const qreal xScale = sourceBox.width() / m_destinationSize.width();
     const qreal yScale = sourceBox.height() / m_destinationSize.height();
     // each view of a stereo buffer covers the whole surface
