@@ -8,6 +8,7 @@
 */
 #include "drm_egl_layer.h"
 #include "drm_stereo.h"
+#include "core/colorconversion.h"
 #include "core/colorpipeline.h"
 #include "core/iccprofile.h"
 #include "core/renderdevice.h"
@@ -145,11 +146,27 @@ bool EglGbmLayer::canCopyEyes(const StereoEyePair &eyes) const
         return no("ICC profile");
     }
     // the eyes are in the colour space the composing layer blends in; this layer's wire stage
-    // reads its own shadow buffers as blendingColor
-    if (!eyes.blendingColor || !drmOutput()->blendingColor() || !(*eyes.blendingColor == *drmOutput()->blendingColor())) {
-        return no("another colour space");
+    // reads its own shadow buffers as blendingColor. Another colour space (brightness, dimming,
+    // HDR, a different colour resolution) is converted once on the copy, with the table of the
+    // pair, when that gives what painting the scene again would give.
+    if (!eyes.blendingColor || !drmOutput()->blendingColor()) {
+        return no("no colour space");
+    }
+    if (!(*eyes.blendingColor == *drmOutput()->blendingColor())) {
+        QString reason;
+        if (!ColorConversionTable::forCopy(eyes.blendingColor, drmOutput()->blendingColor(), eyesHdrContent(), &reason)) {
+            return no(qPrintable(QStringLiteral("another colour space: ") + reason));
+        }
     }
     return true;
+}
+
+std::shared_ptr<const ColorConversionTable> EglGbmLayer::eyesConversion(const StereoEyePair &eyes) const
+{
+    if (!eyes.blendingColor || !drmOutput()->blendingColor() || *eyes.blendingColor == *drmOutput()->blendingColor()) {
+        return nullptr;
+    }
+    return ColorConversionTable::forCopy(eyes.blendingColor, drmOutput()->blendingColor(), eyesHdrContent(), nullptr);
 }
 
 std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::beginRightEyeFrame()

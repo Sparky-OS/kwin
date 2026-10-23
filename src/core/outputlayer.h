@@ -7,6 +7,7 @@
 #pragma once
 
 #include "core/backendoutput.h"
+#include "core/colorconversion.h"
 #include "core/colorpipeline.h"
 #include "core/drm_formats.h"
 #include "core/rendertarget.h"
@@ -124,6 +125,9 @@ public:
      * layer that composes no eye buffers of its own).
      */
     virtual void setEyesWanted(bool wanted);
+    /** Some window in the view has HDR content: a copy of the eyes must then give HDR content what painting again gives. */
+    void setEyesHdrContent(bool hdrContent);
+    bool eyesHdrContent() const;
     bool eyesWanted() const;
     virtual std::shared_ptr<StereoEyePair> composedEyes() const;
     /**
@@ -132,6 +136,11 @@ public:
      * buffers must be compatible (same device, orientation and colour space).
      */
     virtual bool canCopyEyes(const StereoEyePair &eyes) const;
+    /**
+     * The table that converts the eyes into this layer's colour space on the copy, null when they
+     * already are in it (the copy is a blit). Meaningful when canCopyEyes() is true.
+     */
+    virtual std::shared_ptr<const ColorConversionTable> eyesConversion(const StereoEyePair &eyes) const;
 
     /**
      * Do checks if the current configuration of the layer could possibly work.
@@ -213,6 +222,7 @@ protected:
     uint32_t m_requiredAlphaBits = 0;
     bool m_repaintScheduled = false;
     bool m_eyesWanted = false;
+    bool m_eyesHdrContent = false;
     RenderLoop *m_renderLoop = nullptr;
     int m_zpos = 0;
     int m_minZpos = 0;

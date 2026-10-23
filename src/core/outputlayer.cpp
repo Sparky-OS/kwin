@@ -138,6 +138,16 @@ void OutputLayer::setEyesWanted(bool wanted)
     m_eyesWanted = wanted;
 }
 
+void OutputLayer::setEyesHdrContent(bool hdrContent)
+{
+    m_eyesHdrContent = hdrContent;
+}
+
+bool OutputLayer::eyesHdrContent() const
+{
+    return m_eyesHdrContent;
+}
+
 bool OutputLayer::eyesWanted() const
 {
     return m_eyesWanted;
@@ -151,6 +161,11 @@ std::shared_ptr<StereoEyePair> OutputLayer::composedEyes() const
 bool OutputLayer::canCopyEyes(const StereoEyePair &eyes) const
 {
     return false;
+}
+
+std::shared_ptr<const ColorConversionTable> OutputLayer::eyesConversion(const StereoEyePair &eyes) const
+{
+    return nullptr;
 }
 
 std::optional<OutputLayerBeginFrameInfo> OutputLayer::beginRightEyeFrame()

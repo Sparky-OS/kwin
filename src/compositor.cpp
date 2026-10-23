@@ -12,6 +12,7 @@
 
 #include "core/backendoutput.h"
 #include "core/brightnessdevice.h"
+#include "core/colorconversion.h"
 #include "core/drmdevice.h"
 #include "core/graphicsbufferview.h"
 #include "core/outputbackend.h"
@@ -455,6 +456,34 @@ static bool showsStereoContent(RenderView *view)
     });
 }
 
+static bool itemHoldsHdr(Item *item)
+{
+    if (!item->isVisible()) {
+        return false;
+    }
+    if (const auto surfaceItem = qobject_cast<SurfaceItem *>(item)) {
+        const auto &description = surfaceItem->colorDescription();
+        if (description->transferFunction().type == TransferFunction::PerceptualQuantizer
+            || description->maxHdrLuminance().value_or(description->referenceLuminance()) > description->referenceLuminance() * 1.5) {
+            return true;
+        }
+    }
+    const QList<Item *> children = item->childItems();
+    return std::ranges::any_of(children, [](Item *child) {
+        return itemHoldsHdr(child);
+    });
+}
+
+// some window or overlay in the view has HDR content (a colour-managed client with a PQ or HLG
+// image, or headroom above the reference white)
+static bool showsHdrContent(RenderView *view)
+{
+    const QList<Item *> items = kwinApp()->scene()->overlayItem()->childItems() + kwinApp()->scene()->containerItem()->childItems();
+    return std::ranges::any_of(items, [view](Item *item) {
+        return itemHoldsHdr(item) && item->mapToScene(item->boundingRect()).intersects(view->viewport());
+    });
+}
+
 // A picture and depth output (HDMI 1.4a, Appendix H, L + depth and L + depth + graphics +
 // graphics-depth): the scene in the picture's eye, then the depth of what it shows. With graphics,
 // the picture leaves the desktop's chrome out, and the chrome and the pointer make the graphics,
@@ -518,7 +547,7 @@ static void renderPictureAndDepth(RenderView *view, BackendOutput *backendOutput
 // Copies one eye of a scene another output composed into the render target of this view's layer,
 // scaled once into the place the view shows the scene at (the rest, around a mirror that does not
 // fill the output, black). The copy is a blit: no scene pass.
-static bool copyEye(const StereoEyePair &eyes, bool rightEye, RenderView *view, const RenderTarget &target)
+static bool copyEye(const StereoEyePair &eyes, bool rightEye, RenderView *view, const RenderTarget &target, const ColorConversionTable *conversion)
 {
     const auto &source = (rightEye && eyes.right) ? eyes.right : eyes.left;
     GLFramebuffer *destination = target.framebuffer();
@@ -534,6 +563,26 @@ static bool copyEye(const StereoEyePair &eyes, bool rightEye, RenderView *view, 
         glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
         GLFramebuffer::popFramebuffer();
+    }
+    if (conversion && !conversion->isIdentity()) {
+        // another colour space: one draw, scaled and converted at once with the pair's table
+        // (the same shader the scene pass converts a client's picture with)
+        GLTexture *texture = source->framebuffer()->colorAttachment();
+        if (!texture) {
+            return false;
+        }
+        GLFramebuffer::pushFramebuffer(destination);
+        QMatrix4x4 mat;
+        mat.ortho(QRectF(QPointF(), destination->size()));
+        mat.translate(place.x(), place.y());
+        ShaderBinder binder(ShaderTrait::MapTexture | ShaderTrait::TransformColorspace);
+        binder.shader()->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mat);
+        binder.shader()->setColorspaceUniforms(*conversion);
+        texture->setFilter(GL_LINEAR);
+        glDisable(GL_BLEND);
+        texture->render(Rect(QPoint(), source->framebuffer()->size()), Region::infinite(), place.size(), 1);
+        GLFramebuffer::popFramebuffer();
+        return true;
     }
     GLFramebuffer::pushFramebuffer(source->framebuffer());
     destination->blitFromFramebuffer(Rect(), place, GL_LINEAR);
@@ -561,7 +610,7 @@ static void fenceEyeReaders(const StereoEyePair &eyes)
     }
 }
 
-static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendOutput *backendOutput, const std::shared_ptr<OutputFrame> &frame, const Region &surfaceDamage, const StereoEyePair *copiedEyes = nullptr)
+static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendOutput *backendOutput, const std::shared_ptr<OutputFrame> &frame, const Region &surfaceDamage, const StereoEyePair *copiedEyes = nullptr, const ColorConversionTable *conversion = nullptr)
 {
     auto beginInfo = view->layer()->beginFrame();
     if (!beginInfo) {
@@ -575,11 +624,11 @@ static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendO
         // output is damaged.
         const bool stereo = view->layer()->hasStereoEyes();
         const bool swap = backendOutput && backendOutput->stereoSwapEyes();
-        bool copied = copyEye(*copiedEyes, !stereo && swap, view, renderTarget);
+        bool copied = copyEye(*copiedEyes, !stereo && swap, view, renderTarget, conversion);
         int copies = copied ? 1 : 0;
         if (copied && stereo && copiedEyes->right) {
             if (auto rightInfo = view->layer()->beginRightEyeFrame()) {
-                copied = copyEye(*copiedEyes, true, view, rightInfo->renderTarget);
+                copied = copyEye(*copiedEyes, true, view, rightInfo->renderTarget, conversion);
                 copies += copied ? 1 : 0;
             } else {
                 qCWarning(KWIN_CORE, "Rendering the right eye failed, showing the left eye in both");
@@ -587,7 +636,7 @@ static bool renderLayer(RenderView *view, LogicalOutput *logicalOutput, BackendO
         }
         if (copied) {
             fenceEyeReaders(*copiedEyes);
-            qCDebug(KWIN_CORE, "stereo-replica: %s scene passes 0, eye copies %d", qPrintable(backendOutput->name()), copies);
+            qCDebug(KWIN_CORE, "stereo-replica: %s scene passes 0, eye copies %d%s", qPrintable(backendOutput->name()), copies, conversion && !conversion->isIdentity() ? ", colour converted" : "");
             const Region whole = renderTarget.transformedRect();
             return view->layer()->endFrame(whole, whole, frame.get());
         }
@@ -935,6 +984,7 @@ void Compositor::composite(RenderLoop *renderLoop)
     // Replication of an output with stereo eyes: the output that has the logical output composes
     // the scene once, as two eyes; the outputs that replicate it copy the eyes.
     std::shared_ptr<StereoEyePair> copiedEyes;
+    std::shared_ptr<const ColorConversionTable> eyesConversion;
     bool hasReplicasOfThis = false;
     {
         SceneView *sourceView = nullptr;
@@ -952,6 +1002,9 @@ void Compositor::composite(RenderLoop *renderLoop)
         if (s_stereoReplicaCopy && logicalOutput->backendOutput() != output && sourceView) {
             OutputLayer *const sourceLayer = sourceView->layer();
             OutputLayer *const ownPrimary = findLayer(unusedOutputLayers, OutputLayerType::Primary);
+            if (ownPrimary) {
+                ownPrimary->setEyesHdrContent(showsHdrContent(sourceView));
+            }
             if (sourceLayer->hasStereoEyes()) {
                 if (!sourceLayer->eyesWanted()) {
                     // the first frame of the replication: have the output that composes keep its
@@ -960,6 +1013,7 @@ void Compositor::composite(RenderLoop *renderLoop)
                     sourceView->addDeviceRepaint(Region::infinite());
                 } else if (const auto eyes = sourceLayer->composedEyes(); eyes && ownPrimary && ownPrimary->canCopyEyes(*eyes)) {
                     copiedEyes = eyes;
+                    eyesConversion = ownPrimary->eyesConversion(*eyes);
                 }
             }
         }
@@ -1036,7 +1090,7 @@ void Compositor::composite(RenderLoop *renderLoop)
                 layer.view->layer()->setEyesWanted(hasReplicasOfThis);
             }
             if (layer.view->layer()->isEnabled() && !layer.directScanout) {
-                result &= renderLayer(layer.view, logicalOutput, output, frame, layer.surfaceDamage, layer.view == primaryView ? copiedEyes.get() : nullptr);
+                result &= renderLayer(layer.view, logicalOutput, output, frame, layer.surfaceDamage, layer.view == primaryView ? copiedEyes.get() : nullptr, eyesConversion.get());
                 if (!result) {
                     qCWarning(KWIN_CORE, "Rendering a layer failed!");
                     break;

@@ -34,6 +34,7 @@ public:
     void setEyesWanted(bool wanted) override;
     std::shared_ptr<StereoEyePair> composedEyes() const override;
     bool canCopyEyes(const StereoEyePair &eyes) const override;
+    std::shared_ptr<const ColorConversionTable> eyesConversion(const StereoEyePair &eyes) const override;
     std::optional<OutputLayerBeginFrameInfo> beginRightEyeFrame() override;
     QList<StereoPlane> stereoPlanes() const override;
     std::optional<OutputLayerBeginFrameInfo> beginStereoPlaneFrame(StereoPlane plane) override;
