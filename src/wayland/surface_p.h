@@ -37,6 +37,7 @@ class ColorFeedbackSurfaceV1;
 class LinuxDrmSyncObjSurfaceV1;
 class AlphaModifierSurfaceV1;
 class StereoContentSurfaceV1;
+class StereoDepthSurfaceV1;
 class FifoV1Surface;
 class FifoBarrier;
 class ColorRepresentationSurfaceV1;
@@ -70,6 +71,7 @@ struct SurfaceState
         SourceGeometry = 1 << 16,
         DestinationSize = 1 << 17,
         StereoContent = 1 << 18,
+        StereoDepth = 1 << 19,
     };
     Q_DECLARE_FLAGS(Fields, Field)
 
@@ -103,6 +105,10 @@ struct SurfaceState
     StereoContent stereoContent = StereoContentNone;
     // declared with kde_stereo_content_v1 version 2: a full side-by-side buffer is two eyes of the surface
     bool stereoContentOneEyeWide = false;
+    // marked with kde_stereo_depth_v1: the pair is the desktop's own depth, not stereo content
+    bool stereoDesktopDepth = false;
+    // declared with kde_stereo_depth_v1: where a popup surface sits, from -1 to 1 of the user's limits
+    std::optional<qreal> stereoPlace;
     YUVMatrixCoefficients yuvCoefficients = YUVMatrixCoefficients::Identity;
     EncodingRange range = EncodingRange::Full;
     bool fifoBarrier = false;
@@ -211,6 +217,11 @@ public:
     LinuxDrmSyncObjSurfaceV1 *syncObjV1 = nullptr;
     AlphaModifierSurfaceV1 *alphaModifier = nullptr;
     StereoContentSurfaceV1 *stereoContent = nullptr;
+    QList<StereoDepthSurfaceV1 *> stereoDepths;
+    // the depth state the compositor last gave the surface: awake and the edges on the output's edge
+    std::optional<std::pair<bool, uint32_t>> stereoDepthState;
+    // takes the desktop depth mark and the place from the surface's kde_stereo_depth_v1 objects
+    void updatePendingStereoDepth();
     FifoV1Surface *fifoSurface = nullptr;
     ColorRepresentationSurfaceV1 *colorRepresentation = nullptr;
     ExtBlurSurfaceV1 *extBlur = nullptr;
