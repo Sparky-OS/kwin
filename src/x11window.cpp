@@ -3054,9 +3054,13 @@ void X11Window::getWmNormalHints()
         maximize(max_mode);
     }
     if (isManaged()) {
-        // update to match restrictions
-        QSizeF new_size = clientSizeToFrameSize(constrainClientSize(clientSize()));
-        if (new_size != size() && !isFullScreen()) {
+        // A one-view client may refresh its hints while painting an answer.
+        // Constrain that pending place, not the old destination held on screen.
+        const QSizeF hintedSize = m_stereoPlacePending
+            ? nextFrameRectToClientRect(m_stereoPlaceFrame).size() : clientSize();
+        const QSizeF hintedFrameSize = m_stereoPlacePending ? m_stereoPlaceFrame.size() : size();
+        QSizeF new_size = clientSizeToFrameSize(constrainClientSize(hintedSize));
+        if (new_size != hintedFrameSize && !isFullScreen()) {
             RectF origClientGeometry = m_clientGeometry;
             moveResize(resizeWithChecks(moveResizeGeometry(), new_size));
             if ((!isSpecialWindow() || isToolbar()) && !isFullScreen()) {

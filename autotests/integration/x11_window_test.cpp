@@ -17,6 +17,7 @@
 #include "rules.h"
 #include "scene/surfaceitem_wayland.h"
 #include "scene/windowitem.h"
+#include "scene/workspacescene.h"
 #include "virtualdesktops.h"
 #include "wayland/surface.h"
 #include "wayland_server.h"
@@ -4224,6 +4225,7 @@ void X11WindowTest::testStereoOneViewConfigure_data()
     QTest::addRow("resize-aspect") << QStringLiteral("resize") << true;
     QTest::addRow("maximize") << QStringLiteral("maximize") << false;
     QTest::addRow("fullscreen") << QStringLiteral("fullscreen") << false;
+    QTest::addRow("restore-hints") << QStringLiteral("restore-hints") << true;
     QTest::addRow("tile") << QStringLiteral("tile") << false;
 }
 
@@ -4255,7 +4257,7 @@ void X11WindowTest::testStereoOneViewConfigure()
         const auto values = property.array<uint32_t>();
         return values && values->size() == 3 ? std::vector<uint32_t>(values->begin(), values->end()) : std::vector<uint32_t>();
     };
-    if (operation == QLatin1String("fullscreen")) {
+    if (operation == QLatin1String("fullscreen") || operation == QLatin1String("restore-hints")) {
         window->setFullScreen(true);
     } else if (operation == QLatin1String("maximize")) {
         window->maximize(MaximizeFull);
@@ -4270,13 +4272,13 @@ void X11WindowTest::testStereoOneViewConfigure()
     const auto proposed = request();
     QVERIFY(proposed[0] != 0);
     QVERIFY(proposed[1] > 0 && proposed[2] > 0);
-    if (aspect) {
+    if (aspect && operation == QLatin1String("resize")) {
         QVERIFY(std::abs(double(proposed[1]) / proposed[2] - 640.0 / 360.0) < 0.01);
     }
     UniqueCPtr<xcb_get_geometry_reply_t> geometry(xcb_get_geometry_reply(c.get(), xcb_get_geometry(c.get(), window->window()), nullptr));
     QCOMPARE(QSize(geometry->width, geometry->height), QSize(1280, 360));
 
-    const std::array<uint32_t, 2> chosen = operation == QLatin1String("client-choice")
+    std::array<uint32_t, 2> chosen = operation == QLatin1String("client-choice")
         ? std::array<uint32_t, 2>{512, 288} : std::array<uint32_t, 2>{proposed[1], proposed[2]};
     // A stale reply must not release the held destination.
     auto answer = [&](uint32_t serial) {
@@ -4290,7 +4292,7 @@ void X11WindowTest::testStereoOneViewConfigure()
         event.data.data32[0] = serial;
         xcb_send_event(c.get(), false, rootWindow(), XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
                        reinterpret_cast<const char *>(&event));
-        const uint32_t color = 0x00ff0000;
+        const uint32_t color = (serial & 1) ? 0x00ff0000 : 0x000000ff;
         xcb_change_window_attributes(c.get(), window->window(), XCB_CW_BACK_PIXEL, &color);
         xcb_clear_area(c.get(), true, window->window(), 0, 0, 0, 0);
         xcb_flush(c.get());
@@ -4302,6 +4304,38 @@ void X11WindowTest::testStereoOneViewConfigure()
     QTRY_COMPARE(window->clientSize(), Xcb::fromXNative(QSize(chosen[0], chosen[1])));
     QTRY_VERIFY(window->surface() && window->windowItem()->surfaceItem());
     QTRY_COMPARE(window->windowItem()->surfaceItem()->destinationSize(), window->clientSize());
+    if (operation == QLatin1String("restore-hints")) {
+        QSignalSpy rendered(kwinApp()->scene(), &WorkspaceScene::frameRendered);
+        kwinApp()->scene()->addRepaintFull();
+        QVERIFY(rendered.wait());
+        window->setFullScreen(false);
+        QTRY_COMPARE(request().size(), size_t(3));
+        const auto restore = request();
+        QCOMPARE(restore[1], original[0]);
+        QCOMPARE(restore[2], original[1]);
+        // The client refreshes its unchanged aspect hint while painting the
+        // restore frame. Constrain the pending place, not the held fullscreen.
+        xcb_size_hints_t hints{};
+        xcb_icccm_size_hints_set_aspect(&hints, 640, 360, 640, 360);
+        xcb_icccm_set_wm_normal_hints(c.get(), window->window(), &hints);
+        xcb_flush(c.get());
+        QTest::qWait(100);
+        QCOMPARE(request(), restore);
+        // Allocate the next native frame, as sView does when removing its
+        // fullscreen padding; the place remains independent of that raster.
+        const uint32_t raster[] = {800, 450};
+        xcb_configure_window(c.get(), window->window(), XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, raster);
+        xcb_flush(c.get());
+        auto nativeSize = [&]() {
+            UniqueCPtr<xcb_get_geometry_reply_t> reply(xcb_get_geometry_reply(c.get(), xcb_get_geometry(c.get(), window->window()), nullptr));
+            return reply ? QSize(reply->width, reply->height) : QSize();
+        };
+        QTRY_COMPARE(nativeSize(), QSize(1600, 450));
+        chosen = {original[0], original[1]};
+        answer(restore[0]);
+        QTRY_COMPARE(window->clientSize(), oldPlace);
+        QTRY_COMPARE(window->windowItem()->surfaceItem()->destinationSize(), oldPlace);
+    }
     xcb_destroy_window(c.get(), window->window());
     xcb_flush(c.get());
 }
