@@ -4753,10 +4753,12 @@ StereoContent Window::stereoContent() const
 
 bool Window::holdsStereoContent() const
 {
-    bool stereo = m_stereoContent != StereoContentNone;
+    // a pair the program marks as the desktop's own depth, its elements drawn once per eye, is not
+    // stereo content (kde_stereo_depth_v1.set_desktop_depth)
+    bool stereo = m_stereoContent != StereoContentNone && !(m_surface && m_surface->isStereoDesktopDepth());
     if (m_surface) {
         m_surface->traverseTree([&stereo](SurfaceInterface *surface) {
-            stereo = stereo || surface->stereoContent() != StereoContentNone;
+            stereo = stereo || (surface->stereoContent() != StereoContentNone && !surface->isStereoDesktopDepth());
         });
     }
 #if KWIN_BUILD_X11

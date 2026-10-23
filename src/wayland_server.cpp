@@ -21,12 +21,12 @@
 #include "layershellv1window.h"
 #include "main.h"
 #include "options.h"
+#include "scene/stereodepthstates.h"
 #include "utils/envvar.h"
 #include "utils/kernel.h"
 #include "utils/serviceutils.h"
 #include "virtualdesktops.h"
 #include "wayland/alphamodifier_v1.h"
-#include "wayland/stereocontent_v1.h"
 #include "wayland/appmenu.h"
 #include "wayland/backgroundeffect_v1.h"
 #include "wayland/clientconnection.h"
@@ -76,6 +76,7 @@
 #include "wayland/server_decoration_palette.h"
 #include "wayland/shadow.h"
 #include "wayland/singlepixelbuffer.h"
+#include "wayland/stereocontent_v1.h"
 #include "wayland/subcompositor.h"
 #include "wayland/tablet_v2.h"
 #include "wayland/tearingcontrol_v1.h"
@@ -597,6 +598,9 @@ void WaylandServer::initWorkspace()
     }
 
     new KeyStateInterface(m_display, m_display);
+
+    // whether what programs draw inside their surfaces may be shown in depth (kde_stereo_depth_v1)
+    new StereoDepthStates(this);
 
     VirtualDesktopManager::self()->setVirtualDesktopManagement(m_virtualDesktopManagement);
 
