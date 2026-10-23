@@ -17,6 +17,7 @@
 #include "rules.h"
 #include "scene/surfaceitem_wayland.h"
 #include "scene/windowitem.h"
+#include "scene/stereodepth.h"
 #include "scene/workspacescene.h"
 #include "virtualdesktops.h"
 #include "wayland/surface.h"
@@ -133,6 +134,7 @@ private Q_SLOTS:
     void testStackOppositeFromApplication();
     void testStackOppositeFromTool();
     void testStackOppositeNoSibling();
+    void testOverrideRedirectTransientChain();
     void testOverrideRedirectReparent();
     void testOverrideRedirectStackingAbove();
     void testOverrideRedirectStackingBelow();
@@ -3498,6 +3500,69 @@ void X11WindowTest::testOverrideRedirectReparent()
     xcb_flush(c.get());
     QSignalSpy windowAddedSpy(workspace(), &Workspace::windowAdded);
     QVERIFY(!windowAddedSpy.wait(10));
+}
+
+void X11WindowTest::testOverrideRedirectTransientChain()
+{
+    auto connection = Test::createX11Connection();
+    auto *owner = createWindow(connection.get(), Rect(20, 20, 100, 100));
+    QVERIFY(owner);
+    const auto createPopup = [&](X11Window *parent) {
+        return createWindow(connection.get(), Rect(40, 40, 60, 60), [&](xcb_window_t id) {
+            const uint32_t redirect = 1;
+            xcb_change_window_attributes(connection.get(), id, XCB_CW_OVERRIDE_REDIRECT, &redirect);
+            xcb_icccm_set_wm_transient_for(connection.get(), id, parent->window());
+            NETWinInfo info(connection.get(), id, rootWindow(), NET::WMWindowType, NET::Properties2());
+            info.setWindowType(NET::PopupMenu);
+        });
+    };
+    auto *menu = createPopup(owner);
+    QVERIFY(menu);
+    QTRY_COMPARE(menu->transientFor(), owner);
+    QCOMPARE(menu->mainWindows(), QList<Window *>{owner});
+    auto *submenu = createPopup(menu);
+    QVERIFY(submenu);
+    QTRY_COMPARE(submenu->transientFor(), menu);
+    auto *third = createPopup(submenu);
+    QVERIFY(third);
+    QTRY_COMPARE(third->transientFor(), submenu);
+
+    auto *other = createWindow(connection.get(), Rect(300, 20, 100, 100));
+    QVERIFY(other);
+    workspace()->activateWindow(other);
+    QTRY_COMPARE(workspace()->activeWindow(), other);
+    QVERIFY(StereoDepth::level(owner) < 0);
+    QCOMPARE(StereoDepth::level(menu), StereoDepth::level(owner));
+    QCOMPARE(StereoDepth::level(submenu), StereoDepth::level(owner));
+    QCOMPARE(StereoDepth::level(third), StereoDepth::level(owner));
+
+    // Reject a property update that would make the ownership chain cyclic.
+    xcb_icccm_set_wm_transient_for(connection.get(), menu->window(), third->window());
+    xcb_flush(connection.get());
+    QTRY_VERIFY(!menu->transientFor());
+    QVERIFY(menu->mainWindows().isEmpty());
+    xcb_icccm_set_wm_transient_for(connection.get(), menu->window(), owner->window());
+    xcb_flush(connection.get());
+    QTRY_COMPARE(menu->transientFor(), owner);
+
+    // Removing and restoring the hint updates an already mapped popup.
+    xcb_delete_property(connection.get(), submenu->window(), XCB_ATOM_WM_TRANSIENT_FOR);
+    xcb_flush(connection.get());
+    QTRY_VERIFY(!submenu->transientFor());
+    xcb_icccm_set_wm_transient_for(connection.get(), submenu->window(), menu->window());
+    xcb_flush(connection.get());
+    QTRY_COMPARE(submenu->transientFor(), menu);
+
+    // An owner disappearing must not leave a pointer to a deleted window.
+    xcb_destroy_window(connection.get(), owner->window());
+    xcb_flush(connection.get());
+    QTRY_VERIFY(!menu->transientFor());
+    xcb_destroy_window(connection.get(), menu->window());
+    xcb_flush(connection.get());
+    QTRY_VERIFY(!submenu->transientFor());
+    xcb_destroy_window(connection.get(), submenu->window());
+    xcb_flush(connection.get());
+    QTRY_VERIFY(!third->transientFor());
 }
 
 void X11WindowTest::testOverrideRedirectStackingAbove()
