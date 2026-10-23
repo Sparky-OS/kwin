@@ -23,6 +23,7 @@
 #include "region_p.h"
 #include "shadow.h"
 #include "slide.h"
+#include "stereocontent_v1.h"
 #include "subcompositor.h"
 #include "surface_p.h"
 #include "transaction.h"
@@ -643,6 +644,8 @@ void SurfaceState::mergeInto(SurfaceState *target)
     target->alphaMultiplier = alphaMultiplier;
     target->stereoContent = stereoContent;
     target->stereoContentOneEyeWide = stereoContentOneEyeWide;
+    target->stereoDesktopDepth = stereoDesktopDepth;
+    target->stereoPlace = stereoPlace;
     target->yuvCoefficients = yuvCoefficients;
     target->fifoBarrier |= std::exchange(fifoBarrier, false);
     target->hasFifoWaitCondition = std::exchange(hasFifoWaitCondition, false);
@@ -684,6 +687,8 @@ void SurfaceInterfacePrivate::applyState(SurfaceState *next)
     const bool bufferReleasePointChanged = (next->committed & SurfaceState::Field::Buffer) && current->releasePoint != next->releasePoint;
     const bool alphaMultiplierChanged = (next->committed & SurfaceState::Field::AlphaMultiplier);
     const bool stereoContentChanged = (next->committed & SurfaceState::Field::StereoContent);
+    const bool stereoDepthChanged = (next->committed & SurfaceState::Field::StereoDepth)
+        && (current->stereoDesktopDepth != next->stereoDesktopDepth || current->stereoPlace != next->stereoPlace);
     const bool yuvCoefficientsChanged = (next->committed & SurfaceState::Field::YuvCoefficients) && (current->yuvCoefficients != next->yuvCoefficients);
 
     const QSizeF oldSurfaceSize = surfaceSize;
@@ -792,6 +797,9 @@ void SurfaceInterfacePrivate::applyState(SurfaceState *next)
     }
     if (stereoContentChanged) {
         Q_EMIT q->stereoContentChanged();
+    }
+    if (stereoDepthChanged) {
+        Q_EMIT q->stereoDepthChanged();
     }
     if (!bufferDamage.isEmpty()) {
         Q_EMIT q->damaged(bufferDamage);
@@ -1328,6 +1336,45 @@ double SurfaceInterface::alphaMultiplier() const
 StereoContent SurfaceInterface::stereoContent() const
 {
     return d->current->stereoContent;
+}
+
+bool SurfaceInterface::isStereoDesktopDepth() const
+{
+    return d->current->stereoDesktopDepth;
+}
+
+std::optional<qreal> SurfaceInterface::stereoPlace() const
+{
+    return d->current->stereoPlace;
+}
+
+bool SurfaceInterface::followsStereoDepth() const
+{
+    return !d->stereoDepths.isEmpty();
+}
+
+void SurfaceInterface::setStereoDepthState(bool awake, Qt::Edges outputEdges)
+{
+    const auto state = std::make_pair(awake, uint32_t(outputEdges.toInt()));
+    d->stereoDepthState = state;
+    for (StereoDepthSurfaceV1 *depth : std::as_const(d->stereoDepths)) {
+        depth->sendState(state.first, state.second);
+    }
+}
+
+void SurfaceInterfacePrivate::updatePendingStereoDepth()
+{
+    bool desktopDepth = false;
+    const StereoDepthSurfaceV1 *placed = nullptr;
+    for (const StereoDepthSurfaceV1 *depth : std::as_const(stereoDepths)) {
+        desktopDepth = desktopDepth || depth->desktopDepth();
+        if (depth->place() && (!placed || depth->placeSerial() > placed->placeSerial())) {
+            placed = depth;
+        }
+    }
+    pending->stereoDesktopDepth = desktopDepth;
+    pending->stereoPlace = placed ? placed->place() : std::nullopt;
+    pending->committed |= SurfaceState::Field::StereoDepth;
 }
 
 void SurfaceInterface::clearFifoBarrier(std::optional<std::chrono::nanoseconds> refreshDuration)

@@ -349,6 +349,30 @@ public:
     StereoContent stereoContent() const;
 
     /**
+     * Whether the client marked the surface's pair as the desktop's own depth, its elements drawn
+     * once per eye, rather than stereo content (kde_stereo_depth_v1.set_desktop_depth).
+     */
+    bool isStereoDesktopDepth() const;
+
+    /**
+     * Where the client declared the surface sits, from -1 (the sunk limit) to 1 (the popped limit),
+     * for a popup (kde_stereo_depth_v1.set_place); no value when it declared none.
+     */
+    std::optional<qreal> stereoPlace() const;
+
+    /**
+     * Whether the client follows the surface's desktop depth (kde_stereo_depth_v1).
+     */
+    bool followsStereoDepth() const;
+
+    /**
+     * Tells the clients following the surface's desktop depth whether elements inside it may be
+     * shown in depth now (@a awake) and which of its edges lie on its output's edge. Only changes
+     * are sent.
+     */
+    void setStereoDepthState(bool awake, Qt::Edges outputEdges);
+
+    /**
      * Returns the current release point for the buffer on this surface. The buffer keeps the
      * release point referenced as long as it's referenced itself; for synchronization on the
      * GPU side, the compositor has to either keep the release point referenced as long as the
@@ -469,6 +493,15 @@ Q_SIGNALS:
     void bufferReleasePointChanged();
     void alphaMultiplierChanged();
     void stereoContentChanged();
+    /**
+     * Emitted when the desktop depth mark or the declared place changed with a commit.
+     */
+    void stereoDepthChanged();
+    /**
+     * Emitted when the client starts following the surface's desktop depth with another object,
+     * which is due a depth state.
+     */
+    void stereoDepthFollowed();
 
     /**
      * Emitted when the Surface has been committed.
