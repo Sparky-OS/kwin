@@ -14,6 +14,7 @@
 #include "backends/virtual/virtual_backend.h"
 #include "backends/wayland/wayland_backend.h"
 #include "compositor.h"
+#include "core/output.h"
 #include "core/outputbackend.h"
 #include "core/session.h"
 #include "effect/effecthandler.h"
@@ -543,10 +544,23 @@ int main(int argc, char *argv[])
         break;
     case BackendType::Virtual: {
         auto outputBackend = std::make_unique<KWin::VirtualBackend>();
+        // For headless proofs of stereo: KWIN_VIRTUAL_STEREO_MODES=1 gives each output the 3D modes a
+        // monitor gets from "Anaglyph" and "Other stereo formats", twins of its one 2D mode, so a
+        // saved configuration or the output management protocol can switch it into a 3D mode.
+        QList<KWin::OutputModeline> modes;
+        if (qEnvironmentVariableIntValue("KWIN_VIRTUAL_STEREO_MODES")) {
+            using Flag = KWin::OutputModeline::Flag;
+            const QSize pixelSize = (QSizeF(initialWindowSize) * outputScale).toSize();
+            modes.append(KWin::OutputModeline(pixelSize, 60000, Flag::Preferred));
+            for (const Flag layout : {Flag::Stereo3DSideBySideHalf, Flag::Stereo3DTopAndBottom, Flag::Stereo3DAnaglyphModern, Flag::Stereo3DAnaglyphCrt}) {
+                modes.append(KWin::OutputModeline(pixelSize, 60000, Flag::VirtualStereo | layout));
+            }
+        }
         for (int i = 0; i < outputCount; ++i) {
             outputBackend->addOutput(KWin::VirtualBackend::OutputInfo{
                 .size = initialWindowSize,
                 .scale = outputScale,
+                .modes = modes,
             });
         }
         a.setSession(KWin::Session::create(KWin::Session::Type::Noop));
