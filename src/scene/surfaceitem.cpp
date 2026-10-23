@@ -185,7 +185,9 @@ void SurfaceItem::addDamage(const Region &region)
             // Simplified version of ceil(ceil(0.5 * output_scale / surface_scale) / output_scale)
             const int xPadding = std::ceil(0.5 / xScale);
             const int yPadding = std::ceil(0.5 / yScale);
-            viewDamage = viewDamage.grownBy(QMarginsF(xPadding, yPadding, xPadding, yPadding));
+            // the padding covers the filtering between the surface's pixels, it is not painted
+            // outside the surface: an output next to a full screen window has nothing to redraw
+            viewDamage = viewDamage.grownBy(QMarginsF(xPadding, yPadding, xPadding, yPadding)) & RegionF(rect());
         }
         scheduleRepaint(view, viewDamage);
     }

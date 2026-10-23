@@ -63,21 +63,7 @@ void StereoOutputRepaintTest::initTestCase()
 
 void StereoOutputRepaintTest::init()
 {
-    using Flag = OutputModeline::Flag;
-    Test::setOutputConfig({
-        Test::OutputInfo{
-            .geometry = Rect(QPoint(0, 0), s_outputSize),
-            .modes = {plainMode()},
-        },
-        Test::OutputInfo{
-            .geometry = Rect(QPoint(s_outputSize.width(), 0), s_outputSize),
-            .modes = {plainMode(),
-                      stereoMode(Flag::Stereo3DFramePacking, false),
-                      stereoMode(Flag::Stereo3DAnaglyphModern, true)},
-        },
-    });
-    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1));
-    workspace()->setActiveOutput(QPoint(10, 10));
+    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1 | Test::AdditionalWaylandInterface::Viewporter));
 }
 
 void StereoOutputRepaintTest::cleanup()
@@ -91,12 +77,22 @@ void StereoOutputRepaintTest::testOtherOutputStaysIdle_data()
     QTest::addColumn<int>("secondMode"); // 0 plain, 1 frame packing, 2 anaglyph
     QTest::addColumn<bool>("stereoFilm");
     QTest::addColumn<bool>("fullScreen");
+    QTest::addColumn<bool>("otherLeft"); // the other output is to the left of the film's
+    QTest::addColumn<bool>("filmAnaglyph"); // the film's own output is in a 3D mode too
+    QTest::addColumn<int>("eyeScale"); // 0: the buffer is the surface (or twice it); n: n * 3 / 2 times it, through a viewport
 
-    QTest::addRow("2D second output, 3D film full screen") << 0 << true << true;
-    QTest::addRow("frame packing second output, 3D film full screen") << 1 << true << true;
-    QTest::addRow("anaglyph second output, 3D film full screen") << 2 << true << true;
-    QTest::addRow("frame packing second output, 3D film in a window") << 1 << true << false;
-    QTest::addRow("frame packing second output, 2D film full screen") << 1 << false << true;
+    QTest::addRow("2D second output, 3D film full screen") << 0 << true << true << false << false << 0;
+    QTest::addRow("frame packing second output, 3D film full screen") << 1 << true << true << false << false << 0;
+    QTest::addRow("anaglyph second output, 3D film full screen") << 2 << true << true << false << false << 0;
+    QTest::addRow("frame packing second output, 3D film in a window") << 1 << true << false << false << false << 0;
+    QTest::addRow("frame packing second output, 2D film full screen") << 1 << false << true << false << false << 0;
+    // the A10: a film larger than the output, drawn through a viewport, the other output to the left, both outputs in a 3D mode
+    QTest::addRow("frame packing second output, 3D film bigger than the output through a viewport") << 1 << true << true << false << false << 1;
+    QTest::addRow("frame packing second output on the left, 3D film bigger than the output") << 1 << true << true << true << false << 1;
+    QTest::addRow("frame packing second output on the left, film output in anaglyph") << 1 << true << true << true << true << 1;
+    QTest::addRow("frame packing second output on the left, film output in anaglyph, film as large as the output") << 1 << true << true << true << true << 0;
+    QTest::addRow("frame packing second output on the left, 2D film bigger than the output") << 1 << false << true << true << true << 1;
+    QTest::addRow("frame packing second output, film smaller than the output") << 1 << true << true << false << false << -1;
 }
 
 void StereoOutputRepaintTest::testOtherOutputStaysIdle()
@@ -104,12 +100,32 @@ void StereoOutputRepaintTest::testOtherOutputStaysIdle()
     QFETCH(int, secondMode);
     QFETCH(bool, stereoFilm);
     QFETCH(bool, fullScreen);
+    QFETCH(bool, otherLeft);
+    QFETCH(bool, filmAnaglyph);
+    QFETCH(int, eyeScale);
+
+    using Flag = OutputModeline::Flag;
+    const auto stereoModes = [](bool plain) {
+        return plain ? QList<OutputModeline>{plainMode()} : QList<OutputModeline>{plainMode(), stereoMode(Flag::Stereo3DFramePacking, false), stereoMode(Flag::Stereo3DAnaglyphModern, true)};
+    };
+    Test::setOutputConfig({
+        Test::OutputInfo{
+            .geometry = Rect(QPoint(otherLeft ? s_outputSize.width() : 0, 0), s_outputSize),
+            .modes = stereoModes(!filmAnaglyph),
+        },
+        Test::OutputInfo{
+            .geometry = Rect(QPoint(otherLeft ? 0 : s_outputSize.width(), 0), s_outputSize),
+            .modes = stereoModes(false),
+        },
+    });
+    const QPoint firstTopLeft(otherLeft ? s_outputSize.width() : 0, 0);
+    workspace()->setActiveOutput(firstTopLeft + QPoint(10, 10));
 
     const auto outputs = workspace()->outputs();
     QCOMPARE(outputs.size(), 2);
     LogicalOutput *first = outputs[0];
     LogicalOutput *second = outputs[1];
-    QCOMPARE(first->geometry().topLeft(), QPoint(0, 0));
+    QCOMPARE(first->geometry().topLeft(), firstTopLeft);
 
     if (secondMode != 0) {
         OutputConfiguration configuration;
@@ -124,7 +140,20 @@ void StereoOutputRepaintTest::testOtherOutputStaysIdle()
         QVERIFY(Test::waylandSync());
         QVERIFY(second->hasStereoEyes());
     }
-    QVERIFY(!first->hasStereoEyes());
+    if (filmAnaglyph) {
+        OutputConfiguration configuration;
+        const auto &modes = first->backendOutput()->modes();
+        const auto it = std::ranges::find_if(modes, [](const auto &mode) {
+            return mode->flags() & OutputModeline::Flag::Stereo3DAnaglyphModern;
+        });
+        QVERIFY(it != modes.end());
+        configuration.changeSet(first->backendOutput())->currentMode = (*it)->modeline();
+        workspace()->applyOutputConfiguration(configuration);
+        QVERIFY(Test::waylandSync());
+        QVERIFY(first->hasStereoEyes());
+    } else {
+        QVERIFY(!first->hasStereoEyes());
+    }
 
     std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
     std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
@@ -133,9 +162,19 @@ void StereoOutputRepaintTest::testOtherOutputStaysIdle()
         declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
         declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
     }
+    // a film bigger or smaller than its surface is drawn through a viewport, as a player does
+    // (eyeScale 1: the eye is 3/2 of the surface, -1: 1/2 of it)
+    std::unique_ptr<WaylandClient::Viewport> viewport;
+    if (eyeScale != 0) {
+        viewport = Test::viewporter()->createViewport(*surface);
+    }
     // a full side by side buffer is both eyes, so twice as wide as the surface
-    const auto frameSize = [stereoFilm](const QSize &size) {
-        return stereoFilm ? QSize(size.width() * 2, size.height()) : size;
+    const auto frameSize = [&](const QSize &size) {
+        const QSize eye = eyeScale == 0 ? size : (eyeScale > 0 ? size * 3 / 2 : size / 2);
+        if (viewport) {
+            viewport->setDestination(size);
+        }
+        return stereoFilm ? QSize(eye.width() * 2, eye.height()) : eye;
     };
     Window *window = Test::renderAndWaitForShown(surface.get(), frameSize(QSize(320, 180)), Qt::blue);
     QVERIFY(window);
