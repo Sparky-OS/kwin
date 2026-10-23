@@ -143,6 +143,9 @@ private Q_SLOTS:
     void testStereoContentDeclarationMalformed();
     void testStereoContentOneViewSize_data();
     void testStereoContentOneViewSize();
+    void testStereoOneViewConfigure_data();
+    void testStereoOneViewConfigure();
+    void testStereoOneViewAspect();
     void testStereoContentDeclarationRulePrecedence();
     void testStereoChildWindow();
     void testStereoChildWindowListedBeforeMapping();
@@ -3994,7 +3997,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 6u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 7u);
 
     const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -4143,11 +4146,12 @@ void X11WindowTest::testStereoContentOneViewSize()
     QTRY_COMPARE(surfaceItem->destinationSize(), Xcb::fromXNative(QSize(larger[0], larger[1])));
     QCOMPARE(x11Size(), bothViews);
 
-    // a place the user gives the window is where its views are drawn, still at their own resolution
+    // A WM proposal keeps the client's current destination until the answer.
+    const QSizeF previousPlace = window->clientSize();
     const QSizeF placed = Xcb::fromXNative(QSize(300, 120));
     window->moveResize(RectF(window->frameGeometry().topLeft(), window->clientSizeToFrameSize(placed)));
-    QTRY_COMPARE(window->clientSize(), placed);
-    QTRY_COMPARE(surfaceItem->destinationSize(), placed);
+    QCOMPARE(window->clientSize(), previousPlace);
+    QCOMPARE(surfaceItem->destinationSize(), previousPlace);
     QCOMPARE(x11Size(), bothViews);
 
     // without the size the window is one view of the program's own size again
@@ -4156,6 +4160,120 @@ void X11WindowTest::testStereoContentOneViewSize()
     QTRY_COMPARE(x11Size(), Xcb::toXNative(QSizeF(window->clientSize().width() * 2, window->clientSize().height())));
 
     xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoOneViewAspect()
+{
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    const uint32_t stereo = StereoContentSideBySideFull;
+    const uint32_t place[] = {384, 216};
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 640, 360), [&](xcb_window_t id) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &stereo);
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content_one_view_size,
+                            XCB_ATOM_CARDINAL, 32, 2, place);
+        xcb_size_hints_t hints{};
+        xcb_icccm_size_hints_set_aspect(&hints, 640, 360, 640, 360);
+        xcb_icccm_size_hints_set_base_size(&hints, 32, 18);
+        xcb_icccm_set_wm_normal_hints(c.get(), id, &hints);
+    });
+    QVERIFY(window);
+    const QSizeF answer = Xcb::toXNative(window->frameSizeToClientSize(window->constrainFrameSize(
+        window->clientSizeToFrameSize(Xcb::fromXNative(QSize(700, 500))))));
+    QVERIFY(std::abs((answer.width() - 32) / (answer.height() - 18) - 640.0 / 360.0) < 0.01);
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoOneViewConfigure_data()
+{
+    QTest::addColumn<QString>("operation");
+    QTest::addColumn<bool>("aspect");
+    QTest::addRow("resize") << QStringLiteral("resize") << false;
+    QTest::addRow("client-choice") << QStringLiteral("client-choice") << false;
+    QTest::addRow("resize-aspect") << QStringLiteral("resize") << true;
+    QTest::addRow("maximize") << QStringLiteral("maximize") << false;
+    QTest::addRow("fullscreen") << QStringLiteral("fullscreen") << false;
+    QTest::addRow("tile") << QStringLiteral("tile") << false;
+}
+
+void X11WindowTest::testStereoOneViewConfigure()
+{
+    QFETCH(QString, operation);
+    QFETCH(bool, aspect);
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    const uint32_t stereo = StereoContentSideBySideFull;
+    const uint32_t original[] = {384, 216};
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 640, 360), [&](xcb_window_t id) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &stereo);
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content_one_view_size,
+                            XCB_ATOM_CARDINAL, 32, 2, original);
+        if (aspect) {
+            xcb_size_hints_t hints{};
+            xcb_icccm_size_hints_set_aspect(&hints, 640, 360, 640, 360);
+            xcb_icccm_set_wm_normal_hints(c.get(), id, &hints);
+        }
+    });
+    QVERIFY(window);
+    const QSizeF oldPlace = Xcb::fromXNative(QSize(384, 216));
+    QCOMPARE(window->clientSize(), oldPlace);
+    Xcb::Atom requestAtom("_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_CONFIGURE");
+    Xcb::Atom commitAtom("_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_COMMIT");
+    auto request = [&]() {
+        Xcb::Property property(false, window->window(), requestAtom, XCB_ATOM_CARDINAL, 0, 3);
+        const auto values = property.array<uint32_t>();
+        return values && values->size() == 3 ? std::vector<uint32_t>(values->begin(), values->end()) : std::vector<uint32_t>();
+    };
+    if (operation == QLatin1String("fullscreen")) {
+        window->setFullScreen(true);
+    } else if (operation == QLatin1String("maximize")) {
+        window->maximize(MaximizeFull);
+    } else if (operation == QLatin1String("tile")) {
+        window->setQuickTileMode(QuickTileFlag::Left, window->frameGeometry().center());
+    } else {
+        window->moveResize(RectF(window->frameGeometry().topLeft(), window->clientSizeToFrameSize(Xcb::fromXNative(QSize(700, 500)))));
+    }
+    // A WM proposal does not change the destination or the native eye raster.
+    QCOMPARE(window->clientSize(), oldPlace);
+    QTRY_COMPARE(request().size(), size_t(3));
+    const auto proposed = request();
+    QVERIFY(proposed[0] != 0);
+    QVERIFY(proposed[1] > 0 && proposed[2] > 0);
+    if (aspect) {
+        QVERIFY(std::abs(double(proposed[1]) / proposed[2] - 640.0 / 360.0) < 0.01);
+    }
+    UniqueCPtr<xcb_get_geometry_reply_t> geometry(xcb_get_geometry_reply(c.get(), xcb_get_geometry(c.get(), window->window()), nullptr));
+    QCOMPARE(QSize(geometry->width, geometry->height), QSize(1280, 360));
+
+    const std::array<uint32_t, 2> chosen = operation == QLatin1String("client-choice")
+        ? std::array<uint32_t, 2>{512, 288} : std::array<uint32_t, 2>{proposed[1], proposed[2]};
+    // A stale reply must not release the held destination.
+    auto answer = [&](uint32_t serial) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_one_view_size,
+                            XCB_ATOM_CARDINAL, 32, 2, chosen.data());
+        xcb_client_message_event_t event{};
+        event.response_type = XCB_CLIENT_MESSAGE;
+        event.format = 32;
+        event.window = window->window();
+        event.type = commitAtom;
+        event.data.data32[0] = serial;
+        xcb_send_event(c.get(), false, rootWindow(), XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
+                       reinterpret_cast<const char *>(&event));
+        const uint32_t color = 0x00ff0000;
+        xcb_change_window_attributes(c.get(), window->window(), XCB_CW_BACK_PIXEL, &color);
+        xcb_clear_area(c.get(), true, window->window(), 0, 0, 0, 0);
+        xcb_flush(c.get());
+    };
+    answer(proposed[0] + 1);
+    QTest::qWait(100);
+    QCOMPARE(window->clientSize(), oldPlace);
+    answer(proposed[0]);
+    QTRY_COMPARE(window->clientSize(), Xcb::fromXNative(QSize(chosen[0], chosen[1])));
+    QTRY_VERIFY(window->surface() && window->windowItem()->surfaceItem());
+    QTRY_COMPARE(window->windowItem()->surfaceItem()->destinationSize(), window->clientSize());
     xcb_destroy_window(c.get(), window->window());
     xcb_flush(c.get());
 }
