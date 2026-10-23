@@ -801,6 +801,7 @@ bool EglGbmLayerSurface::checkSurface(const QSize &size, const FormatModifierMap
     }
     if (doesSurfaceFit(m_oldSurface.get(), size, formats, tradeoff, requiredAlphaBits)) {
         m_surface = std::move(m_oldSurface);
+        m_composedEyes.reset();
         return true;
     }
     if (m_gpu != m_eglBackend->gpu() && m_gpu->renderDevice() && m_gpu->renderDevice()->isInReset()) {
@@ -822,6 +823,8 @@ bool EglGbmLayerSurface::checkSurface(const QSize &size, const FormatModifierMap
             }
         }
         m_surface = std::move(newSurface);
+        // the eyes held for replicas belong to the swapchains that were just replaced
+        m_composedEyes.reset();
         return true;
     }
     return false;
