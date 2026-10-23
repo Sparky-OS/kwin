@@ -9,6 +9,7 @@
 #include "core/output.h"
 #include "effect/effecthandler.h"
 #include "options.h"
+#include "wayland/surface.h"
 #include "window.h"
 #include "workspace.h"
 
@@ -111,6 +112,13 @@ static Role roleOf(const Window *window)
     return active && mainWindow(active) == window && !isCovered(window) ? Role::Active : Role::Sunk;
 }
 
+// where the program declared a popup sits (kde_stereo_depth_v1.set_place), from -1 to 1
+static std::optional<qreal> declaredPlace(const Window *window)
+{
+    const SurfaceInterface *surface = window->surface();
+    return surface ? surface->stereoPlace() : std::nullopt;
+}
+
 static bool touchesEdge(const Window *window)
 {
     const RectF frame = window->frameGeometry();
@@ -151,18 +159,25 @@ qreal StereoDepth::level(const Window *window)
         if (touchesEdge(window)) {
             return 0;
         }
-        // the popped limit is shared by what is popped over each other, the topmost at the limit
-        int count = 0;
-        int below = 0;
-        bool found = false;
-        for (const Window *other : stack) {
-            if (isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other)) {
-                count++;
-                found |= other == window;
-                below += !found;
+        qreal level = 1;
+        if (const auto place = declaredPlace(window)) {
+            // where the program declared it, under the rules below
+            level = std::clamp(*place, -1.0, 1.0);
+        } else {
+            // the popped limit is shared by what is popped over each other, the topmost at the
+            // limit; a popup with a declared place takes no share
+            int count = 0;
+            int below = 0;
+            bool found = false;
+            for (const Window *other : stack) {
+                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other) && !declaredPlace(other)) {
+                    count++;
+                    found |= other == window;
+                    below += !found;
+                }
             }
+            level = found ? qreal(below + 1) / count : 1;
         }
-        qreal level = found ? qreal(below + 1) / count : 1;
         // nor behind what its own window popped up before it, which it was opened from: a sub-menu
         // that ends up under its menu shares the menu's level
         const Window *main = mainWindow(window);
@@ -192,6 +207,47 @@ qreal StereoDepth::level(const Window *window)
     }
     }
     return 0;
+}
+
+bool StereoDepth::isAwake(const Window *window)
+{
+    const LogicalOutput *output = window->output();
+    if (!output || !output->hasStereoEyes() || !isOnStage(window, output)) {
+        return false;
+    }
+    switch (roleOf(window)) {
+    case Role::Active:
+    case Role::Popped:
+    case Role::Above:
+    case Role::Desktop:
+        return true;
+    case Role::Fixed: {
+        // a panel is never in the pile; a fullscreen window is awake while it is the active one
+        const Window *active = workspace()->activeWindow();
+        return window->isDock() || window->isLockScreen() || window->isInternal()
+            || (window->isFullScreen() && active && mainWindow(active) == mainWindow(window));
+    }
+    case Role::Sunk:
+    case Role::Below:
+        return false;
+    }
+    return false;
+}
+
+Qt::Edges StereoDepth::outputEdges(const Window *window)
+{
+    const LogicalOutput *output = window->output();
+    if (!output) {
+        return Qt::Edges();
+    }
+    const RectF frame = window->frameGeometry();
+    const RectF screen = output->geometryF();
+    Qt::Edges edges;
+    edges.setFlag(Qt::LeftEdge, frame.x() <= screen.x());
+    edges.setFlag(Qt::TopEdge, frame.y() <= screen.y());
+    edges.setFlag(Qt::RightEdge, frame.x() + frame.width() >= screen.x() + screen.width());
+    edges.setFlag(Qt::BottomEdge, frame.y() + frame.height() >= screen.y() + screen.height());
+    return edges;
 }
 
 int StereoDepth::parallax(const Window *window, int viewWidth)

@@ -2050,6 +2050,24 @@ StereoContentV1::~StereoContentV1()
     destroy();
 }
 
+StereoDepthV1::StereoDepthV1(::kde_stereo_depth_v1 *object)
+    : QtWayland::kde_stereo_depth_v1(object)
+{
+}
+
+StereoDepthV1::~StereoDepthV1()
+{
+    destroy();
+}
+
+void StereoDepthV1::kde_stereo_depth_v1_depth_state(uint32_t awake, uint32_t output_edges)
+{
+    this->awake = awake != 0;
+    outputEdges = output_edges;
+    states++;
+    Q_EMIT stateReceived();
+}
+
 FifoManagerV1::FifoManagerV1(::wl_registry *registry, uint32_t id, int version)
     : QtWayland::wp_fifo_manager_v1(registry, id, version)
 {

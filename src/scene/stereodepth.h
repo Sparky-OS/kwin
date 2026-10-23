@@ -85,6 +85,20 @@ public:
     static qreal level(const Window *window);
 
     /**
+     * Whether the elements a program draws inside @a window may be shown in depth now: the window
+     * is shown on a stereo output and awake, as the active window on top of what it overlaps, what
+     * pops up, a panel, the desktop or a window pinned above the others are, rather than lying flat
+     * in the pile behind the active window (kde_stereo_depth_v1.depth_state).
+     */
+    static bool isAwake(const Window *window);
+
+    /**
+     * The edges of @a window's frame that lie on an edge of its output. A popped thing touching
+     * them stays at the screen's level.
+     */
+    static Qt::Edges outputEdges(const Window *window);
+
+    /**
      * Whether effects may use depth: either of the effects' limits is above zero. Effects
      * describe their motion in depth with a z in pixels of a view 1920 wide, the unit of the
      * limits, and the renderer turns it into the parallax between the eyes (RenderViewport).

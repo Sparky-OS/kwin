@@ -1072,6 +1072,26 @@ public:
     ~StereoContentV1() override;
 };
 
+class StereoDepthV1 : public QObject, public QtWayland::kde_stereo_depth_v1
+{
+    Q_OBJECT
+
+public:
+    explicit StereoDepthV1(::kde_stereo_depth_v1 *object);
+    ~StereoDepthV1() override;
+
+    // the last depth_state, and how many arrived
+    bool awake = false;
+    uint32_t outputEdges = 0;
+    int states = 0;
+
+Q_SIGNALS:
+    void stateReceived();
+
+protected:
+    void kde_stereo_depth_v1_depth_state(uint32_t awake, uint32_t output_edges) override;
+};
+
 class WlKeyboard;
 class WlPointer;
 class WlTouch;
