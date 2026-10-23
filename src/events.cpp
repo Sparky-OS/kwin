@@ -462,6 +462,7 @@ void X11Window::configureNotifyEvent(xcb_configure_notify_event_t *e)
  */
 void X11Window::configureRequestEvent(xcb_configure_request_event_t *e)
 {
+    xcb_configure_request_event_t nativeRequest;
     if (hasStereoOneViewSize()) {
         if (e->value_mask & XCB_CONFIG_WINDOW_WIDTH) {
             m_programSize.setWidth(Xcb::fromXNative(e->width));
@@ -470,8 +471,9 @@ void X11Window::configureRequestEvent(xcb_configure_request_event_t *e)
             m_programSize.setHeight(Xcb::fromXNative(e->height));
         }
         configure(Xcb::toXNative(m_bufferGeometry));
-        sendSyntheticConfigureNotify();
-        return;
+        nativeRequest = *e;
+        nativeRequest.value_mask &= ~(XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT);
+        e = &nativeRequest;
     }
     if (isInteractiveResize() || isInteractiveMove()) {
         return; // we have better things to do right now

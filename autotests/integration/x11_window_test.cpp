@@ -146,6 +146,7 @@ private Q_SLOTS:
     void testStereoOneViewConfigure_data();
     void testStereoOneViewConfigure();
     void testStereoOneViewAspect();
+    void testStereoOneViewNativeConfigure();
     void testStereoContentDeclarationRulePrecedence();
     void testStereoChildWindow();
     void testStereoChildWindowListedBeforeMapping();
@@ -4160,6 +4161,33 @@ void X11WindowTest::testStereoContentOneViewSize()
     QTRY_COMPARE(x11Size(), Xcb::toXNative(QSizeF(window->clientSize().width() * 2, window->clientSize().height())));
 
     xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoOneViewNativeConfigure()
+{
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    const uint32_t stereo = StereoContentSideBySideFull;
+    const uint32_t place[] = {384, 216};
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 640, 360), [&](xcb_window_t id) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &stereo);
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, id, atoms->kde_net_wm_stereo_content_one_view_size,
+                            XCB_ATOM_CARDINAL, 32, 2, place);
+    });
+    QVERIFY(window);
+    const uint32_t geometry[] = {150, 80, 800, 450};
+    xcb_configure_window(c.get(), window->window(), XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y
+                          | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, geometry);
+    xcb_flush(c.get());
+    QTRY_COMPARE(Xcb::toXNative(window->pos()), QPoint(150, 80));
+    QCOMPARE(window->clientSize(), Xcb::fromXNative(QSize(384, 216)));
+    auto nativeSize = [&]() {
+        UniqueCPtr<xcb_get_geometry_reply_t> reply(xcb_get_geometry_reply(c.get(), xcb_get_geometry(c.get(), window->window()), nullptr));
+        return reply ? QSize(reply->width, reply->height) : QSize();
+    };
+    QTRY_COMPARE(nativeSize(), QSize(1600, 450));
     xcb_destroy_window(c.get(), window->window());
     xcb_flush(c.get());
 }
