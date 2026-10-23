@@ -332,6 +332,7 @@ bool X11Window::track(xcb_window_t w)
     info = new NETWinInfo(kwinApp()->x11Connection(), w, kwinApp()->x11RootWindow(),
                           NET::WMWindowType,
                           NET::WM2Opacity | NET::WM2WindowRole | NET::WM2WindowClass | NET::WM2OpaqueRegion);
+    readTransient();
     setOpacity(info->opacityF());
     readPid(pidCookie);
     getResourceClass();
@@ -2386,6 +2387,30 @@ void X11Window::readTransientProperty(Xcb::TransientFor &transientFor)
 void X11Window::readTransient()
 {
     if (isUnmanaged()) {
+        // Override-redirect popups still describe their owner to compositors.
+        // Keep this separate from managed-window grouping and placement.
+        disconnect(m_unmanagedTransientClosed);
+        const auto id = fetchTransient().getTransientFor().value_or(XCB_WINDOW_NONE);
+        X11Window *parent = workspace()->findClient(id);
+        if (!parent) {
+            parent = workspace()->findUnmanaged(id);
+        }
+        const Window *ancestor = parent;
+        for (int remaining = 32; ancestor; --remaining) {
+            if (ancestor == this || remaining == 0) {
+                parent = nullptr;
+                break;
+            }
+            ancestor = ancestor->transientFor();
+        }
+        m_transientForId = parent ? parent->window() : XCB_WINDOW_NONE;
+        setTransientFor(parent);
+        if (parent) {
+            m_unmanagedTransientClosed = connect(parent, &Window::closed, this, [this]() {
+                m_transientForId = XCB_WINDOW_NONE;
+                setTransientFor(nullptr);
+            });
+        }
         return;
     }
     Xcb::TransientFor transientFor = fetchTransient();
@@ -2653,6 +2678,9 @@ bool X11Window::hasTransientInternal(const X11Window *cl, bool indirect, QList<c
 
 QList<Window *> X11Window::mainWindows() const
 {
+    if (isUnmanaged()) {
+        return Window::mainWindows();
+    }
     if (!isTransient()) {
         return QList<Window *>();
     }

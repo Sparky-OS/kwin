@@ -425,6 +425,7 @@ private:
     NETWinInfo *info = nullptr;
     xcb_window_t m_transientForId;
     xcb_window_t m_originalTransientForId;
+    QMetaObject::Connection m_unmanagedTransientClosed;
     Xcb::MotifHints m_motif;
     DecorationPolicy m_decorationPolicy = DecorationPolicy::PreferredByClient;
     bool m_wantsNoDecoration = false;
