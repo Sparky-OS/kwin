@@ -414,6 +414,13 @@ void X11Window::destroyNotifyEvent(xcb_destroy_notify_event_t *e)
  */
 void X11Window::clientMessageEvent(xcb_client_message_event_t *e)
 {
+    if (e->type == atoms->kde_net_wm_stereo_content_one_view_commit) {
+        if (e->format == 32 && e->data.data32[1] == 0 && e->data.data32[2] == 0
+            && e->data.data32[3] == 0 && e->data.data32[4] == 0) {
+            commitStereoOneViewPlace(e->data.data32[0]);
+        }
+        return;
+    }
     if (e->type == atoms->wl_surface_serial) {
         m_surfaceSerial = (uint64_t(e->data.data32[1]) << 32) | e->data.data32[0];
         if (XwaylandSurfaceV1Interface *xwaylandSurface = waylandServer()->xwaylandShell()->findSurface(m_surfaceSerial)) {
@@ -455,6 +462,17 @@ void X11Window::configureNotifyEvent(xcb_configure_notify_event_t *e)
  */
 void X11Window::configureRequestEvent(xcb_configure_request_event_t *e)
 {
+    if (hasStereoOneViewSize()) {
+        if (e->value_mask & XCB_CONFIG_WINDOW_WIDTH) {
+            m_programSize.setWidth(Xcb::fromXNative(e->width));
+        }
+        if (e->value_mask & XCB_CONFIG_WINDOW_HEIGHT) {
+            m_programSize.setHeight(Xcb::fromXNative(e->height));
+        }
+        configure(Xcb::toXNative(m_bufferGeometry));
+        sendSyntheticConfigureNotify();
+        return;
+    }
     if (isInteractiveResize() || isInteractiveMove()) {
         return; // we have better things to do right now
     }

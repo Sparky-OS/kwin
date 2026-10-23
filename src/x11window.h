@@ -327,6 +327,10 @@ private:
     void readStereoContentOneViewSize(Xcb::Property &property);
     void getStereoContentOneViewSize();
     bool hasStereoOneViewSize() const;
+    void requestStereoOneViewPlace(const RectF &frame);
+    void commitStereoOneViewPlace(uint32_t serial);
+    void cancelStereoOneViewPlace();
+    void applyStereoOneViewPlace();
     QSizeF stereoViewScale() const;
     void setupStereoChildren();
 
@@ -380,6 +384,12 @@ private:
     uint32_t m_stereoContentVersion = 0;
     // the size one view is shown at, as the program declares it
     QSizeF m_stereoOneViewSize;
+    uint32_t m_stereoPlaceSerial = 0;
+    bool m_stereoPlacePending = false;
+    bool m_stereoPlaceAcked = false;
+    bool m_applyingStereoPlace = false;
+    RectF m_stereoPlaceFrame;
+    QSizeF m_stereoPlaceAnswer;
     std::unique_ptr<X11StereoChildren> m_stereoChildren;
     // how much larger the program's own sizes are than its place on screen
     QSizeF m_programSizeScale = QSizeF(1, 1);

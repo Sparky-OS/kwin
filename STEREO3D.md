@@ -213,10 +213,42 @@ Mesa lists a stereo child in its window's `_KDE_NET_WM_STEREO_CONTENT_CHILDREN`,
 KWin announces this as version 5 of `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED`.
 **X11 views at their own resolution, tested in containers (2026-10-22):** an X11 window's buffer is its own pixmap, so on X11 the size a view is shown at is declared apart from its resolution, as a Wayland program sets its `wp_viewport` destination.
 A program lists it in `_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE` (CARDINAL/32, the width and the height one view is shown at, in display pixels): the two 1920x540 views of a half top-and-bottom 1920x1080 video make a 3840x540 X11 window whose place on screen is one view at 1920x1080.
-The X11 window keeps the program's own size, KWin resizes each view once, to the window's place, and the pointer reaches the first view at that place; a new declared size resizes the place, and maximizing or resizing the window changes only the size the views are drawn at.
+The X11 window keeps the program's own size, KWin resizes each view once, to the window's place, and the pointer reaches the first view at that place; a new declared size resizes the place, and a program chooses a new declared size when its place changes.
 KWin announces this as version 6 of `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED`.
 **Every shrink is integrated (2026-10-22):** a view drawn smaller than its resolution, on either axis, is the average of the samples each pixel covers, taken within its own view; a view drawn at its size or larger is bilinear.
 **Anaglyph:** the same Dubois matrices (modern screens and CRT, in linear light) were tested in a game, Half-Life 2 handing its full side by side eyes to a gamescope effect, on the HX855 (2026-09-25, both profiles). In KWin it is built and switched by an environment variable for now; its first screen test comes with the toggle.
 **Planned, in this order:** the virtual 3D modes and their toggles, the other stereo formats, VR.
 
 Daniel (Sparky Stereo OS, an edition of SparkyLinux)
+
+## X11 one-view place requests (version 7)
+
+A window with a valid ONE_VIEW_SIZE receives a proposed place when it is resized, maximized, tiled or made fullscreen.
+KWin does not change the current destination until the client answers and submits its next frame.
+The native X11 pixmap and ConfigureNotify geometry remain native geometry.
+
+KWin writes the window property `_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_CONFIGURE`, CARDINAL/32, exactly three values: nonzero serial, width, height.
+The dimensions are one view's display pixels, in the same units as ONE_VIEW_SIZE, from 1 to 32767.
+A newer serial supersedes an earlier request.
+The client selects PropertyChangeMask, chooses its buffer, paints, writes ONE_VIEW_SIZE with its chosen destination, and sends `_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_COMMIT` to the root with SubstructureRedirectMask | SubstructureNotifyMask.
+That ClientMessage has format 32, its window is the client, data[0] is the request serial, and data[1..4] are zero.
+The chosen destination may differ from the proposal.
+Only the latest serial is accepted.
+KWin holds Xwayland surface commits until the answer, then applies the answer with the next surface commit.
+Removing the declaration or ONE_VIEW_SIZE cancels the pending request.
+An unanswered request leaves the old picture at its old size.
+
+The root `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED` is 7.
+libstereo-declare 1.6.0 exposes `stereo_x11_one_view_event()` and `stereo_declare_x11_one_view_commit()`; its API.md specifies validation and client use.
+WM_NORMAL_HINTS dimensions and aspect bounds use one-view display units.
+An explicit strict-geometry window rule remains a user choice.
+Fullscreen proposes the whole output so the program can pad its native canvas.
+
+ICCCM 4.1.5 requires refused ConfigureRequests to report the “(unchanged) geometry of the window”.
+ICCCM 4.2.8 requires a ResizeRedirect recipient to use “the width and height specified”.
+These mechanisms describe native X geometry, so neither carries a separate destination.
+ICCCM 4.1.2.3 defines aspect fractions with “the numerator first and the denominator second”; an explicit base size is subtracted for aspect constraints, and a minimum size is not its substitute.
+See [ICCCM](https://xorg.freedesktop.org/archive/current/doc/xorg-docs/icccm/icccm.html).
+EWMH 6.2 says synchronization covers “the client repainting the window”.
+KWin retains that repaint counter protocol and its existing timeout handling; the place acknowledgement is separate, and both gates must release a pending frame.
+See [EWMH 6.2](https://specifications.freedesktop.org/wm/latest/ar01s06.html).

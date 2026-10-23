@@ -2868,7 +2868,7 @@ QSizeF X11Window::constrainClientSize(const QSizeF &size, SizeMode mode) const
     w = std::max(min_size.width(), w);
     h = std::max(min_size.height(), h);
 
-    if (!rules()->checkStrictGeometry(false)) {
+    if (!rules()->checkStrictGeometry(hasStereoOneViewSize())) {
         // Disobey increments and aspect by explicit rule.
         return QSizeF(w, h);
     }
@@ -3080,14 +3080,14 @@ void X11Window::getWmNormalHints()
 QSizeF X11Window::minSize() const
 {
     const QSizeF size = Xcb::fromXNative(m_geometryHints.minSize());
-    const QSizeF scale = programSizeScale();
+    const QSizeF scale = hasStereoOneViewSize() ? QSizeF(1, 1) : programSizeScale();
     return rules()->checkMinSize(QSizeF(size.width() / scale.width(), size.height() / scale.height()));
 }
 
 QSizeF X11Window::maxSize() const
 {
     const QSizeF size = Xcb::fromXNative(m_geometryHints.maxSize());
-    const QSizeF scale = programSizeScale();
+    const QSizeF scale = hasStereoOneViewSize() ? QSizeF(1, 1) : programSizeScale();
     return rules()->checkMaxSize(QSizeF(size.width() / scale.width(), size.height() / scale.height()));
 }
 
@@ -3212,6 +3212,12 @@ void X11Window::handleStereoContentChanged()
     if (!m_managed) {
         return;
     }
+    if (!hasStereoOneViewSize()) {
+        cancelStereoOneViewPlace();
+    }
+    const bool wasApplying = m_applyingStereoPlace;
+    m_applyingStereoPlace = true;
+    const auto restoreApplying = qScopeGuard([this, wasApplying]() { m_applyingStereoPlace = wasApplying; });
     // the program's own size stays: a program declaring stereo itself keeps its place on
     // screen and its X11 window changes, a window rule keeps the X11 window and its place on
     // screen changes; a fullscreen or maximized window keeps its place
@@ -3228,6 +3234,9 @@ void X11Window::handleStereoContentChanged()
 void X11Window::handleCommitted()
 {
     if (surface()->isMapped()) {
+        if (m_stereoPlaceAcked && (!m_syncRequest.pending || !m_syncRequest.enabled)) {
+            applyStereoOneViewPlace();
+        }
         if (m_syncRequest.acked) {
             finishSync();
         }
@@ -3237,7 +3246,7 @@ void X11Window::handleCommitted()
 void X11Window::setAllowCommits(bool allow)
 {
     static bool disabled = qEnvironmentVariableIntValue("KWIN_NO_XWAYLAND_ALLOW_COMMITS") == 1;
-    if (disabled) {
+    if (disabled || (allow && m_stereoPlacePending && !m_stereoPlaceAcked)) {
         return;
     }
 
@@ -3654,6 +3663,11 @@ void X11Window::moveResizeInternal(const RectF &rect, MoveResizeMode mode)
 
     const RectF frameGeometry = Xcb::fromXNative(Xcb::toXNative(rect));
     const RectF clientGeometry = nextFrameRectToClientRect(frameGeometry);
+    if (m_managed && hasStereoOneViewSize() && !m_applyingStereoPlace
+        && (clientGeometry.size() != m_clientGeometry.size() || m_stereoPlacePending)) {
+        requestStereoOneViewPlace(frameGeometry);
+        return;
+    }
     const RectF bufferGeometry = nextFrameRectToBufferRect(frameGeometry);
     const qreal bufferScale = kwinApp()->xwaylandScale();
     const QSizeF stereoClientScale = this->stereoClientScale();
@@ -4362,8 +4376,79 @@ void X11Window::readStereoContentOneViewSize(Xcb::Property &property)
 void X11Window::getStereoContentOneViewSize()
 {
     auto property = fetchStereoContentOneViewSize();
+    const QSizeF oldSize = m_stereoOneViewSize;
     readStereoContentOneViewSize(property);
+    if (m_stereoPlacePending && !m_stereoOneViewSize.isEmpty()) {
+        m_stereoOneViewSize = oldSize;
+        return; // the serial acknowledgement commits this answer
+    }
     handleStereoContentChanged();
+}
+
+void X11Window::requestStereoOneViewPlace(const RectF &frame)
+{
+    RectF proposed = frame;
+    if (!isFullScreen()) {
+        proposed.setSize(clientSizeToFrameSize(constrainClientSize(nextFrameRectToClientRect(frame).size())));
+    }
+    if (m_stereoPlacePending && m_stereoPlaceFrame == proposed && !m_stereoPlaceAcked) {
+        return;
+    }
+    m_stereoPlaceFrame = proposed;
+    m_stereoPlacePending = true;
+    m_stereoPlaceAcked = false;
+    if (++m_stereoPlaceSerial == 0) {
+        ++m_stereoPlaceSerial;
+    }
+    const QSize size = Xcb::toXNative(nextFrameRectToClientRect(proposed).size());
+    const uint32_t request[] = {m_stereoPlaceSerial, uint32_t(std::clamp(size.width(), 1, 32767)),
+                               uint32_t(std::clamp(size.height(), 1, 32767))};
+    setAllowCommits(false);
+    xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, window(),
+                        atoms->kde_net_wm_stereo_content_one_view_configure, XCB_ATOM_CARDINAL, 32, 3, request);
+    xcb_flush(kwinApp()->x11Connection());
+}
+
+void X11Window::commitStereoOneViewPlace(uint32_t serial)
+{
+    if (!m_stereoPlacePending || !serial || serial != m_stereoPlaceSerial || !hasStereoOneViewSize()) {
+        return;
+    }
+    auto property = fetchStereoContentOneViewSize();
+    const QSizeF oldSize = m_stereoOneViewSize;
+    readStereoContentOneViewSize(property);
+    m_stereoPlaceAnswer = m_stereoOneViewSize;
+    m_stereoOneViewSize = oldSize;
+    if (m_stereoPlaceAnswer.isEmpty()) {
+        return;
+    }
+    m_stereoPlaceAcked = true;
+    if (!m_syncRequest.pending || !m_syncRequest.enabled) {
+        setAllowCommits(true);
+    }
+}
+
+void X11Window::applyStereoOneViewPlace()
+{
+    m_stereoOneViewSize = m_stereoPlaceAnswer;
+    RectF frame = m_stereoPlaceFrame;
+    frame.setSize(clientSizeToFrameSize(m_stereoOneViewSize));
+    m_stereoPlacePending = false;
+    m_stereoPlaceAcked = false;
+    m_applyingStereoPlace = true;
+    moveResize(frame);
+    m_applyingStereoPlace = false;
+    xcb_delete_property(kwinApp()->x11Connection(), window(), atoms->kde_net_wm_stereo_content_one_view_configure);
+}
+
+void X11Window::cancelStereoOneViewPlace()
+{
+    m_stereoPlacePending = false;
+    m_stereoPlaceAcked = false;
+    xcb_delete_property(kwinApp()->x11Connection(), window(), atoms->kde_net_wm_stereo_content_one_view_configure);
+    if (!m_syncRequest.pending || !m_syncRequest.enabled) {
+        setAllowCommits(true);
+    }
 }
 
 //********************************************
