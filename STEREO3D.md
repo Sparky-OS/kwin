@@ -260,3 +260,10 @@ From version 8 it may also declare `_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE` (C
 A child without stereo content of its own, or without the property, is shown at its X11 window's size as before.
 libstereo-declare 1.7.0 writes it with `stereo_declare_x11_child()`.
 Under Xwayland the child has a surface of its own only in the edition's Xwayland; on a stock Xwayland the child stays in its window's surface and nothing is shown per eye.
+
+A child may instead declare `_KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE`, for the native raster of a video that the ordinary window paints its controls over: CARDINAL/32, exactly five values (x, y, width, height, below-parent), the rectangle in the X11 window the child is shown at, in display pixels (x and y signed 32-bit values from -32767 to 32767, width and height from 1 to 32767), and whether the child is shown below the window's own surface (1) or above it (0).
+The X11 window of the child keeps its native size; each view is scaled once to the rectangle.
+A malformed property, or one of another type, counts as absent.
+**Precedence:** the child's `CHILD_PLACE`, else its position at the size of one view of its `ONE_VIEW_SIZE` (only while it holds stereo content), else its X11 window's rectangle.
+X11 input geometry does not change: a child shown elsewhere makes its input shape empty and handles input in the logical area of the parent.
+libstereo-declare 1.7.0 writes it with `stereo_declare_x11_child_place()`.
