@@ -308,7 +308,7 @@ SurfaceItemXwayland::SurfaceItemXwayland(X11Window *window, Item *parent)
     updateStereoChildren();
 }
 
-// The child windows that hold stereo content, each above the window's own surface at its place,
+// Declared children keep their native buffers and independent place relative to the parent,
 // one view for each eye; the rest of the window is the same in both eyes.
 void SurfaceItemXwayland::updateStereoChildren()
 {
@@ -330,7 +330,7 @@ void SurfaceItemXwayland::updateStereoChildren()
             item->setChildGeometry(child->place());
             item->setStereoContent(child->content);
             item->setMapped(child->mapped);
-            item->setZ(int(items.size()) + 1);
+            item->setZ(child->belowParent ? int(items.size()) - int(children->children().size()) : int(items.size()) + 1);
             items.push_back(std::move(item));
         }
     }

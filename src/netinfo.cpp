@@ -131,9 +131,11 @@ RootInfo *RootInfo::create()
     // program's own size, its views at their own resolution, and its place on
     // screen is one view at that size, as a Wayland surface's viewport destination).
     // 7 negotiates changes of that place with the client before applying them.
-    // 8 also takes the size one view is shown at from a child window's own
-    // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE: a child that holds both views at full width
-    // is an X11 window twice as wide as its place.
+    // 8 also places a child window independently of its native raster: from the child's own
+    // _KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE (a rectangle in its parent and whether it is shown
+    // below the parent's own surface) or from the size one view is shown at in its own
+    // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE, so a child may hold both views at full width or
+    // the native raster of a video while the ordinary window paints its controls above it.
     const uint32_t stereoContentSupported = 8;
     xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, kwinApp()->x11RootWindow(),
                         atoms->kde_net_wm_stereo_content_supported, XCB_ATOM_CARDINAL, 32, 1, &stereoContentSupported);

@@ -187,6 +187,20 @@ void X11StereoChildren::updateGeometry(X11StereoChild *child)
         return;
     }
     child->geometry = Xcb::fromXNative(Rect(position->dst_x, position->dst_y, geometry->width, geometry->height));
+    child->belowParent = false;
+    Xcb::Property placement(false, child->window, atoms->kde_net_wm_stereo_content_child_place, XCB_ATOM_CARDINAL, 0, 6);
+    if (const auto values = placement.array<uint32_t>(); values && values->size() == 5) {
+        const int32_t x = int32_t((*values)[0]);
+        const int32_t y = int32_t((*values)[1]);
+        const uint32_t width = (*values)[2];
+        const uint32_t height = (*values)[3];
+        const uint32_t below = (*values)[4];
+        if (x >= -32767 && x <= 32767 && y >= -32767 && y <= 32767
+            && width > 0 && width <= 32767 && height > 0 && height <= 32767 && below <= 1) {
+            child->geometry = Xcb::fromXNative(Rect(x, y, width, height));
+            child->belowParent = below;
+        }
+    }
 
     // mapped up to the X11 window: the X11 window's own state is the window's, and a child that
     // was mapped while the X11 window was not gets no MapNotify when the X11 window is mapped
@@ -306,6 +320,11 @@ void X11StereoChildren::handleEvent(xcb_generic_event_t *event)
         if (property->atom == atoms->kde_net_wm_stereo_content || property->atom == atoms->kde_net_wm_stereo_content_one_view_size) {
             if (X11StereoChild *child = findChild(property->window)) {
                 updateContent(child);
+                Q_EMIT changed();
+            }
+        } else if (property->atom == atoms->kde_net_wm_stereo_content_child_place) {
+            if (X11StereoChild *child = findChild(property->window)) {
+                updateGeometry(child);
                 Q_EMIT changed();
             }
         }

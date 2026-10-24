@@ -70,6 +70,7 @@ public:
     Xcb::Atom kde_net_wm_stereo_content;
     Xcb::Atom kde_net_wm_stereo_content_class;
     Xcb::Atom kde_net_wm_stereo_content_children;
+    Xcb::Atom kde_net_wm_stereo_content_child_place;
     Xcb::Atom kde_net_wm_stereo_content_version;
     Xcb::Atom kde_net_wm_stereo_content_one_view_configure;
     Xcb::Atom kde_net_wm_stereo_content_one_view_commit;

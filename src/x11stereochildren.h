@@ -45,6 +45,7 @@ struct KWIN_EXPORT X11StereoChild
     // the child and the windows between it and the X11 window are mapped, so the child is
     // shown with the X11 window
     bool mapped = false;
+    bool belowParent = false;
     StereoContent content = StereoContentNone;
     // the child's own _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE: the size one view is shown at,
     // empty when the child declares none
