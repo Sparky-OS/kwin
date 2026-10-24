@@ -209,6 +209,17 @@ void X11StereoChildren::updateContent(X11StereoChild *child)
     Xcb::Property property(false, child->window, atoms->kde_net_wm_stereo_content, XCB_ATOM_CARDINAL, 0, 1);
     const uint32_t value = property.value<uint32_t>().value_or(StereoContentNone);
     child->content = value == StereoContentSideBySideFull ? StereoContentSideBySideFull : StereoContentNone;
+
+    // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE, read as for an X11 window: CARDINAL/32, exactly
+    // two values, neither zero nor beyond X11's coordinates; anything else means none
+    Xcb::Property sizeProperty(false, child->window, atoms->kde_net_wm_stereo_content_one_view_size, XCB_ATOM_CARDINAL, 0, 2);
+    const auto values = sizeProperty.array<uint32_t>();
+    if (!values || values->size() != 2 || sizeProperty.data()->bytes_after != 0
+        || (*values)[0] == 0 || (*values)[1] == 0 || (*values)[0] > 32767 || (*values)[1] > 32767) {
+        child->oneViewSize = QSizeF();
+    } else {
+        child->oneViewSize = Xcb::fromXNative(QSize((*values)[0], (*values)[1]));
+    }
 }
 
 void X11StereoChildren::setSurface(X11StereoChild *child, SurfaceInterface *surface)
@@ -292,7 +303,7 @@ void X11StereoChildren::handleEvent(xcb_generic_event_t *event)
     }
     case XCB_PROPERTY_NOTIFY: {
         const auto *property = reinterpret_cast<xcb_property_notify_event_t *>(event);
-        if (property->atom == atoms->kde_net_wm_stereo_content) {
+        if (property->atom == atoms->kde_net_wm_stereo_content || property->atom == atoms->kde_net_wm_stereo_content_one_view_size) {
             if (X11StereoChild *child = findChild(property->window)) {
                 updateContent(child);
                 Q_EMIT changed();
