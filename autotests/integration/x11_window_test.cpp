@@ -4567,8 +4567,8 @@ void X11WindowTest::testStereoChildWindow()
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
                         XCB_ATOM_CARDINAL, 32, 5, place);
     xcb_flush(c.get());
-    QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(Size(240, 130)));
-    QCOMPARE(childItem->position(), Xcb::fromXNative(Point(4, 7)));
+    QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(QSize(240, 130)));
+    QCOMPARE(childItem->position(), Xcb::fromXNative(Rect(4, 7, 0, 0)).topLeft());
     QVERIFY(childItem->z() < 0);
     Xcb::WindowGeometry nativeGeometry(child);
     QCOMPARE(nativeGeometry->width, 100);
@@ -4583,16 +4583,24 @@ void X11WindowTest::testStereoChildWindow()
     };
     for (const auto &values : invalid) {
         xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
+                            XCB_ATOM_CARDINAL, 32, 5, place);
+        xcb_flush(c.get());
+        QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(QSize(240, 130)));
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
                             XCB_ATOM_CARDINAL, 32, values.size(), values.constData());
         xcb_flush(c.get());
-        QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(Size(100, 80)));
-        QCOMPARE(childItem->position(), Xcb::fromXNative(Point(30, 35)));
+        QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(QSize(100, 80)));
+        QCOMPARE(childItem->position(), Xcb::fromXNative(Rect(30, 35, 0, 0)).topLeft());
         QVERIFY(childItem->z() > 0);
     }
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
+                        XCB_ATOM_CARDINAL, 32, 5, place);
+    xcb_flush(c.get());
+    QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(QSize(240, 130)));
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
                         XCB_ATOM_WINDOW, 32, 5, place);
     xcb_flush(c.get());
-    QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(Size(100, 80)));
+    QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(QSize(100, 80)));
     xcb_delete_property(c.get(), child, childPlace);
     xcb_flush(c.get());
 
