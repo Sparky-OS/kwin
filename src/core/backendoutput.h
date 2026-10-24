@@ -89,6 +89,7 @@ public:
         Ized3dOptions = 1 << 21,
         SideBySideFullTiming = 1 << 22,
         StereoDepth = 1 << 23,
+        StereoGlasses = 1 << 24,
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
 
@@ -390,6 +391,12 @@ public:
 
     bool anaglyph() const;
     bool otherStereoFormats() const;
+    /**
+     * USB-C 3D glasses that show a picture two eyes wide as two eyes: a 2D mode of that shape
+     * comes up as its side by side (full) twin when no saved mode fits. On by default for the
+     * glasses the output configuration store knows by their EDID, off for every other output.
+     */
+    bool stereoGlasses() const;
     uint32_t abmLevel() const;
 
 Q_SIGNALS:
@@ -469,6 +476,7 @@ Q_SIGNALS:
     void hdrIccProfilePathChanged();
     void hdrColorProfileSourceChanged();
     void stereoFormatsChanged();
+    void stereoGlassesChanged();
     void abmLevelChanged();
 
 protected:
@@ -573,6 +581,7 @@ protected:
         uint32_t abmLevel = 0;
         bool anaglyph = false;
         bool otherStereoFormats = false;
+        bool stereoGlasses = false;
         HeadsetView headsetView;
     };
 

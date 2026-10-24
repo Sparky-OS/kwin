@@ -109,6 +109,10 @@ public:
     std::optional<QSize> likelyNativeResolution() const;
 
     QByteArray pnpId() const;
+    /**
+     * the manufacturer's product code (bytes 10 and 11), with pnpId() the identity of a display model
+     */
+    uint16_t productCode() const;
 
     std::optional<uint32_t> minVrrRefreshRateHz() const;
 
@@ -117,6 +121,7 @@ private:
     QByteArray m_vendor;
     QByteArray m_eisaId;
     QByteArray m_pnpId;
+    uint16_t m_productCode = 0;
     QByteArray m_monitorName;
     QByteArray m_serialNumber;
     QString m_hash;

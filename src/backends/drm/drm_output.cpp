@@ -268,7 +268,7 @@ static const bool s_allowColorspaceNVidia = qEnvironmentVariableIntValue("KWIN_D
 
 BackendOutput::Capabilities DrmOutput::computeCapabilities() const
 {
-    Capabilities capabilities = Capability::Ized3dOptions | Capability::StereoSwapEyes | Capability::VirtualStereo | Capability::Dpms | Capability::IccProfile | Capability::CustomModes | Capability::HdrIccProfile;
+    Capabilities capabilities = Capability::Ized3dOptions | Capability::StereoSwapEyes | Capability::VirtualStereo | Capability::StereoGlasses | Capability::Dpms | Capability::IccProfile | Capability::CustomModes | Capability::HdrIccProfile;
     if (m_connector->overscan.isValid() || m_connector->underscan.isValid()) {
         capabilities |= Capability::Overscan;
     }
@@ -632,6 +632,7 @@ bool DrmOutput::queueChanges(const std::shared_ptr<OutputChangeSet> &props)
     m_nextState->rgbRange = props->rgbRange.value_or(m_state.rgbRange);
     m_nextState->anaglyph = props->anaglyph.value_or(m_state.anaglyph);
     m_nextState->otherStereoFormats = props->otherStereoFormats.value_or(m_state.otherStereoFormats);
+    m_nextState->stereoGlasses = props->stereoGlasses.value_or(m_state.stereoGlasses);
     m_nextState->highDynamicRange = props->highDynamicRange.value_or(m_state.highDynamicRange);
     m_nextState->referenceLuminance = props->referenceLuminance.value_or(m_state.referenceLuminance);
     m_nextState->wideColorGamut = props->wideColorGamut.value_or(m_state.wideColorGamut);

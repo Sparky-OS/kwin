@@ -105,6 +105,7 @@ private:
         std::optional<uint32_t> abmLevel;
         std::optional<bool> anaglyph;
         std::optional<bool> otherStereoFormats;
+        std::optional<bool> stereoGlasses;
         std::optional<HeadsetView> headsetView;
     };
     struct SetupState

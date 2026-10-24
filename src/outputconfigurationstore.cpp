@@ -35,6 +35,38 @@ static bool isStereo3D(OutputModeline::Flags flags)
     return flags & OutputModeline::AllStereo3D || flags.testFlag(OutputModeline::Flag::VirtualStereo);
 }
 
+// USB-C 3D glasses that take their 3D picture two eyes wide, by the EDID's manufacturer and product;
+// XREAL One series: SYNTHETIC identities (PnP ID XRL, the USB product identifiers) until the real EDID is dumped
+static const struct
+{
+    const char *pnpId;
+    uint16_t product;
+} s_stereoGlasses[] = {
+    {"XRL", 0x0435}, // XREAL One Pro
+    {"XRL", 0x0436}, // XREAL One Pro
+    {"XRL", 0x0437}, // XREAL One
+    {"XRL", 0x0438}, // XREAL One
+    {"XRL", 0x043d}, // XREAL 1S
+    {"XRL", 0x043e}, // XREAL 1S
+};
+
+static bool isStereoGlasses(const Edid &edid)
+{
+    return std::ranges::any_of(s_stereoGlasses, [&edid](const auto &glasses) {
+        return edid.pnpId() == glasses.pnpId && edid.productCode() == glasses.product;
+    });
+}
+
+// the side by side (full) twin of a plain 2D mode two eyes wide: for glasses, the one 3D mode
+// chosen without the user, as a 2D desktop across their 3840x1080 shows a stretched left half to the left eye
+static std::optional<OutputModeline> glassesTwin(const OutputModeline &mode)
+{
+    if (isStereo3D(mode.flags()) || !isTwoEyesWide(mode.size())) {
+        return std::nullopt;
+    }
+    return OutputModeline(mode.size(), mode.refreshRate(), (mode.flags() & ~OutputModeline::Flags(OutputModeline::Flag::Preferred)) | OutputModeline::Flag::VirtualStereo | OutputModeline::Flag::Stereo3DSideBySideFull);
+}
+
 static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &saved, bool anaglyph, bool otherStereoFormats, const std::optional<QList<CustomModeDefinition>> &customModes)
 {
     using Flag = OutputModeline::Flag;
@@ -426,6 +458,7 @@ void OutputConfigurationStore::storeConfig(const QList<BackendOutput *> &allOutp
             .abmLevel = output->abmLevel(),
             .anaglyph = output->anaglyph(),
             .otherStereoFormats = output->otherStereoFormats(),
+            .stereoGlasses = output->stereoGlasses(),
             .headsetView = output->isSplitEyeDisplay() ? std::make_optional(output->headsetView()) : std::nullopt,
         };
         *outputIt = SetupState{
@@ -481,10 +514,17 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
                 }
             }
         }
+        const bool stereoGlasses = state.stereoGlasses.value_or(isStereoGlasses(output->edid()));
+        bool glassesTwinChosen = false;
         if (!effectiveMode) {
             effectiveMode = chooseMode(output)->modeline();
-            qCDebug(KWIN_OUTPUT_CONFIG, "Chose new mode for output %s: %dx%d@%u",
-                    qPrintable(state.edidIdentifier), effectiveMode->size().width(), effectiveMode->size().height(), effectiveMode->refreshRate());
+            if (const auto twin = stereoGlasses ? glassesTwin(*effectiveMode) : std::nullopt) {
+                effectiveMode = twin;
+                glassesTwinChosen = true;
+            }
+            qCDebug(KWIN_OUTPUT_CONFIG, "Chose new mode for output %s: %dx%d@%u%s",
+                    qPrintable(state.edidIdentifier), effectiveMode->size().width(), effectiveMode->size().height(), effectiveMode->refreshRate(),
+                    glassesTwinChosen ? " side by side (full), for glasses" : "");
         }
 
         *ret.changeSet(output) = OutputChangeSet{
@@ -539,7 +579,8 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
             .autoBrightnessCurve = state.autoBrightnessCurve,
             .abmLevel = state.abmLevel,
             .anaglyph = state.anaglyph,
-            .otherStereoFormats = output->initialVirtualMode() ? output->isSplitEyeDisplay() : state.otherStereoFormats,
+            .otherStereoFormats = output->initialVirtualMode() ? output->isSplitEyeDisplay() : (glassesTwinChosen ? std::optional<bool>(true) : state.otherStereoFormats),
+            .stereoGlasses = stereoGlasses,
             .headsetView = state.headsetView,
         };
     }
@@ -683,8 +724,14 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
                 }
             }
         }
+        const bool stereoGlasses = existingData.stereoGlasses.value_or(isStereoGlasses(output->edid()));
+        bool glassesTwinChosen = false;
         if (!modeline) {
             modeline = chooseMode(output)->modeline();
+            if (const auto twin = stereoGlasses ? glassesTwin(*modeline) : std::nullopt) {
+                modeline = twin;
+                glassesTwinChosen = true;
+            }
         }
 
         const auto changeset = ret.changeSet(output);
@@ -729,7 +776,8 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
             .autoBrightnessCurve = existingData.autoBrightnessCurve,
             .abmLevel = existingData.abmLevel.value_or(0),
             .anaglyph = existingData.anaglyph.value_or(false),
-            .otherStereoFormats = output->initialVirtualMode() ? output->isSplitEyeDisplay() : existingData.otherStereoFormats.value_or(output->otherStereoFormats()),
+            .otherStereoFormats = output->initialVirtualMode() ? output->isSplitEyeDisplay() : (glassesTwinChosen || existingData.otherStereoFormats.value_or(output->otherStereoFormats())),
+            .stereoGlasses = stereoGlasses,
         };
         if (setupState) {
             priority = std::max(setupState->priority + 1, priority);
@@ -1366,6 +1414,9 @@ void OutputConfigurationStore::load()
         if (data.value("otherStereoFormats").isBool()) {
             state.otherStereoFormats = data.value("otherStereoFormats").toBool();
         }
+        if (data.value("stereoGlasses").isBool()) {
+            state.stereoGlasses = data.value("stereoGlasses").toBool();
+        }
         if (const auto it = data.find("abmLevel"); it != data.end()) {
             const int level = it->toInt(-1);
             if (level >= 0 && level <= 4) {
@@ -1720,6 +1771,9 @@ void OutputConfigurationStore::save()
         }
         if (output.otherStereoFormats) {
             o["otherStereoFormats"] = *output.otherStereoFormats;
+        }
+        if (output.stereoGlasses) {
+            o["stereoGlasses"] = *output.stereoGlasses;
         }
         if (output.abmLevel.has_value()) {
             o["abmLevel"] = int(*output.abmLevel);

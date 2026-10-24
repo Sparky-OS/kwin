@@ -190,6 +190,7 @@ Edid::Edid(QByteArrayView data)
     m_physicalSize = determineScreenPhysicalSizeMm(edid);
     m_eisaId = parseEisaId(bytes);
     m_pnpId = parsePnpId(bytes);
+    m_productCode = productInfo->product;
     UniqueCPtr<char> monitorName{di_info_get_model(info)};
     m_monitorName = QByteArray(monitorName.get());
     UniqueCPtr<char> serial{di_info_get_serial(info)};
@@ -476,6 +477,11 @@ QByteArray Edid::identifier() const
 QByteArray Edid::pnpId() const
 {
     return m_pnpId;
+}
+
+uint16_t Edid::productCode() const
+{
+    return m_productCode;
 }
 
 std::optional<uint32_t> Edid::minVrrRefreshRateHz() const
