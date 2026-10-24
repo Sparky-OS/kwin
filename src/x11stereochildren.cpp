@@ -188,6 +188,7 @@ void X11StereoChildren::updateGeometry(X11StereoChild *child)
     }
     child->geometry = Xcb::fromXNative(Rect(position->dst_x, position->dst_y, geometry->width, geometry->height));
     child->belowParent = false;
+    child->declaredPlace.reset();
     Xcb::Property placement(false, child->window, atoms->kde_net_wm_stereo_content_child_place, XCB_ATOM_CARDINAL, 0, 6);
     if (const auto values = placement.array<uint32_t>(); values && values->size() == 5) {
         const int32_t x = int32_t((*values)[0]);
@@ -197,7 +198,7 @@ void X11StereoChildren::updateGeometry(X11StereoChild *child)
         const uint32_t below = (*values)[4];
         if (x >= -32767 && x <= 32767 && y >= -32767 && y <= 32767
             && width > 0 && width <= 32767 && height > 0 && height <= 32767 && below <= 1) {
-            child->geometry = Xcb::fromXNative(Rect(x, y, width, height));
+            child->declaredPlace = Xcb::fromXNative(Rect(x, y, width, height));
             child->belowParent = below;
         }
     }

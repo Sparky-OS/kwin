@@ -45,17 +45,26 @@ struct KWIN_EXPORT X11StereoChild
     // the child and the windows between it and the X11 window are mapped, so the child is
     // shown with the X11 window
     bool mapped = false;
+    // the child's own _KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE: the rectangle in the X11 window it
+    // is shown at, however large its native raster is, and whether it is shown below the X11
+    // window's own surface (so the ordinary window paints its controls above the child)
+    std::optional<RectF> declaredPlace;
     bool belowParent = false;
     StereoContent content = StereoContentNone;
     // the child's own _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE: the size one view is shown at,
     // empty when the child declares none
     QSizeF oneViewSize;
 
-    // The child's place in the X11 window as the scene shows it: a child that holds stereo content
-    // and declares the size of one view is shown at that size, however large its X11 window is
-    // (as for an X11 window, the views are kept at the program's own raster).
+    // The child's place in the X11 window as the scene shows it, in this order: its declared
+    // place (_KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE); else, when it holds stereo content and
+    // declares the size of one view, its position at that size, however large its X11 window is
+    // (as for an X11 window, the views are kept at the program's own raster); else its X11
+    // window's rectangle.
     RectF place() const
     {
+        if (declaredPlace) {
+            return *declaredPlace;
+        }
         if (content != StereoContentNone && !oneViewSize.isEmpty()) {
             return RectF(geometry.topLeft(), oneViewSize);
         }

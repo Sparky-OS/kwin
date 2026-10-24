@@ -4810,6 +4810,19 @@ void X11WindowTest::testStereoChildWindowOneViewSize()
     xcb_flush(c.get());
     QTRY_COMPARE(stereoChild->place(), Xcb::fromXNative(Rect(30, 35, 100, 80)));
 
+    // a declared place (_KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE) wins over the size of one view, and
+    // deleting it gives the size of one view back; the child's own raster is not touched
+    Xcb::Atom childPlace(QByteArrayLiteral("_KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE"));
+    const uint32_t declaredPlace[] = {4, 7, 50, 40, 0};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace, XCB_ATOM_CARDINAL, 32, 5, declaredPlace);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->place(), Xcb::fromXNative(Rect(4, 7, 50, 40)));
+    QCOMPARE(stereoChild->oneViewSize, Xcb::fromXNative(QSize(100, 80)));
+    QCOMPARE(stereoChild->geometry, Xcb::fromXNative(Rect(30, 35, 200, 80)));
+    xcb_delete_property(c.get(), child, childPlace);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->place(), Xcb::fromXNative(Rect(30, 35, 100, 80)));
+
     // the scene shows the surface at the place of one view
     KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(stereoChild);
     SurfaceItem *windowSurfaceItem = window->windowItem()->surfaceItem();
