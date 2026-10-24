@@ -391,6 +391,11 @@ std::unique_ptr<Connection> Connection::setup(AdditionalWaylandInterfaces flags)
     connection->thread->start();
 
     connection->connection->initConnection();
+    // KWIN_TEST_CONNECT_DELAY_MS keeps the test thread busy here, as a loaded machine does, so
+    // that the client is already connected when the test starts to wait for it
+    if (const int delay = qEnvironmentVariableIntValue("KWIN_TEST_CONNECT_DELAY_MS"); delay > 0) {
+        QThread::msleep(delay);
+    }
     if (!connectedSpy.wait()) {
         return nullptr;
     }
