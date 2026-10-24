@@ -276,7 +276,7 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
             sourceRect = frameSequentialSourceRect(mode, eye);
             targetRect = Rect(QPoint(0, 0), m_pending.mode->size());
         } else {
-            sourceRect = targetRect = Rect(QPoint(0, 0), stereoFrameSize(mode, stereoLayout));
+            sourceRect = targetRect = Rect(QPoint(0, 0), stereoFrameSize(mode, stereoLayout, m_pending.mode->flags()));
         }
     }
     if (layer->type() == OutputLayerType::Primary && isSpatialStereo(stereoLayout)

@@ -340,7 +340,9 @@ QSize BackendOutput::viewSize() const
 QSize BackendOutput::viewSizeForMode(const OutputModeline &mode) const
 {
     const QSize size = mode.size();
-    if (isSplitEyeDisplay() && mode.flags().testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf)) {
+    // the side by side (full) twin of a mode two eyes wide: the desktop is one eye, each half of the frame
+    const bool twoEyesWide = mode.flags().testFlag(OutputModeline::Flag::VirtualStereo) && mode.flags().testFlag(OutputModeline::Flag::Stereo3DSideBySideFull);
+    if (twoEyesWide || (isSplitEyeDisplay() && mode.flags().testFlag(OutputModeline::Flag::Stereo3DSideBySideHalf))) {
         return QSize(size.width() / 2, size.height());
     }
     return size;

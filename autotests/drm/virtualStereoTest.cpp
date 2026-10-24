@@ -275,6 +275,20 @@ private Q_SLOTS:
         // the twin keeps the base's timing: the frame is the mode, the glasses split it
         QCOMPARE(full[0]->size(), QSize(3840, 1080));
         QCOMPARE(std::memcmp(full[0]->nativeMode(), wide->nativeMode(), sizeof(drmModeModeInfo)), 0);
+        QVERIFY(isVirtualSideBySideFull(full[0]->flags()));
+        QCOMPARE(stereoFrameSize(*full[0]->nativeMode(), StereoLayout::SideBySideFull, full[0]->flags()), QSize(3840, 1080));
+        QCOMPARE(stereoEyeSize(*full[0]->nativeMode(), full[0]->flags()), QSize(1920, 1080));
+        QCOMPARE(stereoRightEyeOffset(*full[0]->nativeMode(), StereoLayout::SideBySideFull, full[0]->flags()), QPoint(1920, 0));
+        // the HDMI structure is unchanged: the mode per eye, the frame twice as wide (Figure H-4)
+        QCOMPARE(stereoFrameSize(*plain->nativeMode(), StereoLayout::SideBySideFull), QSize(3840, 1080));
+        QCOMPARE(stereoEyeSize(*plain->nativeMode(), OutputModeline::Flags()), QSize(1920, 1080));
+        QCOMPARE(stereoRightEyeOffset(*plain->nativeMode(), StereoLayout::SideBySideFull), QPoint(1920, 0));
+        QVERIFY(!isTwoEyesWide(QSize(1920, 1080)));
+        QVERIFY(!isTwoEyesWide(QSize(2560, 1080)));
+        QVERIFY(!isTwoEyesWide(QSize(3440, 1440)));
+        QVERIFY(isTwoEyesWide(QSize(3840, 1080)));
+        QVERIFY(isTwoEyesWide(QSize(2560, 720)));
+        QVERIFY(isTwoEyesWide(QSize(7680, 2160)));
         // the hand-switched twins of both modes are still there
         QCOMPARE(std::ranges::count_if(modes, [](const auto &mode) {
                      return stereoLayoutForMode(mode->flags()) == StereoLayout::SideBySideHalf;

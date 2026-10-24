@@ -187,6 +187,13 @@ private:
     Flags m_flags;
 };
 
+/**
+ * Whether a 2D mode is two eyes wide, as the side by side mode of USB-C 3D glasses is (3840x1080:
+ * the left half to the left eye, the right half to the right eye). Each half then has the aspect
+ * ratio of an ordinary picture, 4:3 to 18:9; an ultrawide 21:9 mode is not two eyes wide.
+ */
+KWIN_EXPORT bool isTwoEyesWide(const QSize &size);
+
 class KWIN_EXPORT OutputMode
 {
 public:

@@ -44,6 +44,15 @@ QDebug operator<<(QDebug debug, const LogicalOutput *output)
     return debug;
 }
 
+bool isTwoEyesWide(const QSize &size)
+{
+    if (size.width() % 2 || size.height() <= 0) {
+        return false;
+    }
+    const double aspect = (size.width() / 2.0) / size.height();
+    return aspect >= 4.0 / 3.0 - 0.01 && aspect <= 2.0 + 0.01;
+}
+
 OutputModeline::OutputModeline()
     : OutputModeline(QSize(), 0, {})
 {

@@ -62,7 +62,7 @@ QSize EglGbmLayer::scanoutSize() const
         return pipeline()->mode()->size();
     }
     if (m_type == OutputLayerType::Primary && isFullFrameStereo(layout)) {
-        return stereoFrameSize(*pipeline()->mode()->nativeMode(), layout);
+        return stereoFrameSize(*pipeline()->mode()->nativeMode(), layout, pipeline()->mode()->flags());
     }
     return targetRect().size();
 }
@@ -73,7 +73,8 @@ std::optional<OutputLayerBeginFrameInfo> EglGbmLayer::doBeginFrame()
     const StereoLayout stereoLayout = drmOutput()->activeStereoLayout();
     if (m_type == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         const drmModeModeInfo *mode = pipeline()->mode()->nativeMode();
-        m_surface.setStereoLayout(stereoLayout, QSize(mode->hdisplay, mode->vdisplay), stereoRightEyeOffset(*mode, stereoLayout));
+        const OutputModeline::Flags flags = pipeline()->mode()->flags();
+        m_surface.setStereoLayout(stereoLayout, stereoEyeSize(*mode, flags), stereoRightEyeOffset(*mode, stereoLayout, flags));
     } else {
         m_surface.setStereoLayout(stereoLayout);
     }

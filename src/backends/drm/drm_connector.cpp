@@ -288,6 +288,10 @@ QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QL
         }
         if (otherStereoFormats) {
             layouts << OutputModeline::Flag::Stereo3DSideBySideHalf << OutputModeline::Flag::Stereo3DTopAndBottom;
+            // a mode two eyes wide, as USB-C 3D glasses take their 3D picture: one eye copied into each half
+            if (isTwoEyesWide(mode->size())) {
+                layouts << OutputModeline::Flag::Stereo3DSideBySideFull;
+            }
             // frame sequential: the gear (DLP-Link, a panel with its own emitter) syncs its glasses itself;
             // any size, but the rate per eye is half the refresh
             if (mode->refreshRate() >= 100000) {

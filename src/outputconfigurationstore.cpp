@@ -43,7 +43,8 @@ static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &s
     }
     const auto layouts = saved.flags() & ~(Flag::Preferred | Flag::Generated | Flag::Custom | Flag::ReducedBlanking | Flag::VirtualStereo);
     const bool anaglyphLayout = layouts == Flag::Stereo3DAnaglyphModern || layouts == Flag::Stereo3DAnaglyphCrt;
-    const bool halfLayout = layouts == Flag::Stereo3DSideBySideHalf || layouts == Flag::Stereo3DTopAndBottom;
+    // the hand-switched packings, and the side by side (full) twin of a mode two eyes wide
+    const bool halfLayout = layouts == Flag::Stereo3DSideBySideHalf || layouts == Flag::Stereo3DTopAndBottom || layouts == Flag::Stereo3DSideBySideFull;
     const bool spatialLayout = layouts == Flag::Stereo3DRowsLeftFirst || layouts == Flag::Stereo3DRowsRightFirst
         || layouts == Flag::Stereo3DColumnsLeftFirst || layouts == Flag::Stereo3DColumnsRightFirst
         || layouts == Flag::Stereo3DCheckerboardLeftFirst || layouts == Flag::Stereo3DCheckerboardRightFirst;

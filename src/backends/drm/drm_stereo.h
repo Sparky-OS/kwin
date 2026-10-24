@@ -30,7 +30,10 @@ namespace KWin
  * Without a 3D mode, an output can still be packed side by side (half) or top and bottom
  * on its 2D mode, for displays that don't detect a 3D signal and have their 3D format set
  * by hand (projectors and the like), or mixed as anaglyph for red/cyan glasses on any
- * screen (CRT or modern-screen matrices).
+ * screen (CRT or modern-screen matrices). A 2D mode two eyes wide (3840x1080) also gets
+ * a side by side (full) twin, for USB-C 3D glasses that show its left half to the left eye
+ * and its right half to the right eye: the mode is the whole frame and each eye is one half,
+ * where the HDMI structure is the mode per eye and the frame twice as wide.
  */
 enum class StereoLayout {
     None,
@@ -53,6 +56,12 @@ enum class StereoLayout {
     LDepth,
     LDepthGraphics,
 };
+
+// the side by side (full) twin of a 2D mode two eyes wide: the mode is the frame, not an eye
+inline bool isVirtualSideBySideFull(OutputModeline::Flags flags)
+{
+    return flags.testFlag(OutputModeline::Flag::VirtualStereo) && flags.testFlag(OutputModeline::Flag::Stereo3DSideBySideFull);
+}
 
 inline bool isSpatialStereo(StereoLayout layout)
 {
@@ -194,8 +203,11 @@ inline bool isFullFrameStereo(StereoLayout layout)
     }
 }
 
-inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
+inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout, OutputModeline::Flags flags = {})
 {
+    if (layout == StereoLayout::SideBySideFull && isVirtualSideBySideFull(flags)) {
+        return QSize(mode.hdisplay, mode.vdisplay);
+    }
     switch (layout) {
     case StereoLayout::FramePacking:
     case StereoLayout::FieldAlternative:
@@ -214,9 +226,21 @@ inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout)
     }
 }
 
-// where the right eye starts in a full-frame layout; for L + depth where the depth starts
-inline QPoint stereoRightEyeOffset(const drmModeModeInfo &mode, StereoLayout layout)
+// one eye of a full-frame layout: the mode, or half of it for the twin of a mode two eyes wide
+inline QSize stereoEyeSize(const drmModeModeInfo &mode, OutputModeline::Flags flags)
 {
+    if (isVirtualSideBySideFull(flags)) {
+        return QSize(mode.hdisplay / 2, mode.vdisplay);
+    }
+    return QSize(mode.hdisplay, mode.vdisplay);
+}
+
+// where the right eye starts in a full-frame layout; for L + depth where the depth starts
+inline QPoint stereoRightEyeOffset(const drmModeModeInfo &mode, StereoLayout layout, OutputModeline::Flags flags = {})
+{
+    if (layout == StereoLayout::SideBySideFull && isVirtualSideBySideFull(flags)) {
+        return QPoint(mode.hdisplay / 2, 0);
+    }
     switch (layout) {
     case StereoLayout::FramePacking:
     case StereoLayout::FieldAlternative:
