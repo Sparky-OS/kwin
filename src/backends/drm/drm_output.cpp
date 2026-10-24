@@ -343,6 +343,15 @@ void DrmOutput::updateInformation()
     // so limit the changes to what's verified to work
     const Edid *edid = m_connector->edid();
     Information nextInfo = m_information;
+    // USB-C 3D glasses re-announce themselves with another EDID when their mode is switched, the cable
+    // in: the output keeps its connector and takes the display the EDID now describes
+    nextInfo.manufacturer = edid->manufacturerString();
+    nextInfo.model = m_connector->modelName();
+    nextInfo.serialNumber = edid->serialNumber();
+    nextInfo.eisaId = edid->eisaId();
+    nextInfo.physicalSize = m_connector->physicalSize();
+    nextInfo.edid = *edid;
+    nextInfo.minVrrRefreshRateHz = edid->minVrrRefreshRateHz();
     nextInfo.capabilities = computeCapabilities();
     nextInfo.maxPeakBrightness = edid->desiredMaxLuminance();
     nextInfo.maxAverageBrightness = edid->desiredMaxFrameAverageLuminance();
