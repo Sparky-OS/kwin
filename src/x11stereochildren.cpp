@@ -154,7 +154,8 @@ std::unique_ptr<X11StereoChild> X11StereoChildren::watch(xcb_window_t window)
 void X11StereoChildren::unwatch(X11StereoChild *child)
 {
     xcb_connection_t *connection = kwinApp()->x11Connection();
-    xcb_composite_unredirect_window(connection, child->window, XCB_COMPOSITE_REDIRECT_MANUAL);
+    // the child may be gone already, with its X11 window destroyed: that is no error to report
+    xcb_discard_reply(connection, xcb_composite_unredirect_window_checked(connection, child->window, XCB_COMPOSITE_REDIRECT_MANUAL).sequence);
     const uint32_t noEvents = XCB_EVENT_MASK_NO_EVENT;
     xcb_change_window_attributes(connection, child->window, XCB_CW_EVENT_MASK, &noEvents);
     for (const xcb_window_t ancestor : std::as_const(child->ancestors)) {
