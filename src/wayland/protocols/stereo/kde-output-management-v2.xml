@@ -11,7 +11,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-<interface name="kde_output_management_v2" version="28">
+<interface name="kde_output_management_v2" version="29">
   <description summary="configuration of server outputs through clients">
     This interface enables clients to set properties of output devices for screen
     configuration purposes via the server. To this end output devices are referenced
@@ -74,7 +74,7 @@
 
 </interface>
 
-<interface name="kde_output_configuration_v2" version="28">
+<interface name="kde_output_configuration_v2" version="29">
   <description summary="configure single output devices">
     outputconfiguration is a client-specific resource that can be used to ask
     the server to apply changes to available output devices.
@@ -558,6 +558,16 @@
     <arg name="outputdevice" type="object" interface="kde_output_device_v2"/>
     <arg name="source" type="uint" enum="stereo_depth_source"/>
     <arg name="viewing_distance" type="uint"/>
+  </request>
+  <request name="set_stereo_glasses" since="29">
+    <description summary="mark the output as side by side 3D glasses">
+      The value has the same meaning as the output device's stereo_glasses
+      event: 1 brings a two-eyes-wide 2D mode of the output up as its side by
+      side (full) twin when no saved mode fits, 0 leaves every 3D mode to the
+      user's choice.
+    </description>
+    <arg name="outputdevice" type="object" interface="kde_output_device_v2"/>
+    <arg name="enabled" type="uint"/>
   </request>
 </interface>
 

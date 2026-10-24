@@ -92,6 +92,11 @@ target_link_libraries(testMockDrmDepthStructures LibDrmTest Qt::Test)
 add_test(NAME kwin-testMockDrmDepthStructures COMMAND testMockDrmDepthStructures)
 ecm_mark_as_test(testMockDrmDepthStructures)
 
+add_executable(testMockDrmGlasses mockGlassesTest.cpp)
+target_link_libraries(testMockDrmGlasses LibDrmTest Qt::Test)
+add_test(NAME kwin-testMockDrmGlasses COMMAND testMockDrmGlasses)
+ecm_mark_as_test(testMockDrmGlasses)
+
 add_executable(testFrameSequential frameSequentialTest.cpp)
 target_link_libraries(testFrameSequential LibDrmTest Qt::Test)
 add_test(NAME kwin-testFrameSequential COMMAND testFrameSequential)

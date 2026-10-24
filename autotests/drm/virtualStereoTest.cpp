@@ -241,6 +241,50 @@ private Q_SLOTS:
         }
     }
 
+    void sideBySideFullTwin()
+    {
+        // a plain 2D mode two eyes wide (the 3840x1080 of USB-C 3D glasses in their side by side mode)
+        // gets a side by side (full) twin, each eye one half of the frame; an ordinary mode gets none
+        drmModeModeInfo timing{};
+        timing.clock = 266500;
+        timing.hdisplay = 3840;
+        timing.htotal = 4000;
+        timing.vdisplay = 1080;
+        timing.vtotal = 1111;
+        timing.type = DRM_MODE_TYPE_PREFERRED;
+        auto wide = std::make_shared<DrmConnectorMode>(nullptr, timing, OutputModeline::Flags{});
+        timing.clock = 148500;
+        timing.hdisplay = 1920;
+        timing.htotal = 2200;
+        timing.vtotal = 1125;
+        timing.type = 0;
+        auto plain = std::make_shared<DrmConnectorMode>(nullptr, timing, OutputModeline::Flags{});
+        const QList<std::shared_ptr<OutputMode>> bases{wide, plain};
+        const auto modes = DrmConnector::withVirtualStereoModes(bases, {}, false, true);
+        QList<std::shared_ptr<DrmConnectorMode>> full;
+        for (const auto &mode : modes) {
+            if (stereoLayoutForMode(mode->flags()) == StereoLayout::SideBySideFull) {
+                full.append(std::static_pointer_cast<DrmConnectorMode>(mode));
+            }
+        }
+        QCOMPARE(full.size(), 1);
+        QCOMPARE(full[0]->virtualBase(), wide);
+        QVERIFY(full[0]->flags() & OutputModeline::Flag::VirtualStereo);
+        QVERIFY(!(full[0]->flags() & OutputModeline::Flag::Preferred));
+        QCOMPARE(full[0]->flags() & OutputModeline::AllStereo3D, OutputModeline::Flags(OutputModeline::Flag::Stereo3DSideBySideFull));
+        // the twin keeps the base's timing: the frame is the mode, the glasses split it
+        QCOMPARE(full[0]->size(), QSize(3840, 1080));
+        QCOMPARE(std::memcmp(full[0]->nativeMode(), wide->nativeMode(), sizeof(drmModeModeInfo)), 0);
+        // the hand-switched twins of both modes are still there
+        QCOMPARE(std::ranges::count_if(modes, [](const auto &mode) {
+                     return stereoLayoutForMode(mode->flags()) == StereoLayout::SideBySideHalf;
+                 }),
+                 2);
+        // the twin stays the same object across an unchanged rebuild, and goes with the toggle
+        QCOMPARE(DrmConnector::withVirtualStereoModes(bases, modes, false, true), modes);
+        QCOMPARE(DrmConnector::withVirtualStereoModes(bases, {}, false, false), bases);
+    }
+
     void noPreferredSize()
     {
         drmModeModeInfo timing{};

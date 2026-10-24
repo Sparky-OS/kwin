@@ -10,7 +10,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-  <interface name="kde_output_device_registry_v2" version="28">
+  <interface name="kde_output_device_registry_v2" version="29">
     <description summary="output devices">
       This interface can be used to list output devices.
 
@@ -52,7 +52,7 @@
     </event>
   </interface>
 
-  <interface name="kde_output_device_v2" version="28">
+  <interface name="kde_output_device_v2" version="29">
     <description summary="output configuration representation">
       An output device describes a display device available to the compositor.
       output_device is similar to wl_output, but focuses on output
@@ -293,6 +293,7 @@
       <entry name="ized3d_options" value="0x80000" since="27" summary="iZ3D formula and transfer settings are supported"/>
       <entry name="side_by_side_full_timing" value="0x100000" since="28" summary="the timing of side by side (full) 3D modes can be chosen"/>
       <entry name="stereo_depth" value="0x200000" since="28" summary="the depth sent with picture and depth 3D modes can be chosen"/>
+      <entry name="stereo_glasses" value="0x400000" since="29" summary="the output can be marked as side by side 3D glasses"/>
     </enum>
 
     <event name="capabilities">
@@ -693,9 +694,22 @@
       <arg name="source" type="uint" enum="stereo_depth_source"/>
       <arg name="viewing_distance" type="uint" summary="centimetres, 0 for automatic"/>
     </event>
+    <event name="stereo_glasses" since="29">
+      <description summary="side by side 3D glasses">
+        Whether the output is 3D glasses that show a picture two eyes wide as
+        two eyes (USB-C glasses whose 3D mode is a 3840x1080 input, the left
+        half to the left eye and the right half to the right eye). On, a 2D
+        mode of that shape comes up as its side by side (full) twin, each eye at
+        full resolution, with other_stereo_formats turned on, whenever no saved
+        mode fits the output. The compositor turns it on by default for glasses
+        it knows by their EDID and off for every other output; the user may
+        change it. A saved mode is always the user's and is never replaced.
+      </description>
+      <arg name="enabled" type="uint" summary="0 off, 1 on"/>
+    </event>
   </interface>
 
-  <interface name="kde_output_device_mode_v2" version="28">
+  <interface name="kde_output_device_mode_v2" version="29">
     <description summary="output mode">
       This object describes an output mode.
 
