@@ -238,7 +238,7 @@ KWin holds Xwayland surface commits until the answer, then applies the answer wi
 Removing the declaration or ONE_VIEW_SIZE cancels the pending request.
 An unanswered request leaves the old picture at its old size.
 
-The root `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED` is 7.
+The root `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED` is 8 (7 is this place negotiation; 8 is described below).
 libstereo-declare 1.6.0 exposes `stereo_x11_one_view_event()` and `stereo_declare_x11_one_view_commit()`; its API.md specifies validation and client use.
 WM_NORMAL_HINTS dimensions and aspect bounds use one-view display units.
 An explicit strict-geometry window rule remains a user choice.
@@ -252,3 +252,11 @@ See [ICCCM](https://xorg.freedesktop.org/archive/current/doc/xorg-docs/icccm/icc
 EWMH 6.2 says synchronization covers “the client repainting the window”.
 KWin retains that repaint counter protocol and its existing timeout handling; the place acknowledgement is separate, and both gates must release a pending frame.
 See [EWMH 6.2](https://specifications.freedesktop.org/wm/latest/ar01s06.html).
+
+## X11 child windows that hold both views at full width (version 8)
+
+A child window listed in `_KDE_NET_WM_STEREO_CONTENT_CHILDREN` declares its own `_KDE_NET_WM_STEREO_CONTENT` (version 5).
+From version 8 it may also declare `_KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE` (CARDINAL/32, exactly two values, the width and the height one view is shown at, each from 1 to 32767; anything else means none), read as for an X11 window: the child's X11 window keeps the program's own raster, both views at full width and so twice as wide as the place, and KWin shows each view at the declared size, at the child's position.
+A child without stereo content of its own, or without the property, is shown at its X11 window's size as before.
+libstereo-declare 1.7.0 writes it with `stereo_declare_x11_child()`.
+Under Xwayland the child has a surface of its own only in the edition's Xwayland; on a stock Xwayland the child stays in its window's surface and nothing is shown per eye.
