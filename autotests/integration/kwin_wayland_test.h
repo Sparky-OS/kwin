@@ -1671,4 +1671,20 @@ Q_DECLARE_METATYPE(QtWayland::zxdg_toplevel_decoration_v1::mode)
 #define WAYLANDTEST_MAIN(TestObject) WAYLANDTEST_MAIN_OPT(TestObject, false, {})
 #define WAYLAND_DRM_TEST_MAIN(TestObject) WAYLANDTEST_MAIN_OPT(TestObject, true, {})
 
+// A manually redirected X11 child window gets a surface of its own only from an Xwayland that
+// carries the Sparky Stereo OS patches for redirected children (xwayland/0001, 0002 and 0006):
+// the surface-per-window rule of stock Xwayland gives a child the surface of its toplevel, and
+// KDE's CI images carry stock Xwayland. Without that surface KWin cannot show the child per eye,
+// and the test has nothing to measure: it is skipped, unless KWIN_TEST_XWAYLAND_CHILD_SURFACES
+// is set to 1, which says "this Xwayland has the patches" (the local CI image with them sets it),
+// and then a missing surface fails the test.
+#define KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(child)                                                                                         \
+    if (!QTest::qWaitFor([&]() { return !(child)->surface.isNull(); }, 5000)) {                                                           \
+        if (qEnvironmentVariableIntValue("KWIN_TEST_XWAYLAND_CHILD_SURFACES") == 1) {                                                     \
+            QFAIL("Xwayland gave the stereo child window no surface, though KWIN_TEST_XWAYLAND_CHILD_SURFACES=1 says it has the patches"); \
+        } else {                                                                                                                      \
+            QSKIP("this Xwayland gives a redirected child window no surface of its own (stock Xwayland, without the Sparky Stereo patches)"); \
+        }                                                                                                                             \
+    }
+
 #endif

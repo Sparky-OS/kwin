@@ -4535,7 +4535,7 @@ void X11WindowTest::testStereoChildWindow()
     QVERIFY(stereoChild->mapped);
 
     // Xwayland gives the redirected child a surface of its own
-    QTRY_VERIFY(stereoChild->surface);
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(stereoChild);
     QVERIFY(stereoChild->surface != window->surface());
     QVERIFY(window->holdsStereoContent());
     QCOMPARE(window->stereoContent(), StereoContentNone);
@@ -4634,7 +4634,7 @@ void X11WindowTest::testStereoChildWindowListedBeforeMapping()
     const X11StereoChild *stereoChild = children->children().front().get();
     QCOMPARE(stereoChild->window, child);
     QVERIFY(stereoChild->mapped);
-    QTRY_VERIFY(stereoChild->surface);
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(stereoChild);
     QVERIFY(window->holdsStereoContent());
 
     xcb_unmap_window(c.get(), window->window());
@@ -4686,7 +4686,7 @@ void X11WindowTest::testStereoChildWindowOtherVisual()
     const X11StereoChildren *children = window->stereoChildren();
     QTRY_COMPARE(children->children().size(), 1u);
     const X11StereoChild *stereoChild = children->children().front().get();
-    QTRY_VERIFY(stereoChild->surface);
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(stereoChild);
     QVERIFY(stereoChild->surface != window->surface());
     QTRY_VERIFY(stereoChild->surface->isMapped());
     QVERIFY(window->holdsStereoContent());

@@ -343,7 +343,7 @@ void XWaylandInputTest::testPointerInStereoChild()
     xcb_flush(c.get());
     QTRY_COMPARE(window->stereoChildren()->children().size(), 1u);
     const X11StereoChild *stereoChild = window->stereoChildren()->children().front().get();
-    QTRY_VERIFY(stereoChild->surface);
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(stereoChild);
     QVERIFY(window->holdsStereoContent());
     click();
     if (QTest::currentTestFailed()) {
