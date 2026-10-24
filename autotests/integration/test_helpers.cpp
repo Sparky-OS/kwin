@@ -10,6 +10,9 @@
 
 #include <QSignalSpy>
 
+#include <atomic>
+#include <memory>
+
 #include "kwin_wayland_test.h"
 
 #if KWIN_BUILD_X11
@@ -370,20 +373,30 @@ void destroyWaylandConnection()
     s_waylandConnection.reset();
 }
 
+// Say where a connection of the test client failed: the tests only see "setupWaylandConnection() returned FALSE"
+static std::unique_ptr<Connection> failedAt(int line)
+{
+    qWarning() << "Test::Connection::setup failed at test_helpers.cpp line" << line;
+    return nullptr;
+}
+
 std::unique_ptr<Connection> Connection::setup(AdditionalWaylandInterfaces flags)
 {
     int sx[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sx) < 0) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
     KWin::waylandServer()->display()->createClient(sx[0]);
     // setup connection
     auto connection = std::make_unique<Connection>();
     connection->connection = new KWayland::Client::ConnectionThread;
-    QSignalSpy connectedSpy(connection->connection, &KWayland::Client::ConnectionThread::connected);
-    if (!connectedSpy.isValid()) {
-        return nullptr;
-    }
+    // connected() is emitted by the connection thread as soon as it has connected, which can be before
+    // this thread waits for it: a flag, not a QSignalSpy, whose wait() sees only the signals that come
+    // after the call (and, with a count() checked before it, the ones that come between the two)
+    auto connected = std::make_shared<std::atomic<bool>>(false);
+    QObject::connect(connection->connection, &KWayland::Client::ConnectionThread::connected, connection->connection, [connected]() {
+        *connected = true;
+    }, Qt::DirectConnection);
     connection->connection->setSocketFd(sx[1]);
 
     connection->thread = new QThread(kwinApp());
@@ -396,14 +409,14 @@ std::unique_ptr<Connection> Connection::setup(AdditionalWaylandInterfaces flags)
     if (const int delay = qEnvironmentVariableIntValue("KWIN_TEST_CONNECT_DELAY_MS"); delay > 0) {
         QThread::msleep(delay);
     }
-    if (!connectedSpy.wait()) {
-        return nullptr;
+    if (!QTest::qWaitFor([connected]() { return connected->load(); }, 5000)) {
+        return failedAt(__LINE__);
     }
 
     connection->queue = new KWayland::Client::EventQueue;
     connection->queue->setup(connection->connection);
     if (!connection->queue->isValid()) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
 
     KWayland::Client::Registry *registry = new KWayland::Client::Registry;
@@ -597,79 +610,79 @@ std::unique_ptr<Connection> Connection::setup(AdditionalWaylandInterfaces flags)
 
     QSignalSpy allAnnounced(registry, &KWayland::Client::Registry::interfacesAnnounced);
     if (!allAnnounced.isValid()) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
     registry->create(connection->connection);
     if (!registry->isValid()) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
     registry->setup();
     if (!allAnnounced.wait()) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
 
     connection->compositor = registry->createCompositor(registry->interface(KWayland::Client::Registry::Interface::Compositor).name, registry->interface(KWayland::Client::Registry::Interface::Compositor).version);
     if (!connection->compositor->isValid()) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
     connection->subCompositor = registry->createSubCompositor(registry->interface(KWayland::Client::Registry::Interface::SubCompositor).name, registry->interface(KWayland::Client::Registry::Interface::SubCompositor).version);
     if (!connection->subCompositor->isValid()) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
     connection->shm = registry->createShmPool(registry->interface(KWayland::Client::Registry::Interface::Shm).name, registry->interface(KWayland::Client::Registry::Interface::Shm).version);
     if (!connection->shm->isValid()) {
-        return nullptr;
+        return failedAt(__LINE__);
     }
     if (flags.testFlag(AdditionalWaylandInterface::Seat)) {
         connection->seat = registry->createSeat(registry->interface(KWayland::Client::Registry::Interface::Seat).name, registry->interface(KWayland::Client::Registry::Interface::Seat).version);
         if (!connection->seat->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
     if (flags.testFlag(AdditionalWaylandInterface::DataDeviceManager)) {
         connection->dataDeviceManager = registry->createDataDeviceManager(registry->interface(KWayland::Client::Registry::Interface::DataDeviceManager).name, registry->interface(KWayland::Client::Registry::Interface::DataDeviceManager).version);
         if (!connection->dataDeviceManager->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
     if (flags.testFlag(AdditionalWaylandInterface::ShadowManager)) {
         connection->shadowManager = registry->createShadowManager(registry->interface(KWayland::Client::Registry::Interface::Shadow).name,
                                                                   registry->interface(KWayland::Client::Registry::Interface::Shadow).version);
         if (!connection->shadowManager->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
     if (flags.testFlag(AdditionalWaylandInterface::PlasmaShell)) {
         connection->plasmaShell = registry->createPlasmaShell(registry->interface(KWayland::Client::Registry::Interface::PlasmaShell).name,
                                                               registry->interface(KWayland::Client::Registry::Interface::PlasmaShell).version);
         if (!connection->plasmaShell->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
     if (flags.testFlag(AdditionalWaylandInterface::WindowManagement)) {
         connection->windowManagement = registry->createPlasmaWindowManagement(registry->interface(KWayland::Client::Registry::Interface::PlasmaWindowManagement).name,
                                                                               registry->interface(KWayland::Client::Registry::Interface::PlasmaWindowManagement).version);
         if (!connection->windowManagement->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
     if (flags.testFlag(AdditionalWaylandInterface::PointerConstraints)) {
         connection->pointerConstraints = registry->createPointerConstraints(registry->interface(KWayland::Client::Registry::Interface::PointerConstraintsUnstableV1).name,
                                                                             registry->interface(KWayland::Client::Registry::Interface::PointerConstraintsUnstableV1).version);
         if (!connection->pointerConstraints->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
     if (flags.testFlag(AdditionalWaylandInterface::AppMenu)) {
         connection->appMenu = registry->createAppMenuManager(registry->interface(KWayland::Client::Registry::Interface::AppMenu).name, registry->interface(KWayland::Client::Registry::Interface::AppMenu).version);
         if (!connection->appMenu->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
     if (flags.testFlag(AdditionalWaylandInterface::TextInputManagerV2)) {
         connection->textInputManager = registry->createTextInputManager(registry->interface(KWayland::Client::Registry::Interface::TextInputManagerUnstableV2).name, registry->interface(KWayland::Client::Registry::Interface::TextInputManagerUnstableV2).version);
         if (!connection->textInputManager->isValid()) {
-            return nullptr;
+            return failedAt(__LINE__);
         }
     }
 
