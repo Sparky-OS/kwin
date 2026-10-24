@@ -114,6 +114,7 @@ private:
     void updateIzed3dOptions();
     void updateSideBySideFullTiming();
     void updateStereoDepth();
+    void updateStereoGlasses();
 
     void scheduleDone();
 

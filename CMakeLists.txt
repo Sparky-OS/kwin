@@ -232,8 +232,8 @@ if(EXISTS ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-stereo-content-v1.xml)
     file(READ ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-output-device-v2.xml _kwin_output_device_xml)
     file(READ ${PLASMA_WAYLAND_PROTOCOLS_DIR}/kde-stereo-content-v1.xml _kwin_stereo_content_xml)
 endif()
-# kde_stereo_depth_v1 came with version 3 of kde-stereo-content-v1
-if(NOT _kwin_output_device_xml MATCHES "stereo_l_depth_graphics" OR NOT _kwin_stereo_content_xml MATCHES "kde_stereo_depth_v1")
+# kde_stereo_depth_v1 came with version 3 of kde-stereo-content-v1; stereo_glasses with version 29 of kde-output-device-v2
+if(NOT _kwin_output_device_xml MATCHES "stereo_l_depth_graphics" OR NOT _kwin_output_device_xml MATCHES "stereo_glasses" OR NOT _kwin_stereo_content_xml MATCHES "kde_stereo_depth_v1")
     set(KWIN_STEREO_PROTOCOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/wayland/protocols/stereo)
     set(KWIN_STEREO_PROTOCOLS_IN_TREE TRUE)
 endif()

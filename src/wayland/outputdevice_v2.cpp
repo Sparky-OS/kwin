@@ -160,6 +160,9 @@ static uint32_t kwinCapabilitiesToOutputDeviceCapabilities(BackendOutput::Capabi
     if (caps & BackendOutput::Capability::StereoDepth) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_stereo_depth;
     }
+    if (caps & BackendOutput::Capability::StereoGlasses) {
+        ret |= QtWaylandServer::kde_output_device_v2::capability_stereo_glasses;
+    }
     if (caps & BackendOutput::Capability::VirtualStereo) {
         ret |= QtWaylandServer::kde_output_device_v2::capability_virtual_stereo;
     }
@@ -237,6 +240,7 @@ public:
     void sendIzed3dOptions(Resource *resource);
     void sendSideBySideFullTiming(Resource *resource);
     void sendStereoDepth(Resource *resource);
+    void sendStereoGlasses(Resource *resource);
     void sendAbmLevel(Resource *resource);
 
     OutputDeviceV2Interface *q;
@@ -433,6 +437,7 @@ OutputDeviceV2Interface::OutputDeviceV2Interface(BackendOutput *handle)
     connect(handle, &BackendOutput::ized3dOptionsChanged, this, &OutputDeviceV2Interface::updateIzed3dOptions);
     connect(handle, &BackendOutput::sideBySideFullTimingChanged, this, &OutputDeviceV2Interface::updateSideBySideFullTiming);
     connect(handle, &BackendOutput::stereoDepthChanged, this, &OutputDeviceV2Interface::updateStereoDepth);
+    connect(handle, &BackendOutput::stereoGlassesChanged, this, &OutputDeviceV2Interface::updateStereoGlasses);
     connect(handle, &BackendOutput::abmLevelChanged, this, &OutputDeviceV2Interface::updateAbmLevel);
 
     // Delay the done event to batch property updates.
@@ -536,6 +541,7 @@ void OutputDeviceV2InterfacePrivate::kde_output_device_v2_bind_resource(Resource
     sendIzed3dOptions(resource);
     sendSideBySideFullTiming(resource);
     sendStereoDepth(resource);
+    sendStereoGlasses(resource);
     if (!m_uuid.isEmpty()) {
         sendDone(resource);
     }
@@ -1366,6 +1372,22 @@ void OutputDeviceV2Interface::updateStereoDepth()
     const auto resources = d->resourceMap();
     for (const auto &resource : resources) {
         d->sendStereoDepth(resource);
+    }
+    scheduleDone();
+}
+
+void OutputDeviceV2InterfacePrivate::sendStereoGlasses(Resource *resource)
+{
+    if (resource->version() >= KDE_OUTPUT_DEVICE_V2_STEREO_GLASSES_SINCE_VERSION) {
+        send_stereo_glasses(resource->handle, m_handle->stereoGlasses());
+    }
+}
+
+void OutputDeviceV2Interface::updateStereoGlasses()
+{
+    const auto resources = d->resourceMap();
+    for (const auto &resource : resources) {
+        d->sendStereoGlasses(resource);
     }
     scheduleDone();
 }

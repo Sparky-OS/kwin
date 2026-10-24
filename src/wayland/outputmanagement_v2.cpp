@@ -89,6 +89,7 @@ protected:
     void kde_output_configuration_v2_set_ized3d_options(Resource *resource, wl_resource *outputdevice, uint32_t mode, uint32_t transfer) override;
     void kde_output_configuration_v2_set_side_by_side_full_timing(Resource *resource, wl_resource *outputdevice, uint32_t timing) override;
     void kde_output_configuration_v2_set_stereo_depth(Resource *resource, wl_resource *outputdevice, uint32_t source, uint32_t viewingDistance) override;
+    void kde_output_configuration_v2_set_stereo_glasses(Resource *resource, wl_resource *outputdevice, uint32_t enabled) override;
     void kde_output_configuration_v2_set_stereo_pair(Resource *resource, wl_resource *outputdevice, wl_resource *partner, uint32_t mode, uint32_t role, uint32_t reflection) override;
     void kde_output_configuration_v2_set_abm_level(Resource *resource, ::wl_resource *outputdevice, uint32_t level) override;
 
@@ -631,6 +632,22 @@ void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_dept
         auto props = config.changeSet(output->handle());
         props->stereoDepthSource = StereoDepthSource(source);
         props->stereoViewingDistance = viewingDistance;
+    } else {
+        invalid = true;
+    }
+}
+
+void OutputConfigurationV2Interface::kde_output_configuration_v2_set_stereo_glasses(Resource *resource, wl_resource *outputdevice, uint32_t enabled)
+{
+    if (invalid) {
+        return;
+    }
+    if (enabled > 1) {
+        failureReason = i18n("Invalid stereo glasses value");
+        return;
+    }
+    if (auto output = OutputDeviceV2Interface::get(outputdevice)) {
+        config.changeSet(output->handle())->stereoGlasses = bool(enabled);
     } else {
         invalid = true;
     }
