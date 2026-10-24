@@ -4560,6 +4560,42 @@ void X11WindowTest::testStereoChildWindow()
     QVERIFY(childItem->z() > 0);
     QTRY_VERIFY(childItem->isVisible());
 
+    // A video keeps its stored pixels while its independent placement is displayed below
+    // the ordinary parent, where subtitles and controls remain at display resolution.
+    Xcb::Atom childPlace(QByteArrayLiteral("_KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE"));
+    const uint32_t place[] = {4, 7, 240, 130, 1};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
+                        XCB_ATOM_CARDINAL, 32, 5, place);
+    xcb_flush(c.get());
+    QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(Size(240, 130)));
+    QCOMPARE(childItem->position(), Xcb::fromXNative(Point(4, 7)));
+    QVERIFY(childItem->z() < 0);
+    Xcb::WindowGeometry nativeGeometry(child);
+    QCOMPARE(nativeGeometry->width, 100);
+    QCOMPARE(nativeGeometry->height, 80);
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+
+    // Bad size, invalid stacking, a truncated or overlong property, and a wrong type
+    // all restore the native geometry instead of moving or hiding content unexpectedly.
+    const QList<QList<uint32_t>> invalid = {
+        {4, 7, 0, 130, 1}, {4, 7, 240, 32768, 1}, {4, 7, 240, 130, 2},
+        {4, 7, 240, 130}, {4, 7, 240, 130, 1, 0}, {32768, 7, 240, 130, 1}
+    };
+    for (const auto &values : invalid) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
+                            XCB_ATOM_CARDINAL, 32, values.size(), values.constData());
+        xcb_flush(c.get());
+        QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(Size(100, 80)));
+        QCOMPARE(childItem->position(), Xcb::fromXNative(Point(30, 35)));
+        QVERIFY(childItem->z() > 0);
+    }
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, childPlace,
+                        XCB_ATOM_WINDOW, 32, 5, place);
+    xcb_flush(c.get());
+    QTRY_COMPARE(childItem->destinationSize(), Xcb::fromXNative(Size(100, 80)));
+    xcb_delete_property(c.get(), child, childPlace);
+    xcb_flush(c.get());
+
     // moving the frame moves the child
     const uint32_t position[] = {40, 50};
     xcb_configure_window(c.get(), frame, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, position);
