@@ -327,7 +327,7 @@ void SurfaceItemXwayland::updateStereoChildren()
             } else {
                 item = std::make_unique<SurfaceItemXwaylandChild>(child->surface, this);
             }
-            item->setChildGeometry(child->geometry);
+            item->setChildGeometry(child->place());
             item->setStereoContent(child->content);
             item->setMapped(child->mapped);
             item->setZ(int(items.size()) + 1);

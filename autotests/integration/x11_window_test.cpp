@@ -154,6 +154,7 @@ private Q_SLOTS:
     void testStereoChildWindow();
     void testStereoChildWindowListedBeforeMapping();
     void testStereoChildWindowOtherVisual();
+    void testStereoChildWindowOneViewSize();
 };
 
 void X11WindowTest::initTestCase_data()
@@ -4697,6 +4698,89 @@ void X11WindowTest::testStereoChildWindowOtherVisual()
     xcb_flush(c.get());
     QTRY_VERIFY(children->children().empty());
     QTRY_VERIFY(!surface);
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoChildWindowOneViewSize()
+{
+    // This test verifies that a child that holds two views at full width, an X11 window twice as
+    // wide as the place it is shown at, declares the size of one view with its own
+    // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE and is shown at that size, with both views kept at
+    // the child's own raster (an X11 window's rule, version 6, for a child of the window).
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200));
+    QVERIFY(window);
+    const xcb_window_t child = xcb_generate_id(c.get());
+    const uint32_t background = 0x00ff0000;
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, window->window(), 30, 35, 200, 80, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &background);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    const uint32_t oneView[] = {100, 80};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_one_view_size,
+                        XCB_ATOM_CARDINAL, 32, 2, oneView);
+    xcb_map_window(c.get(), child);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_flush(c.get());
+
+    const X11StereoChildren *children = window->stereoChildren();
+    QTRY_COMPARE(children->children().size(), 1u);
+    const X11StereoChild *stereoChild = children->children().front().get();
+    // the child's own raster is kept, the place is one view
+    QCOMPARE(stereoChild->geometry, Xcb::fromXNative(Rect(30, 35, 200, 80)));
+    QCOMPARE(stereoChild->oneViewSize, Xcb::fromXNative(QSize(100, 80)));
+    QCOMPARE(stereoChild->place(), Xcb::fromXNative(Rect(30, 35, 100, 80)));
+
+    // malformed sizes mean none: the child is shown at its own size
+    const uint32_t zero[] = {0, 80};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_one_view_size,
+                        XCB_ATOM_CARDINAL, 32, 2, zero);
+    xcb_flush(c.get());
+    QTRY_VERIFY(stereoChild->oneViewSize.isEmpty());
+    QCOMPARE(stereoChild->place(), stereoChild->geometry);
+    const uint32_t three[] = {100, 80, 1};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_one_view_size,
+                        XCB_ATOM_CARDINAL, 32, 3, three);
+    xcb_flush(c.get());
+    QTest::qWait(100);
+    QVERIFY(stereoChild->oneViewSize.isEmpty());
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_one_view_size,
+                        XCB_ATOM_CARDINAL, 32, 2, oneView);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->place(), Xcb::fromXNative(Rect(30, 35, 100, 80)));
+
+    // without stereo content of its own, the size is not used
+    xcb_delete_property(c.get(), child, atoms->kde_net_wm_stereo_content);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->place(), stereoChild->geometry);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->place(), Xcb::fromXNative(Rect(30, 35, 100, 80)));
+
+    // the scene shows the surface at the place of one view
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(stereoChild);
+    SurfaceItem *windowSurfaceItem = window->windowItem()->surfaceItem();
+    QVERIFY(windowSurfaceItem);
+    SurfaceItemXwaylandChild *childItem = nullptr;
+    QTRY_VERIFY([&]() {
+        for (Item *item : windowSurfaceItem->childItems()) {
+            if (auto candidate = qobject_cast<SurfaceItemXwaylandChild *>(item)) {
+                childItem = candidate;
+            }
+        }
+        return childItem != nullptr;
+    }());
+    QCOMPARE(childItem->position(), stereoChild->place().topLeft());
+    QCOMPARE(childItem->destinationSize(), stereoChild->place().size());
 
     xcb_unmap_window(c.get(), window->window());
     xcb_destroy_window(c.get(), window->window());

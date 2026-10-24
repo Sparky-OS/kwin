@@ -46,6 +46,20 @@ struct KWIN_EXPORT X11StereoChild
     // shown with the X11 window
     bool mapped = false;
     StereoContent content = StereoContentNone;
+    // the child's own _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE: the size one view is shown at,
+    // empty when the child declares none
+    QSizeF oneViewSize;
+
+    // The child's place in the X11 window as the scene shows it: a child that holds stereo content
+    // and declares the size of one view is shown at that size, however large its X11 window is
+    // (as for an X11 window, the views are kept at the program's own raster).
+    RectF place() const
+    {
+        if (content != StereoContentNone && !oneViewSize.isEmpty()) {
+            return RectF(geometry.topLeft(), oneViewSize);
+        }
+        return geometry;
+    }
 };
 
 /**
