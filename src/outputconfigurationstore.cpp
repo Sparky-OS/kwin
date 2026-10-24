@@ -35,19 +35,16 @@ static bool isStereo3D(OutputModeline::Flags flags)
     return flags & OutputModeline::AllStereo3D || flags.testFlag(OutputModeline::Flag::VirtualStereo);
 }
 
-// USB-C 3D glasses that take their 3D picture two eyes wide, by the EDID's manufacturer and product;
-// XREAL One series: SYNTHETIC identities (PnP ID XRL, the USB product identifiers) until the real EDID is dumped
+// USB-C 3D glasses that take their 3D picture two eyes wide, by the EDID's manufacturer and product.
+// XREAL One Pro: the EDID read from an owner's glasses on 24 Oct 2026 (PnP ID MRG, product 0x4100, the same
+// in the 2D, half, full and Real 3D modes; autotests/integration/data/xreal-one-pro-*.bin). The One and the 1S
+// are not identified yet; the USB product identifiers (0x0435 to 0x043e) belong to the IMU, not to the display.
 static const struct
 {
     const char *pnpId;
     uint16_t product;
 } s_stereoGlasses[] = {
-    {"XRL", 0x0435}, // XREAL One Pro
-    {"XRL", 0x0436}, // XREAL One Pro
-    {"XRL", 0x0437}, // XREAL One
-    {"XRL", 0x0438}, // XREAL One
-    {"XRL", 0x043d}, // XREAL 1S
-    {"XRL", 0x043e}, // XREAL 1S
+    {"MRG", 0x4100}, // XREAL One Pro
 };
 
 static bool isStereoGlasses(const Edid &edid)

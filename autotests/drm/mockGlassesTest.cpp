@@ -2,8 +2,12 @@
 
 // USB-C 3D glasses on a DRM connector: known glasses, by their EDID identity, come up in the side by
 // side (full) twin of their two-eyes-wide 2D mode, a 1920x1080 desktop copied into each half; a user
-// option, on by default for known glasses, off for every other display. The EDIDs are synthetic stand-ins
-// for the XREAL One Pro (autotests/integration/data/xreal-one-pro-synthetic-*.bin).
+// option, on by default for known glasses, off for every other display. The EDIDs are the XREAL One Pro's own,
+// read from Windows' registry on an owner's glasses on 24 Oct 2026 (autotests/integration/data/xreal-one-pro-*.bin,
+// decoded beside them): EDID 1.3, PnP ID MRG, product 0x4100, serial 0, week 49 of 2024, name "XREAL One Pro",
+// the same identity in every mode. 2D lists 1920x1080 at 90 (preferred), 60 and 120 Hz; the half side by side
+// mode announces the same bytes as 2D; full side by side one 3840x1080 at 60 Hz; the glasses' own Real 3D
+// (a 2D to 3D conversion inside them) one 1920x1080 at 60 Hz, which is 2D to the computer.
 
 #include "mock_drm.h"
 
@@ -90,8 +94,10 @@ static void setModes(MockConnector *connector, const QList<ModeSpec> &modes)
 
 // the glasses in their 3D mode: one 3840x1080 picture at 60 Hz, the only rate they offer, the halves to the eyes
 static const QList<ModeSpec> s_sideBySideModes{{3840, 1080, 60.0}};
-// the glasses in their 2D mode: both eyes show the same 1920x1080 picture, at 60, 90 or 120 Hz (as observed on Windows 11)
-static const QList<ModeSpec> s_flatModes{{1920, 1080, 60.0}, {1920, 1080, 90.0}, {1920, 1080, 120.0}};
+// the glasses in their 2D mode: both eyes show the same 1920x1080 picture, at 90 (the EDID's preferred timing), 60 or 120 Hz
+static const QList<ModeSpec> s_flatModes{{1920, 1080, 90.0}, {1920, 1080, 60.0}, {1920, 1080, 120.0}};
+// the glasses' Real 3D mode: one 1920x1080 picture at 60 Hz, which they turn into 3D themselves
+static const QList<ModeSpec> s_realDModes{{1920, 1080, 60.0}};
 
 static OutputModeline::Flags stereoFlags(const OutputModeline &mode)
 {
@@ -199,6 +205,8 @@ private Q_SLOTS:
     void theOptionTurnedOffKeepsTheFlatMode();
     void followsTheGlassesAcrossTheirModes();
     void followsTheGlassesAcrossAReconnect();
+    void realDStaysFlat();
+    void halfAnnouncesNothing();
 };
 
 void MockGlassesTest::initTestCase()
@@ -219,13 +227,14 @@ void MockGlassesTest::cleanup()
 
 void MockGlassesTest::knownGlassesStartInSideBySideFull()
 {
-    Rig rig(readEdid(QStringLiteral("xreal-one-pro-synthetic-sbs-full.bin")), s_sideBySideModes);
+    Rig rig(readEdid(QStringLiteral("xreal-one-pro-full.bin")), s_sideBySideModes);
     QVERIFY(rig.mockGpu);
     QVERIFY(rig.gpu->updateOutputs());
     const auto outputs = rig.outputs();
     QCOMPARE(outputs.size(), 1);
-    QCOMPARE(outputs[0]->edid().vendor().isEmpty(), true);
-    QCOMPARE(outputs[0]->edid().eisaId(), QByteArrayLiteral("XRL"));
+    QCOMPARE(outputs[0]->edid().eisaId(), QByteArrayLiteral("MRG"));
+    QCOMPARE(int(outputs[0]->edid().productCode()), 0x4100);
+    QCOMPARE(outputs[0]->edid().monitorName(), QByteArrayLiteral("XREAL One Pro"));
 
     OutputConfigurationStore store;
     const auto cfg = store.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
@@ -246,7 +255,7 @@ void MockGlassesTest::knownGlassesStartInSideBySideFull()
 void MockGlassesTest::flatModesStayFlat()
 {
     // in their 2D mode the glasses are an ordinary 1920x1080 monitor, at their highest rate
-    Rig rig(readEdid(QStringLiteral("xreal-one-pro-synthetic-2d.bin")), s_flatModes);
+    Rig rig(readEdid(QStringLiteral("xreal-one-pro-2d.bin")), s_flatModes);
     QVERIFY(rig.mockGpu);
     QVERIFY(rig.gpu->updateOutputs());
     const auto outputs = rig.outputs();
@@ -317,7 +326,7 @@ void MockGlassesTest::theOptionTurnsItOnForAnyDisplay()
 void MockGlassesTest::theOptionTurnedOffKeepsTheFlatMode()
 {
     // the user turns the option off for known glasses: their 3D mode comes up as the plain 3840x1080
-    Rig rig(readEdid(QStringLiteral("xreal-one-pro-synthetic-2d.bin")), s_flatModes);
+    Rig rig(readEdid(QStringLiteral("xreal-one-pro-2d.bin")), s_flatModes);
     QVERIFY(rig.mockGpu);
     QVERIFY(rig.gpu->updateOutputs());
     const auto outputs = rig.outputs();
@@ -330,7 +339,7 @@ void MockGlassesTest::theOptionTurnedOffKeepsTheFlatMode()
         store.storeConfig(outputs, false);
     }
     setSavedOption(QStringLiteral("stereoGlasses"), false);
-    rig.announce(readEdid(QStringLiteral("xreal-one-pro-synthetic-sbs-full.bin")), s_sideBySideModes);
+    rig.announce(readEdid(QStringLiteral("xreal-one-pro-full.bin")), s_sideBySideModes);
     QVERIFY(rig.gpu->updateOutputs());
     QCOMPARE(rig.outputs(), outputs);
 
@@ -346,7 +355,7 @@ void MockGlassesTest::theOptionTurnedOffKeepsTheFlatMode()
 void MockGlassesTest::followsTheGlassesAcrossTheirModes()
 {
     // the glasses switch from 2D to Full SBS and back on the same connector; KWin chooses by identity each time
-    Rig rig(readEdid(QStringLiteral("xreal-one-pro-synthetic-2d.bin")), s_flatModes);
+    Rig rig(readEdid(QStringLiteral("xreal-one-pro-2d.bin")), s_flatModes);
     QVERIFY(rig.mockGpu);
     QVERIFY(rig.gpu->updateOutputs());
     const auto outputs = rig.outputs();
@@ -364,7 +373,7 @@ void MockGlassesTest::followsTheGlassesAcrossTheirModes()
 
     // the cable stays in: the glasses tell the computer they are now a 3840x1080 device (as observed on Windows 11, 23 Oct 2026);
     // the output stays and takes the new EDID and mode list
-    const QByteArray sideBySideEdid = readEdid(QStringLiteral("xreal-one-pro-synthetic-sbs-full.bin"));
+    const QByteArray sideBySideEdid = readEdid(QStringLiteral("xreal-one-pro-full.bin"));
     rig.announce(sideBySideEdid, s_sideBySideModes);
     QVERIFY(rig.gpu->updateOutputs());
     QCOMPARE(rig.outputs(), outputs);
@@ -384,7 +393,7 @@ void MockGlassesTest::followsTheGlassesAcrossTheirModes()
         store.storeConfig(outputs, false);
     }
 
-    rig.announce(readEdid(QStringLiteral("xreal-one-pro-synthetic-2d.bin")), s_flatModes);
+    rig.announce(readEdid(QStringLiteral("xreal-one-pro-2d.bin")), s_flatModes);
     QVERIFY(rig.gpu->updateOutputs());
     QCOMPARE(rig.outputs(), outputs);
     {
@@ -401,7 +410,7 @@ void MockGlassesTest::followsTheGlassesAcrossTheirModes()
 void MockGlassesTest::followsTheGlassesAcrossAReconnect()
 {
     // unplugged in 2D mode, plugged back in Full SBS mode: a new output with the same identity
-    Rig rig(readEdid(QStringLiteral("xreal-one-pro-synthetic-2d.bin")), s_flatModes);
+    Rig rig(readEdid(QStringLiteral("xreal-one-pro-2d.bin")), s_flatModes);
     QVERIFY(rig.mockGpu);
     QVERIFY(rig.gpu->updateOutputs());
     {
@@ -417,7 +426,7 @@ void MockGlassesTest::followsTheGlassesAcrossAReconnect()
     rig.connector->connection = DRM_MODE_DISCONNECTED;
     QVERIFY(rig.gpu->updateOutputs());
     QVERIFY(rig.outputs().isEmpty());
-    rig.announce(readEdid(QStringLiteral("xreal-one-pro-synthetic-sbs-full.bin")), s_sideBySideModes);
+    rig.announce(readEdid(QStringLiteral("xreal-one-pro-full.bin")), s_sideBySideModes);
     rig.connector->connection = DRM_MODE_CONNECTED;
     QVERIFY(rig.gpu->updateOutputs());
     const auto outputs = rig.outputs();
@@ -431,6 +440,48 @@ void MockGlassesTest::followsTheGlassesAcrossAReconnect()
     QCOMPARE(changes->currentMode->size(), QSize(3840, 1080));
     QCOMPARE(stereoFlags(*changes->currentMode), Flag::VirtualStereo | Flag::Stereo3DSideBySideFull);
     QCOMPARE(outputs[0]->viewSizeForMode(*changes->currentMode), QSize(1920, 1080));
+}
+
+void MockGlassesTest::realDStaysFlat()
+{
+    // the glasses' Real 3D mode: the same identity, one 1920x1080 mode, so no twin; the glasses make the 3D
+    Rig rig(readEdid(QStringLiteral("xreal-one-pro-realD.bin")), s_realDModes);
+    QVERIFY(rig.mockGpu);
+    QVERIFY(rig.gpu->updateOutputs());
+    const auto outputs = rig.outputs();
+    QCOMPARE(outputs.size(), 1);
+    QCOMPARE(outputs[0]->edid().eisaId(), QByteArrayLiteral("MRG"));
+    QCOMPARE(int(outputs[0]->edid().productCode()), 0x4100);
+
+    OutputConfigurationStore store;
+    const auto cfg = store.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(cfg);
+    const auto changes = cfg->first.constChangeSet(outputs[0]);
+    QVERIFY(changes->currentMode);
+    QCOMPARE(changes->currentMode->size(), QSize(1920, 1080));
+    QVERIFY(nearRate(*changes->currentMode, 60000));
+    QCOMPARE(stereoFlags(*changes->currentMode), OutputModeline::Flags());
+    QVERIFY(!changes->otherStereoFormats.value_or(false));
+    QVERIFY(changes->stereoGlasses.value_or(false));
+}
+
+void MockGlassesTest::halfAnnouncesNothing()
+{
+    // the half side by side mode sends the 2D EDID byte for byte: the computer sees the 2D monitor, and the
+    // user picks side by side (half) by hand under Other stereo formats, as with a 3D television
+    QCOMPARE(readEdid(QStringLiteral("xreal-one-pro-half.bin")), readEdid(QStringLiteral("xreal-one-pro-2d.bin")));
+    Rig rig(readEdid(QStringLiteral("xreal-one-pro-half.bin")), s_flatModes);
+    QVERIFY(rig.mockGpu);
+    QVERIFY(rig.gpu->updateOutputs());
+    const auto outputs = rig.outputs();
+    QCOMPARE(outputs.size(), 1);
+    OutputConfigurationStore store;
+    const auto cfg = store.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(cfg);
+    const auto changes = cfg->first.constChangeSet(outputs[0]);
+    QVERIFY(changes->currentMode);
+    QCOMPARE(changes->currentMode->size(), QSize(1920, 1080));
+    QCOMPARE(stereoFlags(*changes->currentMode), OutputModeline::Flags());
 }
 
 QTEST_GUILESS_MAIN(MockGlassesTest)
