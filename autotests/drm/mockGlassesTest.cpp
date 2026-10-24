@@ -88,10 +88,10 @@ static void setModes(MockConnector *connector, const QList<ModeSpec> &modes)
     }
 }
 
-// the glasses in their 3D mode: one 3840x1080 picture, the halves to the eyes
+// the glasses in their 3D mode: one 3840x1080 picture at 60 Hz, the only rate they offer, the halves to the eyes
 static const QList<ModeSpec> s_sideBySideModes{{3840, 1080, 60.0}};
-// the glasses in their 2D mode: both eyes show the same 1920x1080 picture
-static const QList<ModeSpec> s_flatModes{{1920, 1080, 60.0}, {1920, 1080, 120.0}};
+// the glasses in their 2D mode: both eyes show the same 1920x1080 picture, at 60, 90 or 120 Hz (as observed on Windows 11)
+static const QList<ModeSpec> s_flatModes{{1920, 1080, 60.0}, {1920, 1080, 90.0}, {1920, 1080, 120.0}};
 
 static OutputModeline::Flags stereoFlags(const OutputModeline &mode)
 {
