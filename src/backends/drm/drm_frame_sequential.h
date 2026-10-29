@@ -30,7 +30,10 @@ inline StereoEye operator!(StereoEye eye)
  * display alternates, stays the robust path.
  *
  * The pipeline submits both eyes once per pair of refreshes; when nothing has changed,
- * the previous pair is alternated again, so the glasses never lose sync.
+ * the previous pair is alternated again, so the glasses never lose sync. Every frame is for
+ * the refresh right after the last completed one, and the render loop keeps no frame queued
+ * ahead (DrmOutput::maxPendingFrames()): a held pair's re-commit, for which nothing is
+ * rendered, lands on the next refresh however long rendering is predicted to take.
  */
 class FrameSequentialScheduler
 {

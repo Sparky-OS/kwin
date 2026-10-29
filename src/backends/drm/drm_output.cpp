@@ -48,9 +48,7 @@ DrmOutput::DrmOutput(const std::shared_ptr<DrmConnector> &conn, DrmPipeline *pip
     , m_connector(conn)
 {
     m_pipeline->setOutput(this);
-    if (m_gpu->atomicModeSetting() && !s_disableTripleBuffering.value_or(false)) {
-        m_renderLoop->setMaxPendingFrameCount(2);
-    }
+    m_renderLoop->setMaxPendingFrameCount(maxPendingFrames(StereoLayout::None));
 
     const Edid *edid = m_connector->edid();
     setInformation(Information{
@@ -173,6 +171,19 @@ void DrmOutput::setSharedPrimaryBuffer(const std::shared_ptr<DrmFramebuffer> &bu
 bool DrmOutput::frameSequentialNeedsNewFrame() const
 {
     return m_pipeline->frameSequentialNeedsNewFrame();
+}
+
+uint32_t DrmOutput::maxPendingFrames(StereoLayout layout) const
+{
+    // KWin's own frame sequential twins commit on every refresh, each time for the refresh right
+    // after the last one, and a held pair is re-committed with nothing rendered for it. A frame
+    // queued ahead (triple buffering, when rendering is predicted to take longer than a refresh)
+    // lands two refreshes after the last one with the eye that was due on the first: then a commit
+    // lands only on every second refresh, and every one of them shows the same eye
+    if (isFrameSequential(layout)) {
+        return 1;
+    }
+    return m_gpu->atomicModeSetting() && !s_disableTripleBuffering.value_or(false) ? 2 : 1;
 }
 
 bool DrmOutput::presentAsync(OutputLayer *layer, std::optional<std::chrono::nanoseconds> allowedVrrDelay)
