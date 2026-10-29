@@ -4,6 +4,8 @@
 
 #include "core/gpumanager.h"
 #include "core/outputconfiguration.h"
+#include "core/renderloop.h"
+#include "core/renderloop_p.h"
 #include "core/session.h"
 #include "drm_backend.h"
 #include "drm_buffer.h"
@@ -13,6 +15,7 @@
 #include "drm_output.h"
 #include "drm_pipeline.h"
 #include "drm_plane.h"
+#include "main.h"
 #include "qpainter/qpainterbackend.h"
 
 #include <QScopeGuard>
@@ -21,6 +24,22 @@
 #include <fcntl.h>
 
 using namespace KWin;
+using namespace std::chrono_literals;
+
+// the render loop asks the application whether it is terminating
+class TestApplication : public Application
+{
+public:
+    TestApplication(int &argc, char **argv)
+        : Application(argc, argv)
+    {
+    }
+
+protected:
+    void performStartup() override
+    {
+    }
+};
 
 static std::unique_ptr<MockGpu> findRenderDevice(int crtcCount)
 {
@@ -86,6 +105,7 @@ class MockFrameSequentialTest : public QObject
 private Q_SLOTS:
     void testScanout_data();
     void testScanout();
+    void testHeldPairTargetsNextRefresh();
 };
 
 void MockFrameSequentialTest::testScanout_data()
@@ -226,5 +246,89 @@ void MockFrameSequentialTest::testScanout()
 
 }
 
-QTEST_GUILESS_MAIN(MockFrameSequentialTest)
+void MockFrameSequentialTest::testHeldPairTargetsNextRefresh()
+{
+    // Rendering predicted to take longer than a refresh makes the render loop queue frames two
+    // refreshes ahead (triple buffering). KWin's frame sequential twin needs a commit on every
+    // refresh, each for the refresh right after the last: a held pair re-committed two refreshes
+    // after the last one lands only on every second refresh, with the eye due on the first, so it
+    // shows the same eye every time. Its frames are for the next refresh; other layouts keep
+    // queueing ahead.
+    GpuManager::s_self = std::make_unique<GpuManager>();
+    const auto mockGpu = findRenderDevice(1);
+    QVERIFY(mockGpu);
+    const auto mockConnector = std::make_shared<MockConnector>(mockGpu.get());
+    mockConnector->addMode(1920, 1080, 120);
+    mockGpu->connectors.push_back(mockConnector);
+
+    const auto session = Session::create(Session::Type::Noop);
+    const auto backend = std::make_unique<DrmBackend>(session.get());
+    const auto renderBackend = backend->createQPainterBackend();
+    Q_UNUSED(renderBackend);
+    const auto resetManager = qScopeGuard([] {
+        GpuManager::s_self.reset();
+    });
+    auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
+    const auto connector = std::make_shared<DrmConnector>(gpu.get(), mockConnector->id);
+    QVERIFY(connector->init());
+    const auto mode2d = connector->modes().front();
+    const auto sequentialMode = std::make_shared<DrmConnectorMode>(mode2d, OutputModeline::Flag::Stereo3DSequentialLeftFirst);
+    auto pipeline = std::make_unique<DrmPipeline>(connector.get());
+    auto output = std::make_unique<DrmOutput>(connector, pipeline.get());
+    RenderLoop *loop = output->renderLoop();
+    RenderLoopPrivate *const loopPrivate = RenderLoopPrivate::get(loop);
+
+    // what the render loop targets after the vblank at @p timestamp, in refreshes after it
+    const auto refreshesAhead = [&](std::chrono::nanoseconds timestamp) {
+        const std::chrono::nanoseconds refresh(1'000'000'000'000ull / loop->refreshRate());
+        return std::llround((loop->nextPresentationTimestamp() - timestamp).count() / double(refresh.count()));
+    };
+    const auto now = []() {
+        return std::chrono::nanoseconds(std::chrono::steady_clock::now().time_since_epoch());
+    };
+
+    // the 2D mode, rendering predicted at 40 ms: the next frame is queued two refreshes ahead
+    pipeline->setMode(mode2d);
+    pipeline->applyPendingChanges();
+    loopPrivate->renderJournal.add(40ms, now());
+    QVERIFY(loop->predictedRenderTime() > 2 * std::chrono::nanoseconds(1'000'000'000'000ull / loop->refreshRate()));
+    auto vblank = now();
+    loopPrivate->notifyVblank(vblank);
+    loop->scheduleRepaint();
+    QCOMPARE(refreshesAhead(vblank), 2);
+    loopPrivate->compositeTimer.stop();
+
+    // the frame sequential twin of the same mode, the same prediction: each frame lands where it
+    // was targeted; the first eye of a pair landed on refresh 100, and the re-commit of the held
+    // pair is for refresh 101
+    pipeline->setMode(sequentialMode);
+    pipeline->applyPendingChanges();
+    vblank = loop->nextPresentationTimestamp();
+    pipeline->pageFlipped(vblank, 100, StereoEye::Left);
+    QCOMPARE(pipeline->frameSequentialNeedsNewFrame(), false);
+    QCOMPARE(refreshesAhead(vblank), 1);
+    loopPrivate->compositeTimer.stop();
+    // so is the next pair's first eye, whether it is rendered or re-committed
+    vblank = loop->nextPresentationTimestamp();
+    pipeline->pageFlipped(vblank, 101, StereoEye::Right);
+    QCOMPARE(pipeline->frameSequentialNeedsNewFrame(), true);
+    QCOMPARE(refreshesAhead(vblank), 1);
+    loopPrivate->compositeTimer.stop();
+
+    // back in 2D the render loop queues ahead again
+    pipeline->setMode(mode2d);
+    pipeline->applyPendingChanges();
+    vblank = loop->nextPresentationTimestamp();
+    loopPrivate->notifyVblank(vblank);
+    loop->scheduleRepaint();
+    QCOMPARE(refreshesAhead(vblank), 2);
+    loopPrivate->compositeTimer.stop();
+}
+
+int main(int argc, char **argv)
+{
+    TestApplication app(argc, argv);
+    MockFrameSequentialTest test;
+    return QTest::qExec(&test, argc, argv);
+}
 #include "mockFrameSequentialTest.moc"

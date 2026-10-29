@@ -554,6 +554,7 @@ void DrmPipeline::applyPendingChanges()
     m_commitThread->setModeInfo(m_pending.mode->refreshRate(), m_pending.mode->vblankTime());
     m_output->renderLoop()->setPresentationSafetyMargin(m_commitThread->safetyMargin());
     m_output->renderLoop()->setRefreshRate(m_pending.mode->refreshRate());
+    m_output->renderLoop()->setMaxPendingFrameCount(m_output->maxPendingFrames(newLayout));
 }
 
 DrmConnector *DrmPipeline::connector() const

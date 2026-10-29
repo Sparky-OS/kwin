@@ -314,6 +314,12 @@ void RenderLoop::setPresentationMode(PresentationMode mode)
 void RenderLoop::setMaxPendingFrameCount(uint32_t maxCount)
 {
     d->maxPendingFrameCount = maxCount;
+    if (maxCount < 2) {
+        // with one frame pending at most, every frame is for the refresh after the last one: the
+        // hysteresis of triple buffering would otherwise keep targeting two refreshes ahead
+        d->wasTripleBuffering = false;
+        d->doubleBufferingCounter = 0;
+    }
 }
 
 std::chrono::nanoseconds RenderLoop::predictedRenderTime() const

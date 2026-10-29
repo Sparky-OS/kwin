@@ -83,6 +83,12 @@ public:
     StereoLayout activeStereoLayout() const;
     bool hasStereoEyes() const override;
     bool frameSequentialNeedsNewFrame() const override;
+    /**
+     * How many frames the render loop may have pending in @p layout: two with atomic modesetting
+     * (triple buffering), one in KWin's own frame sequential layouts, where every frame is for
+     * the refresh right after the last one.
+     */
+    uint32_t maxPendingFrames(StereoLayout layout) const;
     StereoEye stereoPairEye() const;
     OutputTransform stereoPairTransform() const;
     void setSharedPrimaryBuffer(const std::shared_ptr<DrmFramebuffer> &buffer);
