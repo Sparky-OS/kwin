@@ -1151,6 +1151,12 @@ int drmModeAtomicCommit(int fd, drmModeAtomicReqPtr req, uint32_t flags, void *u
                     qWarning("mode on crtc %u is incompatible with connector %u", p.crtc->id, conn->id);
                     return -(errno = EINVAL);
                 }
+                // the edition kernel's core check: frame sequential stereo only where the driver opted in
+                constexpr uint32_t frameSequential = 9 << 14;
+                if ((mode.flags & DRM_MODE_FLAG_3D_MASK) == frameSequential && !conn->frameSequentialAllowed) {
+                    qWarning("connector %u cannot send frame-sequential stereo", conn->id);
+                    return -(errno = EINVAL);
+                }
             }
         }
     }

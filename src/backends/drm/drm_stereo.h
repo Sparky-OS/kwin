@@ -17,6 +17,13 @@
 
 #include <algorithm>
 
+// The edition kernel's frame sequential stereo layout (include/uapi/drm/drm_mode.h, kernel series 36), which
+// libdrm doesn't have yet: the eyes take turns, one per frame of the mode, left eye first, from a framebuffer
+// that holds both side by side (twice the mode's width); connectors whose driver opts in list and accept it
+#ifndef DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL
+#define DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL (9 << 14)
+#endif
+
 namespace KWin
 {
 
@@ -34,6 +41,13 @@ namespace KWin
  * a side by side (full) twin, for USB-C 3D glasses that show its left half to the left eye
  * and its right half to the right eye: the mode is the whole frame and each eye is one half,
  * where the HDMI structure is the mode per eye and the frame twice as wide.
+ *
+ * SequentialDisplayPort is DisplayPort's own stereo transport (DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL): the
+ * scanout buffer is both eyes side by side, as for side by side (full), and the kernel sends one eye per
+ * frame of the mode's 2D timing, left eye first, and tells the display which eye each frame carries (the
+ * MSA's MISC1 bits 2:1). Page flips land only at the start of a left-eye frame, so the pair is rendered
+ * and committed once per two refreshes. SequentialLeftFirst and SequentialRightFirst are its software
+ * twins, which alternate the eyes in KWin and tell the display nothing.
  */
 enum class StereoLayout {
     None,
@@ -55,6 +69,7 @@ enum class StereoLayout {
     LineAlternative,
     LDepth,
     LDepthGraphics,
+    SequentialDisplayPort,
 };
 
 // the side by side (full) twin of a 2D mode two eyes wide: the mode is the frame, not an eye
@@ -79,6 +94,18 @@ inline bool isFrameSequential(StereoLayout layout)
     return layout == StereoLayout::SequentialLeftFirst || layout == StereoLayout::SequentialRightFirst;
 }
 
+// the kernel alternates the eyes and signals them: the pair is committed whole, once per two refreshes
+inline bool isDisplayPortFrameSequential(StereoLayout layout)
+{
+    return layout == StereoLayout::SequentialDisplayPort;
+}
+
+// the rate pictures are presented at: one pair per two refreshes when the kernel alternates the eyes
+inline uint32_t stereoPresentationRate(uint32_t refreshRate, StereoLayout layout)
+{
+    return isDisplayPortFrameSequential(layout) ? refreshRate / 2 : refreshRate;
+}
+
 // the picture and depth structures: the left eye's picture with its depth (Figure H-5), and
 // also with graphics and the graphics' depth (Figure H-6)
 inline bool isPictureAndDepth(StereoLayout layout)
@@ -88,7 +115,7 @@ inline bool isPictureAndDepth(StereoLayout layout)
 
 /**
  * The mode flag for a DRM mode's 3D structure, empty for 2D modes: every structure of HDMI
- * 1.4a, Appendix H, Table H-2.
+ * 1.4a, Appendix H, Table H-2, and DisplayPort's frame sequential stereo.
  */
 inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
 {
@@ -109,6 +136,8 @@ inline OutputModeline::Flags stereoFlagsForDrmMode(uint32_t drmFlags)
         return OutputModeline::Flag::Stereo3DLDepth;
     case DRM_MODE_FLAG_3D_L_DEPTH_GFX_GFX_DEPTH:
         return OutputModeline::Flag::Stereo3DLDepthGraphics;
+    case DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL:
+        return OutputModeline::Flag::Stereo3DSequentialDisplayPort;
     default:
         return {};
     }
@@ -141,6 +170,9 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
         return StereoLayout::CheckerboardRightFirst;
     }
 
+    if (flags & OutputModeline::Flag::Stereo3DSequentialDisplayPort) {
+        return StereoLayout::SequentialDisplayPort;
+    }
     if (flags & OutputModeline::Flag::Stereo3DSequentialLeftFirst) {
         return StereoLayout::SequentialLeftFirst;
     }
@@ -183,14 +215,15 @@ inline StereoLayout stereoLayoutForMode(OutputModeline::Flags flags)
  * graphics-depth (four pictures one vtotal apart, Figure H-6), line alternative (the eyes
  * line by line, left first, Figure H-3), side by side full (the right eye from column hdisplay
  * on, Figure H-4), and frame sequential (the two eyes from column hdisplay on, selected one
- * refresh at a time). The scanout buffer is that whole frame, as drm_mode_get_hv_timing()
- * sizes it.
+ * refresh at a time, by KWin's plane source or by the kernel). The scanout buffer is that
+ * whole frame, as drm_mode_get_hv_timing() sizes it.
  */
 inline bool isFullFrameStereo(StereoLayout layout)
 {
     switch (layout) {
     case StereoLayout::FramePacking:
     case StereoLayout::SideBySideFull:
+    case StereoLayout::SequentialDisplayPort:
     case StereoLayout::SequentialLeftFirst:
     case StereoLayout::SequentialRightFirst:
     case StereoLayout::FieldAlternative:
@@ -218,6 +251,7 @@ inline QSize stereoFrameSize(const drmModeModeInfo &mode, StereoLayout layout, O
     case StereoLayout::LineAlternative:
         return QSize(mode.hdisplay, 2 * mode.vdisplay);
     case StereoLayout::SideBySideFull:
+    case StereoLayout::SequentialDisplayPort:
     case StereoLayout::SequentialLeftFirst:
     case StereoLayout::SequentialRightFirst:
         return QSize(2 * mode.hdisplay, mode.vdisplay);

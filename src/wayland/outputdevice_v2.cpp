@@ -1600,6 +1600,13 @@ void OutputDeviceModeV2InterfacePrivate::bindResource(Resource *resource)
                 flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_L_DEPTH_GRAPHICS;
             }
         }
+#ifdef KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_SEQUENTIAL_DISPLAYPORT_SINCE_VERSION
+        // DisplayPort's frame sequential stereo, since version 30; an older client sees no 3D flag on such a mode
+        if (resource->version() >= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_SEQUENTIAL_DISPLAYPORT_SINCE_VERSION
+            && (m_flags & OutputModeline::Flag::Stereo3DSequentialDisplayPort)) {
+            flags |= KDE_OUTPUT_DEVICE_MODE_V2_FLAGS_STEREO_SEQUENTIAL_DISPLAYPORT;
+        }
+#endif
         send_flags(resource->handle, flags);
     }
 }

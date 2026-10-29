@@ -147,6 +147,7 @@ private:
     void setRenderDevice(RenderDevice *device);
     void updateRenderDevice();
 
+    void probeFrameSequential(DrmConnector *connector);
     DrmPipeline::Error checkCrtcAssignment(QList<DrmConnector *> connectors, const QList<DrmCrtc *> &crtcs, std::chrono::steady_clock::time_point deadline);
     DrmPipeline::Error testPipelines();
     QList<DrmObject *> unusedModesetObjects() const;

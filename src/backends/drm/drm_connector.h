@@ -25,6 +25,7 @@ namespace KWin
 
 class DrmConnector;
 class DrmCrtc;
+class DrmFramebuffer;
 
 /**
  * The DrmConnectorMode class represents a native mode and the associated blob.
@@ -37,6 +38,12 @@ public:
     DrmConnectorMode(const std::shared_ptr<DrmConnectorMode> &base, OutputModeline::Flag layout);
     std::shared_ptr<DrmConnectorMode> virtualBase() const;
     bool requiresYcbcr420() const;
+    /**
+     * Whether the kernel takes this 2D mode in DisplayPort's frame sequential stereo on its connector,
+     * as a TEST_ONLY commit found (DrmGpu::probeFrameSequential()); nullopt before the test.
+     */
+    std::optional<bool> frameSequentialAccepted() const;
+    void setFrameSequentialAccepted(bool accepted);
     static std::shared_ptr<OutputMode> resolveVirtualMode(const std::shared_ptr<OutputMode> &current, const QList<std::shared_ptr<OutputMode>> &modes);
 
     drmModeModeInfo *nativeMode();
@@ -52,6 +59,7 @@ private:
     drmModeModeInfo m_nativeMode;
     std::shared_ptr<DrmBlob> m_blob;
     bool m_ycbcr420Only = false;
+    std::optional<bool> m_frameSequentialAccepted;
 };
 
 class KWIN_EXPORT DrmConnector : public DrmObject
@@ -83,6 +91,12 @@ public:
                                                                  const QList<std::shared_ptr<OutputMode>> &previousModes,
                                                                  bool anaglyph, bool otherStereoFormats);
     std::shared_ptr<DrmConnectorMode> generateMode(const QSize &size, float refreshRate, OutputModeline::Flags flags);
+    /**
+     * A TEST_ONLY commit of @p mode, a mode with DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL, on @p crtc with its
+     * primary plane covering the whole frame of both eyes from @p frame: the kernel accepts it only on
+     * connectors whose driver alternates the eyes and signals them.
+     */
+    bool testFrameSequential(DrmCrtc *crtc, const std::shared_ptr<DrmConnectorMode> &mode, const std::shared_ptr<DrmFramebuffer> &frame);
 
     BackendOutput::SubPixel subpixel() const;
 

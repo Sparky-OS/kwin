@@ -25,6 +25,7 @@
 #include "drm_output.h"
 #include "drm_pipeline.h"
 #include "drm_plane.h"
+#include "drm_stereo.h"
 #include "drm_virtual_output.h"
 #include "utils/envvar.h"
 
@@ -308,6 +309,12 @@ bool DrmGpu::updateOutputs()
             existing.push_back(it->get());
         }
     }
+    // before the outputs list their modes: which 2D modes the kernel takes in DisplayPort frame sequential
+    for (DrmConnector *conn : std::as_const(existing)) {
+        if (conn->isConnected()) {
+            probeFrameSequential(conn);
+        }
+    }
     for (auto it = m_connectors.begin(); it != m_connectors.end();) {
         DrmConnector *conn = it->get();
         const auto output = findOutput(conn->id());
@@ -345,6 +352,82 @@ bool DrmGpu::updateOutputs()
         }
     }
     return true;
+}
+
+/**
+ * DisplayPort's frame sequential stereo is offered as a twin of a 2D mode only where the kernel takes it:
+ * the driver alternates the eyes and signals them on connectors that opted in, and refuses the layout
+ * everywhere else. So each 2D mode at 100 Hz or more (the rate per eye is half the refresh) is tested once
+ * per mode list with a TEST_ONLY commit, on the connector's CRTC or a free one, with a primary plane
+ * covering the frame of both eyes; nothing is shown or changed.
+ */
+void DrmGpu::probeFrameSequential(DrmConnector *connector)
+{
+    QList<std::shared_ptr<DrmConnectorMode>> candidates;
+    QSize frame;
+    for (const auto &mode : connector->modes()) {
+        if (mode->frameSequentialAccepted().has_value()) {
+            continue;
+        }
+        if (stereoLayoutForMode(mode->flags()) != StereoLayout::None || mode->refreshRate() < 100000
+            || (mode->flags() & OutputModeline::Flag::Generated) || mode->requiresYcbcr420()) {
+            mode->setFrameSequentialAccepted(false);
+            continue;
+        }
+        candidates.push_back(mode);
+        frame = frame.expandedTo(QSize(2 * mode->size().width(), mode->size().height()));
+    }
+    // untested modes are tried again at the next update, when a CRTC or a buffer may be there
+    if (candidates.isEmpty() || !m_atomicModeSetting || !m_isActive) {
+        return;
+    }
+    DrmCrtc *crtc = nullptr;
+    const uint32_t currentCrtc = connector->crtcId.value();
+    for (const auto &candidate : m_crtcs) {
+        if (candidate->id() == currentCrtc) {
+            crtc = candidate.get();
+            break;
+        }
+    }
+    if (!crtc) {
+        for (const auto &candidate : m_crtcs) {
+            const bool held = candidate->active.value() || std::ranges::any_of(m_pipelines, [&candidate](DrmPipeline *pipeline) {
+                return pipeline->crtc() == candidate.get();
+            });
+            if (connector->isCrtcSupported(candidate.get()) && !held) {
+                crtc = candidate.get();
+                break;
+            }
+        }
+    }
+    if (!crtc) {
+        qCDebug(KWIN_DRM) << "No free CRTC to test frame sequential stereo on" << connector->connectorName();
+        return;
+    }
+    // a dumb buffer, linear, which every driver that scans out takes
+    GraphicsBuffer *buffer = m_drmDevice->allocator()->allocate(GraphicsBufferOptions{
+        .size = frame,
+        .format = DRM_FORMAT_XRGB8888,
+        .software = true,
+    });
+    if (!buffer) {
+        qCDebug(KWIN_DRM) << "No buffer to test frame sequential stereo on" << connector->connectorName();
+        return;
+    }
+    const auto dropBuffer = qScopeGuard([buffer]() {
+        buffer->drop();
+    });
+    const auto framebuffer = importBuffer(buffer, FileDescriptor{});
+    if (!framebuffer) {
+        return;
+    }
+    for (const auto &mode : std::as_const(candidates)) {
+        const auto twin = std::make_shared<DrmConnectorMode>(mode, OutputModeline::Flag::Stereo3DSequentialDisplayPort);
+        const bool accepted = connector->testFrameSequential(crtc, twin, framebuffer);
+        mode->setFrameSequentialAccepted(accepted);
+        qCDebug(KWIN_DRM) << "Frame sequential stereo on" << connector->connectorName() << mode->size() << mode->refreshRate()
+                          << (accepted ? "accepted" : "refused");
+    }
 }
 
 void DrmGpu::removeOutputs()

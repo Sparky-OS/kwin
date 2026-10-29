@@ -661,6 +661,7 @@ bool EglGbmLayerSurface::endRendering(const Region &damagedDeviceRegion, OutputF
             std::array<Rect, 2> deviceEyes;
             switch (m_stereoLayout) {
             case StereoLayout::SideBySideHalf:
+            case StereoLayout::SequentialDisplayPort:
             case StereoLayout::SequentialLeftFirst:
             case StereoLayout::SequentialRightFirst:
             case StereoLayout::SideBySideFull:

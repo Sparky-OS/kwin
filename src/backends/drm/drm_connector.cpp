@@ -9,12 +9,14 @@
 */
 #include "drm_connector.h"
 #include "drm_stereo.h"
+#include "drm_buffer.h"
 #include "drm_commit.h"
 #include "drm_crtc.h"
 #include "drm_gpu.h"
 #include "drm_logging.h"
 #include "drm_output.h"
 #include "drm_pipeline.h"
+#include "drm_plane.h"
 #include "drm_pointer.h"
 
 #include <cerrno>
@@ -70,6 +72,11 @@ DrmConnectorMode::DrmConnectorMode(const std::shared_ptr<DrmConnectorMode> &base
     , m_nativeMode(*base->nativeMode())
     , m_ycbcr420Only(base->requiresYcbcr420())
 {
+    if (layout == OutputModeline::Flag::Stereo3DSequentialDisplayPort) {
+        // the kernel sends this one: the 2D timing with the frame sequential layout, a mode of its own
+        m_nativeMode.flags = (m_nativeMode.flags & ~DRM_MODE_FLAG_3D_MASK) | DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL;
+        m_nativeMode.type &= ~DRM_MODE_TYPE_PREFERRED;
+    }
 }
 
 std::shared_ptr<OutputMode> DrmConnectorMode::resolveVirtualMode(const std::shared_ptr<OutputMode> &current, const QList<std::shared_ptr<OutputMode>> &modes)
@@ -90,9 +97,20 @@ std::shared_ptr<DrmConnectorMode> DrmConnectorMode::virtualBase() const
     return m_virtualBase;
 }
 
+std::optional<bool> DrmConnectorMode::frameSequentialAccepted() const
+{
+    return m_frameSequentialAccepted;
+}
+
+void DrmConnectorMode::setFrameSequentialAccepted(bool accepted)
+{
+    m_frameSequentialAccepted = accepted;
+}
+
 std::shared_ptr<DrmBlob> DrmConnectorMode::blob()
 {
-    if (m_virtualBase) {
+    // a twin KWin packs is sent as its 2D mode; one the kernel sends carries its own 3D layout
+    if (m_virtualBase && !(m_nativeMode.flags & DRM_MODE_FLAG_3D_MASK)) {
         return m_virtualBase->blob();
     }
     if (!m_blob) {
@@ -297,6 +315,17 @@ QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QL
             if (mode->refreshRate() >= 100000) {
                 layouts << OutputModeline::Flag::Stereo3DSequentialLeftFirst;
                 layouts << OutputModeline::Flag::Stereo3DSequentialRightFirst;
+                // DisplayPort's own frame sequential stereo, where the kernel alternates the eyes and tells
+                // the display which one each frame carries: where a TEST_ONLY commit took it, and the
+                // display does not declare it itself (then it is one of its 3D modes)
+                const bool declared = std::ranges::any_of(baseModes, [&mode](const auto &other) {
+                    return stereoLayoutForMode(other->flags()) == StereoLayout::SequentialDisplayPort
+                        && !(other->flags() & OutputModeline::Flag::VirtualStereo)
+                        && other->size() == mode->size() && other->refreshRate() == mode->refreshRate();
+                });
+                if (base->frameSequentialAccepted().value_or(false) && !declared) {
+                    layouts << OutputModeline::Flag::Stereo3DSequentialDisplayPort;
+                }
             }
             if (mode->size() == nativeSize && !base->requiresYcbcr420()) {
                 layouts << OutputModeline::Flag::Stereo3DRowsLeftFirst;
@@ -522,6 +551,28 @@ QList<std::shared_ptr<DrmConnectorMode>> DrmConnector::generateCommonModes()
         }
     }
     return ret;
+}
+
+bool DrmConnector::testFrameSequential(DrmCrtc *crtc, const std::shared_ptr<DrmConnectorMode> &mode, const std::shared_ptr<DrmFramebuffer> &frame)
+{
+    const drmModeModeInfo *info = mode->nativeMode();
+    if (!crtc || !frame || !crtc->primaryPlane() || !(info->flags & DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL)) {
+        return false;
+    }
+    // the plane covers the frame of both eyes, as drm_mode_get_hv_timing() sizes it
+    const QSize frameSize = stereoFrameSize(*info, StereoLayout::SequentialDisplayPort, mode->flags());
+    if (frame->buffer() && (frame->buffer()->size().width() < frameSize.width() || frame->buffer()->size().height() < frameSize.height())) {
+        return false;
+    }
+    DrmPlane *plane = crtc->primaryPlane();
+    DrmAtomicCommit commit(gpu());
+    commit.addProperty(crtcId, crtc->id());
+    commit.addBlob(crtc->modeId, mode->blob());
+    commit.addProperty(crtc->active, 1);
+    commit.addProperty(plane->crtcId, crtc->id());
+    commit.addBuffer(plane, frame, nullptr);
+    plane->set(&commit, Rect(QPoint(0, 0), frameSize), Rect(QPoint(0, 0), frameSize));
+    return commit.testAllowModeset();
 }
 
 std::shared_ptr<DrmConnectorMode> DrmConnector::generateMode(const QSize &size, float refreshRate, OutputModeline::Flags flags)

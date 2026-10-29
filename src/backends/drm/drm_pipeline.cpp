@@ -551,9 +551,12 @@ void DrmPipeline::applyPendingChanges()
         m_frameSequentialScheduler = FrameSequentialScheduler(newLayout);
     }
     m_next = m_pending;
-    m_commitThread->setModeInfo(m_pending.mode->refreshRate(), m_pending.mode->vblankTime());
+    // when the kernel alternates the eyes, a page flip lands only at the start of a left-eye frame and
+    // its event comes one or two refreshes after the commit, so pairs are committed at half the refresh
+    const uint32_t presentationRate = stereoPresentationRate(m_pending.mode->refreshRate(), newLayout);
+    m_commitThread->setModeInfo(presentationRate, m_pending.mode->vblankTime());
     m_output->renderLoop()->setPresentationSafetyMargin(m_commitThread->safetyMargin());
-    m_output->renderLoop()->setRefreshRate(m_pending.mode->refreshRate());
+    m_output->renderLoop()->setRefreshRate(presentationRate);
 }
 
 DrmConnector *DrmPipeline::connector() const

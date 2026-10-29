@@ -372,6 +372,8 @@ bool DrmOutput::testPresentation(const std::shared_ptr<OutputFrame> &frame)
         // The legacy page-flip API cannot crop the side-by-side framebuffer.
         return false;
     }
+    // a pair is shown over two refreshes, so it is never torn or held for a variable refresh
+    const bool vsyncOnly = frameSequential || isDisplayPortFrameSequential(activeStereoLayout());
     const auto layers = m_pipeline->layers();
     const bool nonPrimaryEnabled = std::ranges::any_of(layers, [](OutputLayer *layer) {
         return layer->isEnabled() && layer->type() != OutputLayerType::Primary;
@@ -386,7 +388,7 @@ bool DrmOutput::testPresentation(const std::shared_ptr<OutputFrame> &frame)
         // so testing again isn't super useful
         return true;
     }
-    m_pipeline->setPresentationMode(frameSequential ? PresentationMode::VSync : frame->presentationMode());
+    m_pipeline->setPresentationMode(vsyncOnly ? PresentationMode::VSync : frame->presentationMode());
     if (nonPrimaryEnabled) {
         // the cursor plane needs to be disabled before we enable tearing; see DrmOutput::presentAsync
         if (frame->presentationMode() == PresentationMode::AdaptiveAsync) {
@@ -793,7 +795,7 @@ void DrmOutput::applyQueuedChanges(const std::shared_ptr<OutputChangeSet> &props
         m_gpu->maybeModeset(nullptr, nullptr);
     }
 
-    m_renderLoop->setRefreshRate(refreshRate());
+    m_renderLoop->setRefreshRate(stereoPresentationRate(refreshRate(), activeStereoLayout()));
 
     if (m_state.brightnessDevice && m_state.highDynamicRange && isInternal()) {
         // This is usually not necessary with external monitors, as they default to 100% in HDR mode on their own,

@@ -143,6 +143,10 @@ public:
         Stereo3DLineAlternative = 0x200000,
         Stereo3DLDepth = 0x400000,
         Stereo3DLDepthGraphics = 0x800000,
+        // DisplayPort's own frame sequential stereo: the kernel sends one eye per frame of the
+        // mode's 2D timing, left eye first, and tells the display which eye each frame carries;
+        // a display 3D mode when the display declares it, else a twin of a 2D mode at 100 Hz or more
+        Stereo3DSequentialDisplayPort = 0x1000000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -163,7 +167,8 @@ public:
         | Flag::Stereo3DFieldAlternative
         | Flag::Stereo3DLineAlternative
         | Flag::Stereo3DLDepth
-        | Flag::Stereo3DLDepthGraphics;
+        | Flag::Stereo3DLDepthGraphics
+        | Flag::Stereo3DSequentialDisplayPort;
 
     OutputModeline();
     OutputModeline(const QSize &size, uint32_t refreshRate, Flags flags = {});

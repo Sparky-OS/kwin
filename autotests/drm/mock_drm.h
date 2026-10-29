@@ -82,6 +82,8 @@ public:
     uint32_t type;
     std::shared_ptr<MockEncoder> encoder;
     QList<drmModeModeInfo> modes;
+    // the driver opted in to DisplayPort frame sequential stereo (stereo_frame_sequential_allowed)
+    bool frameSequentialAllowed = false;
 };
 
 class MockEncoder : public MockObject
