@@ -80,6 +80,12 @@ And instead of an adapter for every source and every kind of gear, each source i
 **The display's own 3D modes** (HDMI 1.4 3D, from the EDID) are listed with the 2D modes, labelled, and never chosen automatically.
 Choosing one sends the InfoFrame, and the display switches itself.
 
+**DisplayPort's own 3D, frame sequential** (the edition kernel's `DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL`), is the same full side by side frame, both eyes in one buffer twice the mode's width, committed whole: the kernel sends one eye per frame of the mode's 2D timing, left eye first, and tells the display which eye each frame carries (the Main Stream Attribute's MISC1 bits 2:1, DisplayPort 1.1a; with DisplayPort 1.2, a VSC SDP too).
+- A display that declares it (an EDID detailed timing, a DisplayID stereo block) lists it with its 3D modes, "(3D frame sequential, DisplayPort)".
+- Elsewhere it is a twin of each 2D mode at 100 Hz or more under "Other stereo formats", "(frame sequential, DisplayPort)", on outputs where a TEST_ONLY commit of the mode with the flag succeeds: the kernel takes it only on connectors whose driver alternates the eyes and signals them. The test runs once per mode list, on the connector's CRTC or a free one, and changes nothing.
+- A page flip lands only at the start of a left-eye frame, so a pair is never split, and its event comes one or two refreshes after the commit: KWin renders and commits pairs at half the refresh, one event per pair, never one per eye.
+- Neither is chosen automatically. The per-output "Swap eyes" exchanges the pictures as for every 3D mode; there is no right-first twin, because the eye order is signalled.
+
 **Virtual 3D modes** are twins of every 2D mode, with the same timing and the same link: no InfoFrame, no modeset.
 KWin renders both eyes at the mode's full resolution and composes them into the 2D frame.
 Two toggles per output, both off by default, so the mode list stays as it is until someone asks:
@@ -89,7 +95,7 @@ Two toggles per output, both off by default, so the mode list stays as it is unt
   - rows, for passive polarised panels;
   - columns, for parallax-barrier and lenticular panels;
   - checkerboard, for 3D-ready DLP televisions;
-  - frame sequential at 100 or 120 Hz, for gear with its own glasses sync;
+  - frame sequential at 100 or 120 Hz, for gear with its own glasses sync: KWin's own twins alternate the eyes in software, one commit per refresh, left or right eye first, with nothing sent to the display (a refresh KWin misses shows one eye twice); DisplayPort's twin above alternates them in the kernel and signals them, and both are offered where both work;
   - two outputs as one pair, for dual projectors, mirror rigs and dual-panel monitors.
 
 **VR is one more filter:** each eye goes to the headset through OpenXR, instead of through a colour filter.
