@@ -275,3 +275,16 @@ A malformed property, or one of another type, counts as absent.
 **Precedence:** the child's `CHILD_PLACE`, else its position at the size of one view of its `ONE_VIEW_SIZE` (only while it holds stereo content), else its X11 window's rectangle.
 X11 input geometry does not change: a child shown elsewhere makes its input shape empty and handles input in the logical area of the parent.
 libstereo-declare 1.7.0 writes it with `stereo_declare_x11_child_place()`.
+
+## X11 child bounding shapes (version 9)
+
+Version 9 of `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED` also consumes a declared child's X11 `ShapeBounding` region, including changes notified by `ShapeNotify`.
+The region uses native X window coordinates, independently of `CHILD_PLACE` and `ONE_VIEW_SIZE`.
+For a packed-raster X window each eye uses the part of that region inside its own half of the backing image, mapped once to the child's destination.
+For the version-4 GLX route, whose backing image is exactly twice the native window width at the same height, the native one-eye shape applies to both eyes.
+Holes stay transparent to the ordinary owner; the compositor does not paint either eye into its UI.
+An empty bounding shape hides the child image, and resetting the shape restores the native rectangle.
+Input-only shapes do not change rendering or the existing X input geometry.
+The compositor reads shapes but writes no content declaration or owner membership property.
+Clients that require clipped children must check version 9 rather than treating version 8 placement support as clipping support.
+See the [X11 SHAPE 1.1 protocol](https://www.x.org/releases/X11R7.7/doc/xextproto/shape.html), chapters 2, 4 and 5.

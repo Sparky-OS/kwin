@@ -89,6 +89,7 @@ protected:
     void preprocess() override;
     WindowQuadList buildQuads() const override;
     WindowQuadList buildSourceQuads(const RectF &bufferSourceBox) const;
+    virtual RegionF shapeForSourceBox(const RectF &bufferSourceBox) const;
     void releaseResources() override;
 
     Region m_damage;

@@ -17,6 +17,7 @@
 #include "x11window.h"
 
 #include <xcb/composite.h>
+#include <xcb/shape.h>
 
 namespace KWin
 {
@@ -138,6 +139,9 @@ std::unique_ptr<X11StereoChild> X11StereoChildren::watch(xcb_window_t window)
     xcb_connection_t *connection = kwinApp()->x11Connection();
     const uint32_t childEvents = XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_PROPERTY_CHANGE;
     xcb_change_window_attributes(connection, window, XCB_CW_EVENT_MASK, &childEvents);
+    if (Xcb::Extensions::self()->isShapeAvailable()) {
+        xcb_shape_select_input(connection, window, true);
+    }
     const uint32_t ancestorEvents = XCB_EVENT_MASK_STRUCTURE_NOTIFY;
     for (const xcb_window_t ancestor : std::as_const(child->ancestors)) {
         xcb_change_window_attributes(connection, ancestor, XCB_CW_EVENT_MASK, &ancestorEvents);
@@ -156,6 +160,9 @@ void X11StereoChildren::unwatch(X11StereoChild *child)
     xcb_connection_t *connection = kwinApp()->x11Connection();
     // the child may be gone already, with its X11 window destroyed: that is no error to report
     xcb_discard_reply(connection, xcb_composite_unredirect_window_checked(connection, child->window, XCB_COMPOSITE_REDIRECT_MANUAL).sequence);
+    if (Xcb::Extensions::self()->isShapeAvailable()) {
+        xcb_shape_select_input(connection, child->window, false);
+    }
     const uint32_t noEvents = XCB_EVENT_MASK_NO_EVENT;
     xcb_change_window_attributes(connection, child->window, XCB_CW_EVENT_MASK, &noEvents);
     for (const xcb_window_t ancestor : std::as_const(child->ancestors)) {
@@ -186,6 +193,8 @@ void X11StereoChildren::updateGeometry(X11StereoChild *child)
     if (geometry.isNull() || !position) {
         return;
     }
+    child->nativeSize = QSize(geometry->width, geometry->height);
+    updateShape(child);
     child->geometry = Xcb::fromXNative(Rect(position->dst_x, position->dst_y, geometry->width, geometry->height));
     child->belowParent = false;
     child->declaredPlace.reset();
@@ -215,6 +224,28 @@ void X11StereoChildren::updateGeometry(X11StereoChild *child)
             break;
         }
     }
+}
+
+void X11StereoChildren::updateShape(X11StereoChild *child)
+{
+    const RectF bounds(QPointF(), child->nativeSize);
+    child->shape = bounds;
+    if (!Xcb::Extensions::self()->isShapeAvailable()) {
+        return;
+    }
+    xcb_connection_t *connection = kwinApp()->x11Connection();
+    const auto cookie = xcb_shape_get_rectangles(connection, child->window, XCB_SHAPE_SK_BOUNDING);
+    UniqueCPtr<xcb_shape_get_rectangles_reply_t> reply(xcb_shape_get_rectangles_reply(connection, cookie, nullptr));
+    if (!reply) {
+        return;
+    }
+    RegionF shape;
+    const std::span rectangles(xcb_shape_get_rectangles_rectangles(reply.get()),
+                              xcb_shape_get_rectangles_rectangles_length(reply.get()));
+    for (const auto &rect : rectangles) {
+        shape |= RectF(rect.x, rect.y, rect.width, rect.height);
+    }
+    child->shape = shape.intersected(bounds);
 }
 
 void X11StereoChildren::updateContent(X11StereoChild *child)
@@ -271,6 +302,16 @@ void X11StereoChildren::associate(XwaylandSurfaceV1Interface *surface)
 void X11StereoChildren::handleEvent(xcb_generic_event_t *event)
 {
     const uint8_t eventType = event->response_type & ~0x80;
+    if (eventType == Xcb::Extensions::self()->shapeNotifyEvent()) {
+        const auto *shape = reinterpret_cast<xcb_shape_notify_event_t *>(event);
+        if (shape->shape_kind == XCB_SHAPE_SK_BOUNDING) {
+            if (X11StereoChild *child = findChild(shape->affected_window)) {
+                updateShape(child);
+                Q_EMIT changed();
+            }
+        }
+        return;
+    }
     switch (eventType) {
     case XCB_CONFIGURE_NOTIFY:
     case XCB_MAP_NOTIFY:

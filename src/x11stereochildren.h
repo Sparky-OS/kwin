@@ -9,6 +9,7 @@
 #pragma once
 
 #include "core/rect.h"
+#include "core/region.h"
 #include "effect/globals.h"
 #include "kwin_export.h"
 
@@ -42,6 +43,9 @@ struct KWIN_EXPORT X11StereoChild
     QPointer<SurfaceInterface> surface;
     // the child's place in the X11 window
     RectF geometry;
+    // Bounding shape in native X pixels, independent of the displayed place.
+    RegionF shape;
+    QSize nativeSize;
     // the child and the windows between it and the X11 window are mapped, so the child is
     // shown with the X11 window
     bool mapped = false;
@@ -122,6 +126,7 @@ private:
     void unwatch(X11StereoChild *child);
     void updateGeometry(X11StereoChild *child);
     void updateContent(X11StereoChild *child);
+    void updateShape(X11StereoChild *child);
     void setSurface(X11StereoChild *child, SurfaceInterface *surface);
     X11StereoChild *findChild(xcb_window_t window) const;
 

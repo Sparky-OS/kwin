@@ -80,12 +80,19 @@ public:
     explicit SurfaceItemXwaylandChild(SurfaceInterface *surface, Item *parent = nullptr);
 
     void setChildGeometry(const RectF &geometry);
+    void setChildShape(const RegionF &shape, const QSize &nativeSize);
+    RegionF shape() const override;
+    RegionF opaque() const override;
     void setMapped(bool mapped);
 
 private:
     void updateDestinationSize();
     void updateVisibility();
 
+    RegionF shapeForSourceBox(const RectF &bufferSourceBox) const override;
+
+    RegionF m_nativeShape;
+    QSize m_nativeSize;
     QSizeF m_childSize;
     bool m_mapped = false;
 };

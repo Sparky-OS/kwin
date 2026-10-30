@@ -277,6 +277,54 @@ void SurfaceItemXwaylandChild::setChildGeometry(const RectF &geometry)
     updateDestinationSize();
 }
 
+void SurfaceItemXwaylandChild::setChildShape(const RegionF &shape, const QSize &nativeSize)
+{
+    if (m_nativeShape == shape && m_nativeSize == nativeSize) {
+        return;
+    }
+    m_nativeShape = shape;
+    m_nativeSize = nativeSize;
+    discardQuads();
+    // Both the uncovered ordinary UI and the new shape need repainting.
+    scheduleRepaint(rect());
+}
+
+RegionF SurfaceItemXwaylandChild::shapeForSourceBox(const RectF &sourceBox) const
+{
+    if (sourceBox.isEmpty() || m_nativeSize.isEmpty()) {
+        return {};
+    }
+    RegionF nativeShape = m_nativeShape;
+    // The GLX version-4 route keeps a one-eye X window and a twice-wide backing
+    // pixmap. Its X shape applies to both views. A packed-raster child instead
+    // has native coordinates spanning both eyes, including independent holes.
+    if (stereoContent() != StereoContentNone
+        && bufferSize() == QSize(2 * m_nativeSize.width(), m_nativeSize.height())) {
+        nativeShape |= m_nativeShape.translated(m_nativeSize.width(), 0);
+    }
+    return nativeShape.intersected(sourceBox)
+        .translated(-sourceBox.topLeft())
+        .scaled(destinationSize().width() / sourceBox.width(), destinationSize().height() / sourceBox.height());
+}
+
+RegionF SurfaceItemXwaylandChild::shape() const
+{
+    if (stereoContent() == StereoContentNone) {
+        return shapeForSourceBox(bufferSourceBox());
+    }
+    RectF left = bufferSourceBox();
+    left.setWidth(left.width() / 2);
+    const RectF right = left.translated(left.width(), 0);
+    return shapeForSourceBox(left) | shapeForSourceBox(right);
+}
+
+RegionF SurfaceItemXwaylandChild::opaque() const
+{
+    // Coverage may differ between eyes. Do not occlude the ordinary owner
+    // behind a hole using the other eye's opaque region.
+    return {};
+}
+
 void SurfaceItemXwaylandChild::setMapped(bool mapped)
 {
     m_mapped = mapped;
@@ -329,6 +377,7 @@ void SurfaceItemXwayland::updateStereoChildren()
             }
             item->setChildGeometry(child->place());
             item->setStereoContent(child->content);
+            item->setChildShape(child->shape, child->nativeSize);
             item->setMapped(child->mapped);
             item->setZ(child->belowParent ? int(items.size()) - int(children->children().size()) : int(items.size()) + 1);
             items.push_back(std::move(item));
