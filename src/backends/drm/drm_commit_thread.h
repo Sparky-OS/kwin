@@ -62,6 +62,7 @@ private:
     TimePoint m_targetPageflipTime;
     TimePoint m_lastCommitTime;
     std::chrono::nanoseconds m_minVblankInterval;
+    std::chrono::nanoseconds m_vblankTime{0};
     std::vector<std::unique_ptr<DrmAtomicCommit>> m_commitsToDelete;
     bool m_vrr = false;
     bool m_tearing = false;

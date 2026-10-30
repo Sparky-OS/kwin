@@ -14,10 +14,12 @@
 #include "drm_crtc.h"
 #include "drm_gpu.h"
 #include "drm_object.h"
+#include "drm_plane.h"
 #include "drm_property.h"
 
 #include <QCoreApplication>
 #include <QThread>
+#include <cmath>
 #include <set>
 
 using namespace std::chrono_literals;
@@ -92,9 +94,34 @@ void DrmAtomicCommit::addBuffer(DrmPlane *plane, const std::shared_ptr<DrmFrameb
     }
 }
 
-void DrmAtomicCommit::setFrameSequentialEye(DrmPipeline *pipeline, StereoEye eye)
+void DrmAtomicCommit::setFrameSequentialEye(DrmPipeline *pipeline, StereoEye eye, DrmPlane *plane, std::array<uint32_t, 2> sourceX,
+                                            std::optional<std::chrono::steady_clock::time_point> target)
 {
-    m_frameSequentialEyes[pipeline] = eye;
+    m_frameSequentialEyes[pipeline] = FrameSequentialEye{
+        .chosen = eye,
+        .committed = eye,
+        .plane = plane,
+        .sourceX = sourceX,
+        .target = target,
+    };
+}
+
+void DrmAtomicCommit::retargetFrameSequentialEyes(std::chrono::steady_clock::time_point landing, std::chrono::nanoseconds refreshDuration)
+{
+    if (refreshDuration <= std::chrono::nanoseconds::zero()) {
+        return;
+    }
+    for (auto &[pipeline, eye] : m_frameSequentialEyes) {
+        if (!eye.plane || !eye.target) {
+            continue;
+        }
+        const int64_t later = std::llround(double((landing - *eye.target).count()) / double(refreshDuration.count()));
+        const StereoEye shown = (later % 2) ? (eye.chosen == StereoEye::Left ? StereoEye::Right : StereoEye::Left) : eye.chosen;
+        if (shown != eye.committed) {
+            addProperty(eye.plane->srcX, uint64_t(eye.sourceX[shown == StereoEye::Left ? 0 : 1]) << 16);
+            eye.committed = shown;
+        }
+    }
 }
 
 void DrmAtomicCommit::setVrr(DrmCrtc *crtc, bool vrr)
@@ -225,7 +252,7 @@ void DrmAtomicCommit::pageFlipped(std::chrono::nanoseconds timestamp, std::optio
 std::optional<StereoEye> DrmAtomicCommit::frameSequentialEye(DrmPipeline *pipeline) const
 {
     if (const auto it = m_frameSequentialEyes.find(pipeline); it != m_frameSequentialEyes.end()) {
-        return it->second;
+        return it->second.committed;
     }
     return std::nullopt;
 }

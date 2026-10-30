@@ -271,8 +271,11 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
     } else if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         const drmModeModeInfo &mode = *m_pending.mode->nativeMode();
         if (isFrameSequential(stereoLayout)) {
-            const StereoEye eye = frameSequentialEye(frame ? std::optional(frame->targetPageflipTime()) : std::nullopt);
-            commit->setFrameSequentialEye(this, eye);
+            const auto target = frame ? std::optional(frame->targetPageflipTime()) : std::nullopt;
+            const StereoEye eye = frameSequentialEye(target);
+            const std::array<uint32_t, 2> sourceX{uint32_t(frameSequentialSourceRect(mode, StereoEye::Left).x()),
+                                                  uint32_t(frameSequentialSourceRect(mode, StereoEye::Right).x())};
+            commit->setFrameSequentialEye(this, eye, plane, sourceX, target);
             sourceRect = frameSequentialSourceRect(mode, eye);
             targetRect = Rect(QPoint(0, 0), m_pending.mode->size());
         } else {

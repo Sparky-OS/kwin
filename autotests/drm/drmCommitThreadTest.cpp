@@ -7,7 +7,10 @@
 #include "drm_backend.h"
 #include "drm_commit.h"
 #include "drm_commit_thread.h"
+#include "drm_connector.h"
 #include "drm_gpu.h"
+#include "drm_pipeline.h"
+#include "drm_plane.h"
 
 #include <QLoggingCategory>
 #include <QScopeGuard>
@@ -51,6 +54,7 @@ class DrmCommitThreadTest : public QObject
 
 private Q_SLOTS:
     void testStopWhileCommitting();
+    void testRetargetedEyeIsTheCommittedOne();
 };
 
 void DrmCommitThreadTest::testStopWhileCommitting()
@@ -113,6 +117,64 @@ void DrmCommitThreadTest::testStopWhileCommitting()
         progress.notify_all();
     }
     QCOMPARE(stopped, rounds);
+}
+
+void DrmCommitThreadTest::testRetargetedEyeIsTheCommittedOne()
+{
+    // A frame sequential commit submitted for a later refresh than its frame's shows that refresh's
+    // eye, counted from the refresh it was chosen for, and reports that eye to its pipeline.
+    GpuManager::s_self = std::make_unique<GpuManager>();
+    const auto resetManager = qScopeGuard([] {
+        GpuManager::s_self.reset();
+    });
+    const auto mockGpu = findRenderDevice(1);
+    QVERIFY(mockGpu);
+    const auto mockConnector = std::make_shared<MockConnector>(mockGpu.get());
+    mockGpu->connectors.push_back(mockConnector);
+    const auto session = Session::create(Session::Type::Noop);
+    const auto backend = std::make_unique<DrmBackend>(session.get());
+    auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
+    const auto connector = std::make_shared<DrmConnector>(gpu.get(), mockConnector->id);
+    QVERIFY(connector->init());
+    auto plane = std::make_unique<DrmPlane>(gpu.get(), mockGpu->planes.front()->id);
+    QVERIFY(plane->init());
+    auto pipeline = std::make_unique<DrmPipeline>(connector.get());
+
+    const std::chrono::nanoseconds refresh = 8'333'333ns;
+    const auto target = std::chrono::steady_clock::now();
+    DrmAtomicCommit commit(QList<DrmPipeline *>{pipeline.get()});
+    commit.addProperty(plane->srcX, uint64_t(1920) << 16);
+    commit.setFrameSequentialEye(pipeline.get(), StereoEye::Right, plane.get(), {0, 1920}, target);
+    QCOMPARE(commit.frameSequentialEye(pipeline.get()), std::optional(StereoEye::Right));
+    // on time, and an even number of refreshes late, the chosen eye stays
+    commit.retargetFrameSequentialEyes(target + 300us, refresh);
+    QCOMPARE(commit.frameSequentialEye(pipeline.get()), std::optional(StereoEye::Right));
+    commit.retargetFrameSequentialEyes(target + 2 * refresh, refresh);
+    QCOMPARE(commit.frameSequentialEye(pipeline.get()), std::optional(StereoEye::Right));
+    // an odd number late, the other one, counted from the chosen eye however often it is retargeted
+    commit.retargetFrameSequentialEyes(target + refresh, refresh);
+    QCOMPARE(commit.frameSequentialEye(pipeline.get()), std::optional(StereoEye::Left));
+    commit.retargetFrameSequentialEyes(target + 3 * refresh - 500us, refresh);
+    QCOMPARE(commit.frameSequentialEye(pipeline.get()), std::optional(StereoEye::Left));
+
+    // what reaches the kernel is that eye's source
+    const auto mockPlane = mockGpu->findPlane(plane->id());
+    const auto sourceX = mockPlane->getPropId(QStringLiteral("SRC_X"));
+    mockGpu->atomicCommits.clear();
+    QVERIFY(commit.test());
+    std::optional<uint64_t> committedX;
+    for (const Prop &property : mockGpu->atomicCommits.constLast()) {
+        if (property.obj == mockPlane->id && property.prop == sourceX) {
+            committedX = property.value;
+        }
+    }
+    QCOMPARE(committedX, std::optional<uint64_t>(0));
+
+    // a commit whose eye has no frame to count from, such as a modeset, keeps it
+    DrmAtomicCommit modeset(QList<DrmPipeline *>{pipeline.get()});
+    modeset.setFrameSequentialEye(pipeline.get(), StereoEye::Right);
+    modeset.retargetFrameSequentialEyes(target + refresh, refresh);
+    QCOMPARE(modeset.frameSequentialEye(pipeline.get()), std::optional(StereoEye::Right));
 }
 
 QTEST_GUILESS_MAIN(DrmCommitThreadTest)

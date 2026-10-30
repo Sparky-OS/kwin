@@ -12,6 +12,7 @@
 #include <xf86drmMode.h>
 
 #include <QHash>
+#include <array>
 #include <chrono>
 #include <unordered_map>
 #include <unordered_set>
@@ -66,7 +67,19 @@ public:
     }
     void addBlob(const DrmProperty &prop, const std::shared_ptr<DrmBlob> &blob);
     void addBuffer(DrmPlane *plane, const std::shared_ptr<DrmFramebuffer> &buffer, const std::shared_ptr<OutputFrame> &frame);
-    void setFrameSequentialEye(DrmPipeline *pipeline, StereoEye eye);
+    /**
+     * The eye a commit of KWin's frame sequential twin shows on @p pipeline's primary @p plane, chosen for
+     * @p target, the refresh its frame is for; @p sourceX is the plane's source x of the left and of the
+     * right eye. When the commit is submitted for a later refresh, retargetFrameSequentialEyes() shows the
+     * eye of that one instead.
+     */
+    void setFrameSequentialEye(DrmPipeline *pipeline, StereoEye eye, DrmPlane *plane = nullptr, std::array<uint32_t, 2> sourceX = {},
+                               std::optional<std::chrono::steady_clock::time_point> target = std::nullopt);
+    /**
+     * Sets every frame sequential eye of this commit for the refresh at @p landing, counted in refreshes of
+     * @p refreshDuration from the refresh it was chosen for: an odd number of refreshes later is the other eye.
+     */
+    void retargetFrameSequentialEyes(std::chrono::steady_clock::time_point landing, std::chrono::nanoseconds refreshDuration);
     void setVrr(DrmCrtc *crtc, bool vrr);
     void setPresentationMode(PresentationMode mode);
 
@@ -101,7 +114,15 @@ private:
     std::unordered_map<const DrmProperty *, std::shared_ptr<DrmBlob>> m_blobs;
     std::unordered_map<DrmPlane *, std::shared_ptr<DrmFramebuffer>> m_buffers;
     std::unordered_map<DrmPlane *, std::shared_ptr<OutputFrame>> m_frames;
-    std::unordered_map<DrmPipeline *, StereoEye> m_frameSequentialEyes;
+    struct FrameSequentialEye
+    {
+        StereoEye chosen;
+        StereoEye committed;
+        DrmPlane *plane = nullptr;
+        std::array<uint32_t, 2> sourceX;
+        std::optional<std::chrono::steady_clock::time_point> target;
+    };
+    std::unordered_map<DrmPipeline *, FrameSequentialEye> m_frameSequentialEyes;
     std::unordered_set<DrmPlane *> m_planes;
     std::optional<bool> m_vrr;
     std::unordered_map<uint32_t /* object */, std::unordered_map<uint32_t /* property */, uint64_t /* value */>> m_properties;

@@ -156,6 +156,9 @@ void DrmCommitThread::submit()
 {
     DrmAtomicCommit *commit = m_commits.front().get();
     const auto vrr = commit->isVrr();
+    // a frame sequential commit shows the eye of the refresh it reaches, the first one whose vblank
+    // starts after now, which is later than the refresh its frame was for when it is submitted late
+    commit->retargetFrameSequentialEyes(estimateNextVblank(std::chrono::steady_clock::now() + m_vblankTime), m_minVblankInterval);
     const bool success = commit->commit();
     if (success) {
         m_vrr = vrr.value_or(m_vrr);
@@ -370,6 +373,7 @@ void DrmCommitThread::setModeInfo(uint32_t maximum, std::chrono::nanoseconds vbl
 {
     std::unique_lock lock(m_mutex);
     m_minVblankInterval = std::chrono::nanoseconds(1'000'000'000'000ull / maximum);
+    m_vblankTime = vblankTime;
     // the kernel rejects commits that happen during vblank
     // the 1.5ms on top of that was chosen experimentally, for the time it takes to commit + scheduling inaccuracies
     m_baseSafetyMargin = vblankTime + s_safetyMarginMinimum;
