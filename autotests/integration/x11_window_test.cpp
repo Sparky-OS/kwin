@@ -34,6 +34,7 @@
 #include <linux/input-event-codes.h>
 #include <netwm.h>
 #include <xcb/present.h>
+#include <xcb/shape.h>
 #include <xcb/xcb_event.h>
 #include <xcb/xcb_icccm.h>
 
@@ -152,6 +153,8 @@ private Q_SLOTS:
     void testStereoOneViewNativeConfigure();
     void testStereoContentDeclarationRulePrecedence();
     void testStereoChildWindow();
+    void testStereoChildShape();
+    void testOrdinaryX11Shape();
     void testStereoChildWindowListedBeforeMapping();
     void testStereoChildWindowOtherVisual();
     void testStereoChildWindowOneViewSize();
@@ -4065,7 +4068,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 8u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 9u);
 
     const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -4486,6 +4489,109 @@ void X11WindowTest::testStereoContentDeclarationRulePrecedence()
 
     workspace()->rulebook()->setConfig(KSharedConfig::openConfig(QString(), KConfig::SimpleConfig));
     workspace()->slotReconfigure();
+}
+
+void X11WindowTest::testOrdinaryX11Shape()
+{
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 80));
+    QVERIFY(window);
+    const xcb_rectangle_t rectangles[] = {{0, 0, 100, 20}, {0, 20, 40, 60}};
+    xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, XCB_CLIP_ORDERING_UNSORTED,
+                         window->window(), 0, 0, 2, rectangles);
+    xcb_flush(c.get());
+    const RegionF expected = RegionF(Xcb::fromXNative(Rect(0, 0, 100, 20))) | Xcb::fromXNative(Rect(0, 20, 40, 60));
+    QTRY_COMPARE(window->shapeRegion(), expected);
+    QTRY_COMPARE(window->surfaceItem()->shape(), expected);
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+    xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT, XCB_CLIP_ORDERING_UNSORTED,
+                         window->window(), 0, 0, 0, nullptr);
+    xcb_shape_mask(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, window->window(), 0, 0, XCB_PIXMAP_NONE);
+    xcb_flush(c.get());
+    QTRY_COMPARE(window->surfaceItem()->shape(), RegionF(Xcb::fromXNative(Rect(0, 0, 100, 80))));
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoChildShape()
+{
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200));
+    QVERIFY(window);
+    const xcb_window_t child = xcb_generate_id(c.get());
+    const uint32_t background = 0x00ff0000;
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, window->window(), 10, 20, 100, 80, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &background);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    // Different, nonrectangular clips in the two native packed halves.
+    const xcb_rectangle_t rectangles[] = {{0, 0, 50, 20}, {0, 20, 20, 60}, {75, 10, 25, 70}};
+    xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, XCB_CLIP_ORDERING_UNSORTED,
+                         child, 0, 0, 3, rectangles);
+    xcb_map_window(c.get(), child);
+    xcb_flush(c.get());
+    QTRY_COMPARE(window->stereoChildren()->children().size(), 1u);
+    const auto *tracked = window->stereoChildren()->children().front().get();
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(tracked);
+    SurfaceItemXwaylandChild *item = nullptr;
+    QTRY_VERIFY([&]() {
+        for (Item *candidate : window->surfaceItem()->childItems()) {
+            if (auto surface = qobject_cast<SurfaceItemXwaylandChild *>(candidate)) {
+                item = surface;
+            }
+        }
+        return item != nullptr;
+    }());
+    auto coverage = [item](StereoEye eye) {
+        RegionF region;
+        for (const auto &quad : item->eyeQuads(eye)) {
+            region |= quad.bounds();
+        }
+        return region;
+    };
+    const RegionF left = RegionF(Xcb::fromXNative(Rect(0, 0, 100, 20))) | Xcb::fromXNative(Rect(0, 20, 40, 60));
+    const RegionF right = RegionF(Xcb::fromXNative(Rect(50, 10, 50, 70)));
+    QTRY_COMPARE(coverage(StereoEye::Left), left);
+    QTRY_COMPARE(coverage(StereoEye::Right), right);
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+
+    // Input-only shape changes cannot change what is painted.
+    xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT, XCB_CLIP_ORDERING_UNSORTED,
+                         child, 0, 0, 0, nullptr);
+    xcb_flush(c.get());
+    Test::flushWaylandConnection();
+    QCOMPARE(coverage(StereoEye::Left), left);
+    QCOMPARE(coverage(StereoEye::Right), right);
+
+    // Placement changes scale the native clip once, without changing either native eye.
+    const uint32_t place[] = {5, 6, 200, 120, 0};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_child_place,
+                        XCB_ATOM_CARDINAL, 32, 5, place);
+    xcb_flush(c.get());
+    QTRY_COMPARE(coverage(StereoEye::Left), left.scaled(2.0, 1.5));
+    QTRY_COMPARE(coverage(StereoEye::Right), right.scaled(2.0, 1.5));
+    xcb_delete_property(c.get(), child, atoms->kde_net_wm_stereo_content_child_place);
+    xcb_flush(c.get());
+    QTRY_COMPARE(coverage(StereoEye::Left), left);
+    QTRY_COMPARE(coverage(StereoEye::Right), right);
+
+    // An empty bounding shape hides every sample, and resetting it restores both eyes.
+    xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, XCB_CLIP_ORDERING_UNSORTED,
+                         child, 0, 0, 0, nullptr);
+    xcb_flush(c.get());
+    QTRY_VERIFY(coverage(StereoEye::Left).isEmpty());
+    QTRY_VERIFY(coverage(StereoEye::Right).isEmpty());
+    xcb_shape_mask(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, child, 0, 0, XCB_PIXMAP_NONE);
+    xcb_flush(c.get());
+    QTRY_COMPARE(coverage(StereoEye::Left), RegionF(item->rect()));
+    QTRY_COMPARE(coverage(StereoEye::Right), RegionF(item->rect()));
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
 }
 
 void X11WindowTest::testStereoChildWindow()

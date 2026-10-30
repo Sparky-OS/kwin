@@ -243,9 +243,14 @@ WindowQuadList SurfaceItem::buildQuads() const
     return buildSourceQuads(m_bufferSourceBox);
 }
 
+RegionF SurfaceItem::shapeForSourceBox(const RectF &bufferSourceBox) const
+{
+    return shape();
+}
+
 WindowQuadList SurfaceItem::buildSourceQuads(const RectF &bufferSourceBox) const
 {
-    const RegionF region = shape();
+    const RegionF region = shapeForSourceBox(bufferSourceBox);
     WindowQuadList quads;
     quads.reserve(region.rects().size());
 

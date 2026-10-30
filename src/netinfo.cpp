@@ -136,7 +136,8 @@ RootInfo *RootInfo::create()
     // below the parent's own surface) or from the size one view is shown at in its own
     // _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE, so a child may hold both views at full width or
     // the native raster of a video while the ordinary window paints its controls above it.
-    const uint32_t stereoContentSupported = 8;
+    // 9 also consumes child bounding shapes, independently for each packed eye.
+    const uint32_t stereoContentSupported = 9;
     xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, kwinApp()->x11RootWindow(),
                         atoms->kde_net_wm_stereo_content_supported, XCB_ATOM_CARDINAL, 32, 1, &stereoContentSupported);
 
