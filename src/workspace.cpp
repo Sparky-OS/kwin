@@ -501,8 +501,16 @@ Workspace::~Workspace()
     }
     m_tileManagers.clear();
 
-    for (LogicalOutput *output : std::as_const(m_outputs)) {
+    // Remove the outputs the way updateOutputs() removes an output that went away: outputRemoved is
+    // emitted for an output that outputs() and outputOrder() no longer list, and the outputs are
+    // unreferenced only after the last outputRemoved, so a listener that walks the outputs in its
+    // answer meets no freed output.
+    const QList<LogicalOutput *> outputs = std::exchange(m_outputs, {});
+    m_outputOrder.clear();
+    for (LogicalOutput *output : outputs) {
         Q_EMIT outputRemoved(output);
+    }
+    for (LogicalOutput *output : outputs) {
         output->backendOutput()->unref();
         output->unref();
     }
