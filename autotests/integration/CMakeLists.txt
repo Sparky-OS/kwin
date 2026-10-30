@@ -170,6 +170,7 @@ integrationTest(NAME testStereoDepthPopups SRCS stereo_depth_popups_test.cpp LIB
 integrationTest(NAME testStereoDepthMotion SRCS stereo_depth_motion_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testStereoDepthWallpaper SRCS stereo_depth_wallpaper_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testStereoDepthWallpaperCuts SRCS stereo_depth_wallpaper_cuts_test.cpp)
+integrationTest(NAME testWorkspaceTeardown SRCS workspace_teardown_test.cpp)
 integrationTest(NAME testStereoOutputRepaint SRCS stereo_output_repaint_test.cpp)
 integrationTest(NAME testDmabufFormatSwitch SRCS dmabuf_formatswitch_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testKeyboardInput SRCS keyboard_input_test.cpp)
