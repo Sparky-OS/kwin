@@ -77,6 +77,11 @@ target_link_libraries(testMockDrmDisplayPortSequential LibDrmTest Qt::Test)
 add_test(NAME kwin-testMockDrmDisplayPortSequential COMMAND testMockDrmDisplayPortSequential)
 ecm_mark_as_test(testMockDrmDisplayPortSequential)
 
+add_executable(testDrmCommitThread drmCommitThreadTest.cpp)
+target_link_libraries(testDrmCommitThread LibDrmTest Qt::Test)
+add_test(NAME kwin-testDrmCommitThread COMMAND testDrmCommitThread)
+ecm_mark_as_test(testDrmCommitThread)
+
 add_executable(testVirtualStereo virtualStereoTest.cpp)
 target_link_libraries(testVirtualStereo LibDrmTest Qt::Test)
 add_test(NAME kwin-testVirtualStereo COMMAND testVirtualStereo)

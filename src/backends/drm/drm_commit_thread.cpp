@@ -34,15 +34,20 @@ DrmCommitThread::DrmCommitThread(DrmGpu *gpu, const QString &name)
         const auto thread = QThread::currentThread();
         gainRealTime();
         while (true) {
+            std::unique_lock lock(m_mutex);
+            // the destructor requests the interruption and wakes this thread with the mutex held,
+            // so a request is either seen here or wakes the wait below, never lost in between
             if (thread->isInterruptionRequested()) {
                 return;
             }
-            std::unique_lock lock(m_mutex);
             bool timeout = false;
             if (m_committed) {
                 timeout = m_commitPending.wait_for(lock, DrmGpu::s_pageflipTimeout) == std::cv_status::timeout;
             } else if (m_commits.empty()) {
                 m_commitPending.wait(lock);
+            }
+            if (thread->isInterruptionRequested()) {
+                return;
             }
             if (m_committed) {
                 if (timeout) {
