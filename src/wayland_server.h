@@ -211,6 +211,12 @@ public:
     SocketPairConnection createConnection();
 
     /**
+     * Creates the connection of the screen locker's greeter and returns the client's end of it:
+     * the windows of that client are the lock screen.
+     */
+    int createScreenLockerConnection();
+
+    /**
      * Returns the first socket name that can be used to connect to this server.
      * For a full list, use display()->socketNames()
      */
@@ -237,7 +243,6 @@ Q_SIGNALS:
     void lockStateChanged();
 
 private:
-    int createScreenLockerConnection();
     void initScreenLocker();
     void registerXdgGenericWindow(Window *window);
     void registerXdgToplevelWindow(XdgToplevelWindow *window);

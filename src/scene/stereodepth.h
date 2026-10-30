@@ -163,6 +163,13 @@ public:
     static int maxEyeShift(int viewWidth);
 
     /**
+     * The depth of a wallpaper in pixels of a view 1920 wide: the sunk limit, the deepest layer,
+     * behind every window. The desktop's level puts it there, and the lock screen's wallpaper lies
+     * there too.
+     */
+    static qreal wallpaperDepth();
+
+    /**
      * How many columns are cut from each side of a wallpaper whose copies are @a parallax pixels
      * apart: the same columns in both eyes, as many as the farther of the two copies moves. The
      * wallpaper keeps its size and covers what is left in both eyes.

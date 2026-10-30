@@ -637,6 +637,25 @@ static Region wallpaperPlace(const RenderViewport &viewport, const Window *windo
     return Region(viewport.mapToDeviceCoordinatesAligned(window->frameGeometry()).adjusted(cut, 0, -cut, 0));
 }
 
+// The wallpaper of the lock screen: the surfaces the greeter places below its own, as the layer of a
+// stereo wallpaper is. A wallpaper is a wallpaper on the lock screen too, at the desktop's level,
+// while the greeter's own surface, its clock and password field, stays at the screen's level.
+static QList<Item *> lockScreenWallpaper(const WindowItem *item)
+{
+    QList<Item *> parts;
+    if (!item->window()->isLockScreen() || !item->surfaceItem()) {
+        return parts;
+    }
+    const QList<Item *> children = item->surfaceItem()->sortedChildItems();
+    for (Item *child : children) {
+        if (child->z() >= 0) {
+            break;
+        }
+        parts.append(child);
+    }
+    return parts;
+}
+
 static void addOpaqueRegionRecursive(SceneView *view, Item *item, const std::optional<ClipCorner> &parentCorner, Region &ret)
 {
     const std::optional<ClipCorner> corner = calculateClipCorner(item, parentCorner);
@@ -664,8 +683,9 @@ void WorkspaceScene::preparePaintSimpleScreen()
         effects->prePaintWindow(painted_delegate, windowItem->effectWindow(), data);
         const bool transformedByEffect = data.mask & PAINT_WINDOW_TRANSFORMED;
 
-        if (stereoDepthPainted(window)) {
-            // each eye shows the window at its own place, and its shadow at the places of what it falls on
+        if (stereoDepthPainted(window) || (wallpaperParallax() && !lockScreenWallpaper(windowItem).isEmpty())) {
+            // each eye shows the window at its own place, and its shadow at the places of what it
+            // falls on; the lock screen shows its wallpaper at the desktop's level
             data.mask |= PAINT_WINDOW_TRANSFORMED;
         }
 
@@ -1015,7 +1035,19 @@ bool WorkspaceScene::paintStereoDepth(const RenderTarget &renderTarget, const QP
                 data.translate(shift / viewport.scale());
             }
             const Region place = parallax && window->isDesktop() ? wallpaperPlace(viewport, window, parallax) : Region::infinite();
-            m_renderer->renderItem(desktopTarget, viewport, paintData.item, paintData.mask, place, data, filter, holeFilter);
+            // the lock screen's wallpaper at the desktop's level, as finalDrawWindow() puts it
+            const int sunk = wallpaperParallax();
+            const QList<Item *> wallpaper = sunk ? lockScreenWallpaper(paintData.item) : QList<Item *>();
+            if (!wallpaper.isEmpty()) {
+                m_renderer->setDepthColor(content ? estimatedAt(sunk) : colorOf(sunk));
+                for (Item *part : wallpaper) {
+                    drawWindowPart(desktopTarget, viewport, paintData.item, part, paintData.mask, wallpaperPlace(viewport, window, sunk), data, StereoDepth::eyeShift(sunk, pass.pictureEye), filter, holeFilter);
+                }
+                m_renderer->setDepthColor(content ? estimatedAt(parallax) : colorOf(parallax));
+            }
+            m_renderer->renderItem(desktopTarget, viewport, paintData.item, paintData.mask, place, data, [&filter, &wallpaper](Item *item) {
+                return wallpaper.contains(item) || filter(item);
+            }, holeFilter);
         }
         if (showsOverlayInStereoPlane()) {
             const int parallax = StereoDepth::isEnabled() && painted_screen && painted_screen->hasStereoEyes() ? pointerParallax() : 0;
@@ -1150,13 +1182,55 @@ void WorkspaceScene::finalDrawWindow(const RenderTarget &renderTarget, const Ren
     if (ownShadow) {
         drawStereoShadow(renderTarget, viewport, windowItem, mask, deviceRegion, data);
     }
+    const auto holeFilter = [this](Item *item) {
+        return painted_delegate && painted_delegate->shouldRenderHole(item);
+    };
+    // the lock screen's wallpaper lies at the desktop's level, cut at the sides as the desktop's is
+    QList<Item *> wallpaper;
+    const int parallax = m_renderer->stereoEye() == StereoEye::None ? 0 : wallpaperParallax();
+    if (parallax && data.rotationAngle() == 0) {
+        wallpaper = lockScreenWallpaper(windowItem);
+        const Region place = deviceRegion & wallpaperPlace(viewport, w->window(), parallax);
+        const int shift = StereoDepth::eyeShift(parallax, m_renderer->stereoEye());
+        for (Item *part : std::as_const(wallpaper)) {
+            drawWindowPart(renderTarget, viewport, windowItem, part, mask, place, data, shift, [this](Item *item) {
+                return painted_delegate && !painted_delegate->shouldRenderItem(item);
+            }, holeFilter);
+        }
+    }
     // TODO: Reconsider how the CrossFadeEffect captures the initial window contents to remove
     // null pointer delegate checks in "should render item" and "should render hole" checks.
-    m_renderer->renderItem(renderTarget, viewport, windowItem, mask, deviceRegion, data, [this, shadow, ownShadow](Item *item) {
-        return (ownShadow && item == shadow) || (painted_delegate && !painted_delegate->shouldRenderItem(item));
-    }, [this](Item *item) {
-        return painted_delegate && painted_delegate->shouldRenderHole(item);
-    });
+    m_renderer->renderItem(renderTarget, viewport, windowItem, mask, deviceRegion, data, [this, shadow, ownShadow, &wallpaper](Item *item) {
+        return (ownShadow && item == shadow) || wallpaper.contains(item) || (painted_delegate && !painted_delegate->shouldRenderItem(item));
+    }, holeFilter);
+}
+
+// The parallax of a wallpaper on the output being painted: that of the sunk limit
+int WorkspaceScene::wallpaperParallax() const
+{
+    if (!painted_screen || !painted_screen->hasStereoEyes() || !StereoDepth::isEnabled()) {
+        return 0;
+    }
+    return StereoDepth::parallax(StereoDepth::wallpaperDepth(), painted_delegate->deviceRect().width());
+}
+
+// Draws @a part of @a windowItem's items on its own, where it lies in the window, with the window's
+// paint data and @a shift device pixels more. The paint data apply in the window's own coordinates,
+// so the part's place in the window comes into their translation, scaled as they scale.
+void WorkspaceScene::drawWindowPart(const RenderTarget &renderTarget, const RenderViewport &viewport, WindowItem *windowItem, Item *part, int mask, const Region &deviceRegion, const WindowPaintData &data, int shift, const std::function<bool(Item *)> &filter, const std::function<bool(Item *)> &holeFilter)
+{
+    QPointF offset;
+    qreal opacity = windowItem->opacity();
+    for (const Item *item = part->parentItem(); item && item != windowItem; item = item->parentItem()) {
+        offset += item->position();
+        opacity *= item->opacity();
+    }
+    const QPointF position = part->position();
+    WindowPaintData partData(data);
+    partData.setXTranslation(data.xTranslation() + windowItem->position().x() + data.xScale() * (offset.x() + position.x()) - position.x() + shift / viewport.scale());
+    partData.setYTranslation(data.yTranslation() + windowItem->position().y() + data.yScale() * (offset.y() + position.y()) - position.y());
+    partData.multiplyOpacity(opacity);
+    m_renderer->renderItem(renderTarget, viewport, part, mask, deviceRegion, partData, filter, holeFilter);
 }
 
 EglContext *WorkspaceScene::openglContext() const

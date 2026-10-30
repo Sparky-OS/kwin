@@ -13,13 +13,17 @@
 #include "plugins/screenshot/screenshot.h"
 #include "scene/stereodepth.h"
 #include "scene/workspacescene.h"
+#include "wayland-client/viewporter.h"
 #include "wayland_server.h"
 #include "window.h"
 #include "workspace.h"
 
 #include <KConfigGroup>
 #include <KSharedConfig>
+#include <KWayland/Client/subsurface.h>
 #include <KWayland/Client/surface.h>
+
+#include <QPainter>
 
 namespace KWin
 {
@@ -47,6 +51,10 @@ private Q_SLOTS:
     void testDesktopKeepsItsSize();
     void testNoSunkLimitNoCut();
     void testTwoDimensionalOutputIsUnchanged();
+    // last: the screen locker's connection is the test's own from here on
+    void testLockScreenWallpaperSinks_data();
+    void testLockScreenWallpaperSinks();
+    void testLockScreenNoSunkLimit();
 };
 
 static const QSize s_outputSize(320, 240);
@@ -136,9 +144,70 @@ static Desktop createDesktop()
     return result;
 }
 
+// the greeter's own interface on the lock screen, at the screen's level: an opaque block, its clock
+static const Rect s_clock(140, 100, 40, 40);
+
+struct LockScreen
+{
+    std::unique_ptr<KWayland::Client::Surface> surface;
+    std::unique_ptr<Test::LayerSurfaceV1> shellSurface;
+    std::unique_ptr<KWayland::Client::Surface> wallpaper;
+    std::unique_ptr<KWayland::Client::SubSurface> subsurface;
+    std::unique_ptr<WaylandClient::Viewport> viewport;
+    std::unique_ptr<Test::StereoContentV1> declaration;
+    Window *window = nullptr;
+};
+
+// The lock screen as the greeter makes it: a layer surface over the output with its interface, and
+// its wallpaper in a surface placed below it, full side by side for a stereo wallpaper
+static LockScreen createLockScreen(bool stereo)
+{
+    LockScreen result;
+    result.surface = Test::createSurface();
+    result.shellSurface = Test::createLayerSurfaceV1(result.surface.get(), QStringLiteral("lockscreen"));
+    result.shellSurface->set_size(0, 0);
+    result.shellSurface->set_exclusive_zone(-1);
+    result.shellSurface->set_keyboard_interactivity(1);
+    result.shellSurface->set_anchor(Test::LayerSurfaceV1::anchor_bottom | Test::LayerSurfaceV1::anchor_top
+                                    | Test::LayerSurfaceV1::anchor_left | Test::LayerSurfaceV1::anchor_right);
+    QSignalSpy configured(result.shellSurface.get(), &Test::LayerSurfaceV1::configureRequested);
+    result.surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    if (!configured.wait()) {
+        return result;
+    }
+    result.shellSurface->ack_configure(configured.last().at(0).value<quint32>());
+    const QSize size = configured.last().at(1).toSize();
+
+    result.wallpaper = Test::createSurface();
+    result.subsurface = Test::createSubSurface(result.wallpaper.get(), result.surface.get());
+    result.subsurface->placeBelow(result.surface.get());
+    if (stereo) {
+        QImage pair(QSize(2 * size.width(), size.height()), QImage::Format_ARGB32_Premultiplied);
+        QPainter painter(&pair);
+        painter.drawImage(0, 0, wallpaperImage(size, 0));
+        painter.drawImage(size.width(), 0, wallpaperImage(size, 1));
+        painter.end();
+        result.viewport = Test::viewporter()->createViewport(*result.wallpaper);
+        result.viewport->setDestination(size);
+        result.declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*result.wallpaper));
+        result.declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
+        Test::render(result.wallpaper.get(), pair);
+    } else {
+        Test::render(result.wallpaper.get(), wallpaperImage(size));
+    }
+
+    QImage interface(size, QImage::Format_ARGB32_Premultiplied);
+    interface.fill(Qt::transparent);
+    QPainter painter(&interface);
+    painter.fillRect(s_clock, Qt::white);
+    painter.end();
+    result.window = Test::renderAndWaitForShown(result.surface.get(), interface);
+    return result;
+}
+
 // Compares each eye of @a image, column by column on three rows, with the wallpaper's columns moved
 // by that eye's shift, and black in the columns cut from each side. Says where they differ.
-static QString compareEyes(const QImage &image, int cut, int leftShift, int rightShift, int leftView = 0, int rightView = 0)
+static QString compareEyes(const QImage &image, int cut, int leftShift, int rightShift, int leftView = 0, int rightView = 0, const Rect &interface = Rect())
 {
     const int width = s_outputSize.width();
     const struct {
@@ -149,7 +218,11 @@ static QString compareEyes(const QImage &image, int cut, int leftShift, int righ
     for (const auto &eye : eyes) {
         for (int y : {0, s_outputSize.height() / 2, s_outputSize.height() - 1}) {
             for (int x = 0; x < width; ++x) {
-                const QRgb expected = x < cut || x >= width - cut ? qRgb(0, 0, 0) : columnColor(x - eye.shift, eye.view);
+                QRgb expected = x < cut || x >= width - cut ? qRgb(0, 0, 0) : columnColor(x - eye.shift, eye.view);
+                if (interface.contains(QPoint(x, y))) {
+                    // the interface over the wallpaper, at the same place in both eyes
+                    expected = qRgb(255, 255, 255);
+                }
                 const QRgb pixel = image.pixel(eye.offset + x, y);
                 if (pixel != expected) {
                     return QStringLiteral("eye at %1, column %2, row %3: %4, expected %5").arg(eye.offset).arg(x).arg(y).arg(QColor(pixel).name(), QColor(expected).name());
@@ -189,7 +262,13 @@ void StereoDepthWallpaperTest::init()
         .geometry = Rect(QPoint(), s_outputSize),
         .modes = {plainMode(), stereoMode()},
     }});
-    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::LayerShellV1));
+    // the lock screen's cases connect as the screen locker's greeter does
+    const bool lockScreen = QByteArray(QTest::currentTestFunction()).startsWith("testLockScreen");
+    const int socket = lockScreen ? waylandServer()->createScreenLockerConnection() : -1;
+    QVERIFY(!lockScreen || socket >= 0);
+    QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::LayerShellV1 | Test::AdditionalWaylandInterface::Viewporter
+                                             | Test::AdditionalWaylandInterface::StereoContentV1,
+                                         socket));
     QVERIFY(stereoOutput(true));
     options->setStereoPoppedLimit(s_poppedLimit);
 }
@@ -259,6 +338,46 @@ void StereoDepthWallpaperTest::testTwoDimensionalOutputIsUnchanged()
     QVERIFY(image);
     QCOMPARE(image->size(), s_outputSize);
     QCOMPARE(*image, wallpaperImage(s_outputSize).convertToFormat(QImage::Format_RGB32));
+}
+
+void StereoDepthWallpaperTest::testLockScreenWallpaperSinks_data()
+{
+    QTest::addColumn<bool>("stereo");
+
+    QTest::addRow("stereo wallpaper") << true;
+    QTest::addRow("flat wallpaper") << false;
+}
+
+// The lock screen's wallpaper is a wallpaper: at the desktop's level and cut as the desktop's is,
+// while the greeter's interface stays at the screen's level, the same place in both eyes.
+void StereoDepthWallpaperTest::testLockScreenWallpaperSinks()
+{
+    QFETCH(bool, stereo);
+
+    options->setStereoSunkLimit(96);
+    const LockScreen lockScreen = createLockScreen(stereo);
+    QVERIFY(lockScreen.window && lockScreen.window->isLockScreen());
+    QCOMPARE(StereoDepth::parallax(lockScreen.window, s_outputSize.width()), 0);
+
+    const auto image = capture();
+    QVERIFY(image);
+    QCOMPARE(image->size(), QSize(2 * s_outputSize.width(), s_outputSize.height()));
+    const QString difference = compareEyes(*image, 8, -8, 8, 0, stereo ? 1 : 0, s_clock);
+    QVERIFY2(difference.isEmpty(), qPrintable(difference));
+}
+
+// With no sunk limit the lock screen is drawn as it is.
+void StereoDepthWallpaperTest::testLockScreenNoSunkLimit()
+{
+    options->setStereoSunkLimit(0);
+    QVERIFY(StereoDepth::isEnabled());
+    const LockScreen lockScreen = createLockScreen(true);
+    QVERIFY(lockScreen.window && lockScreen.window->isLockScreen());
+
+    const auto image = capture();
+    QVERIFY(image);
+    const QString difference = compareEyes(*image, 0, 0, 0, 0, 1, s_clock);
+    QVERIFY2(difference.isEmpty(), qPrintable(difference));
 }
 
 }

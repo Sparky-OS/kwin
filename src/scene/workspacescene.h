@@ -16,6 +16,8 @@
 
 #include <QHash>
 
+#include <functional>
+
 namespace KWin
 {
 
@@ -160,6 +162,8 @@ private:
     int stereoParallax(const Window *window) const;
     int pointerParallax() const;
     void drawStereoShadow(const RenderTarget &renderTarget, const RenderViewport &viewport, WindowItem *caster, int mask, const Region &deviceRegion, const WindowPaintData &data);
+    int wallpaperParallax() const;
+    void drawWindowPart(const RenderTarget &renderTarget, const RenderViewport &viewport, WindowItem *windowItem, Item *part, int mask, const Region &deviceRegion, const WindowPaintData &data, int shift, const std::function<bool(Item *)> &filter, const std::function<bool(Item *)> &holeFilter);
     void createDndIconItem();
     void destroyDndIconItem();
     void updateCursor();

@@ -359,12 +359,12 @@ void MockInputMethod::zwp_input_method_v1_deactivate(struct ::zwp_input_method_c
     }
 }
 
-bool setupWaylandConnection(AdditionalWaylandInterfaces flags)
+bool setupWaylandConnection(AdditionalWaylandInterfaces flags, int socket)
 {
     if (s_waylandConnection) {
         return false;
     }
-    s_waylandConnection = Connection::setup(flags);
+    s_waylandConnection = Connection::setup(flags, socket);
     return bool(s_waylandConnection);
 }
 
@@ -380,13 +380,15 @@ static std::unique_ptr<Connection> failedAt(int line)
     return nullptr;
 }
 
-std::unique_ptr<Connection> Connection::setup(AdditionalWaylandInterfaces flags)
+std::unique_ptr<Connection> Connection::setup(AdditionalWaylandInterfaces flags, int socket)
 {
-    int sx[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sx) < 0) {
-        return failedAt(__LINE__);
+    int sx[2] = {-1, socket};
+    if (socket < 0) {
+        if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sx) < 0) {
+            return failedAt(__LINE__);
+        }
+        KWin::waylandServer()->display()->createClient(sx[0]);
     }
-    KWin::waylandServer()->display()->createClient(sx[0]);
     // setup connection
     auto connection = std::make_unique<Connection>();
     connection->connection = new KWayland::Client::ConnectionThread;

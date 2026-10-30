@@ -1191,7 +1191,11 @@ public:
 
 struct Connection
 {
-    static std::unique_ptr<Connection> setup(AdditionalWaylandInterfaces interfaces = AdditionalWaylandInterfaces());
+    /**
+     * Connects to the compositor, through @a socket when it is given (the client's end of a
+     * connection the compositor made, such as the screen locker's).
+     */
+    static std::unique_ptr<Connection> setup(AdditionalWaylandInterfaces interfaces = AdditionalWaylandInterfaces(), int socket = -1);
     ~Connection();
 
     bool sync();
@@ -1282,7 +1286,7 @@ void tabletToolTipEvent(const QPointF &pos, qreal pressure, qreal xTilt, qreal y
  * @returns @c true if created successfully, @c false if there was an error
  * @see destroyWaylandConnection
  */
-bool setupWaylandConnection(AdditionalWaylandInterfaces flags = AdditionalWaylandInterfaces());
+bool setupWaylandConnection(AdditionalWaylandInterfaces flags = AdditionalWaylandInterfaces(), int socket = -1);
 
 /**
  * Destroys the Wayland Connection created with @link{setupWaylandConnection}.

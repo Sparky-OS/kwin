@@ -355,6 +355,11 @@ int StereoDepth::maxEyeShift(int viewWidth)
     return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
 }
 
+qreal StereoDepth::wallpaperDepth()
+{
+    return -options->stereoSunkLimit();
+}
+
 int StereoDepth::wallpaperCut(int parallax)
 {
     return (std::abs(parallax) + 1) / 2;
