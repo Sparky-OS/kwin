@@ -108,6 +108,7 @@ private Q_SLOTS:
     void testScanout();
     void testHeldPairTargetsNextRefresh();
     void testEyeOfTargetedRefresh();
+    void testLateCommitShowsItsRefreshEye();
 };
 
 void MockFrameSequentialTest::testScanout_data()
@@ -423,6 +424,93 @@ void MockFrameSequentialTest::testEyeOfTargetedRefresh()
     mockGpu->atomicCommits.clear();
     QCOMPARE(DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset), DrmPipeline::Error::None);
     QCOMPARE(committedEye(), std::optional(StereoEye::Right));
+}
+
+void MockFrameSequentialTest::testLateCommitShowsItsRefreshEye()
+{
+    // A frame for refresh 101, a right eye's, that reaches the commit thread only after refresh 101
+    // has begun: the thread submits it for refresh 102, and the commit must show 102's eye, the left
+    // one, not the eye of the refresh its frame was for.
+    GpuManager::s_self = std::make_unique<GpuManager>();
+    const auto mockGpu = findRenderDevice(1);
+    QVERIFY(mockGpu);
+    const auto mockConnector = std::make_shared<MockConnector>(mockGpu.get());
+    mockConnector->addMode(1920, 1080, 120);
+    mockGpu->connectors.push_back(mockConnector);
+
+    const auto session = Session::create(Session::Type::Noop);
+    const auto backend = std::make_unique<DrmBackend>(session.get());
+    const auto renderBackend = backend->createQPainterBackend();
+    Q_UNUSED(renderBackend);
+    const auto resetManager = qScopeGuard([] {
+        GpuManager::s_self.reset();
+    });
+    auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
+    const auto connector = std::make_shared<DrmConnector>(gpu.get(), mockConnector->id);
+    QVERIFY(connector->init());
+    const auto sequentialMode = std::make_shared<DrmConnectorMode>(connector->modes().front(), OutputModeline::Flag::Stereo3DSequentialLeftFirst);
+    auto plane = std::make_unique<DrmPlane>(gpu.get(), mockGpu->planes.front()->id);
+    QVERIFY(plane->init());
+    auto crtc = std::make_unique<DrmCrtc>(gpu.get(), mockGpu->crtcs.front()->id, 0, plane.get());
+    QVERIFY(crtc->init());
+    auto pipeline = std::make_unique<DrmPipeline>(connector.get());
+    auto output = std::make_unique<DrmOutput>(connector, pipeline.get());
+    pipeline->setCrtc(crtc.get());
+    pipeline->setMode(sequentialMode);
+    pipeline->setEnable(true);
+    pipeline->setActive(true);
+    auto *const mockFb = new MockFb(mockGpu.get(), 3840, 1080);
+    auto layer = std::make_unique<TestLayer>(plane.get(), std::make_shared<DrmFramebuffer>(std::make_shared<DrmFramebufferData>(gpu.get(), mockFb->id, nullptr), nullptr, FileDescriptor{}));
+    layer->setEnabled(true);
+    layer->setTargetRect(Rect(QPoint(0, 0), QSize(1920, 1080)));
+    layer->setSourceRect(Rect(QPoint(0, 0), QSize(1920, 1080)));
+    pipeline->setLayers({layer.get()});
+    QCOMPARE(DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset), DrmPipeline::Error::None);
+    pipeline->applyPendingChanges();
+
+    RenderLoop *loop = output->renderLoop();
+    RenderLoopPrivate *const loopPrivate = RenderLoopPrivate::get(loop);
+    loopPrivate->compositeTimer.stop();
+    const std::chrono::nanoseconds refresh(1'000'000'000'000ull / loop->refreshRate());
+    const auto now = []() {
+        return std::chrono::nanoseconds(std::chrono::steady_clock::now().time_since_epoch());
+    };
+    const auto mockPlane = mockGpu->findPlane(plane->id());
+    const auto sourceX = mockPlane->getPropId(QStringLiteral("SRC_X"));
+    const auto commits = [&mockGpu]() {
+        std::scoped_lock lock(mockGpu->m_mutex);
+        return mockGpu->atomicCommits;
+    };
+
+    // the left eye of a pair landed on refresh 100, a quarter of a refresh ago (after the modeset's
+    // own completion, which the render loop also took as a vblank)
+    QTest::qSleep(20);
+    const auto vblank = now() - refresh / 4;
+    pipeline->pageFlipped(vblank, 100, StereoEye::Left);
+    loopPrivate->compositeTimer.stop();
+    loop->prepareNewFrame();
+    auto frame = std::make_shared<OutputFrame>(loop, refresh);
+    loop->newFramePrepared();
+    QCOMPARE(std::llround((frame->targetPageflipTime().time_since_epoch() - vblank).count() / double(refresh.count())), 1ll);
+    // the frame reaches the commit thread when refresh 101 has begun
+    while (now() < vblank + refresh * 13 / 10) {
+        QTest::qSleep(1);
+    }
+    const auto before = commits().size();
+    QCOMPARE(pipeline->present({layer.get()}, frame), DrmPipeline::Error::None);
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (commits().size() == before) {
+        QVERIFY(std::chrono::steady_clock::now() < deadline);
+        QTest::qSleep(1);
+    }
+    std::optional<StereoEye> shown;
+    for (const Prop &property : commits().constLast()) {
+        if (property.obj == mockPlane->id && property.prop == sourceX) {
+            shown = property.value == 0 ? StereoEye::Left : StereoEye::Right;
+        }
+    }
+    QCOMPARE(shown, std::optional(StereoEye::Left));
+    frame.reset();
 }
 
 int main(int argc, char **argv)
