@@ -10,7 +10,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-  <interface name="kde_output_device_registry_v2" version="29">
+  <interface name="kde_output_device_registry_v2" version="30">
     <description summary="output devices">
       This interface can be used to list output devices.
 
@@ -52,7 +52,7 @@
     </event>
   </interface>
 
-  <interface name="kde_output_device_v2" version="29">
+  <interface name="kde_output_device_v2" version="30">
     <description summary="output configuration representation">
       An output device describes a display device available to the compositor.
       output_device is similar to wl_output, but focuses on output
@@ -709,7 +709,7 @@
     </event>
   </interface>
 
-  <interface name="kde_output_device_mode_v2" version="29">
+  <interface name="kde_output_device_mode_v2" version="30">
     <description summary="output mode">
       This object describes an output mode.
 
@@ -777,6 +777,7 @@
       <entry name="stereo_line_alternative" value="0x200000" since="28" summary="HDMI 1.4a 3D, line alternative"/>
       <entry name="stereo_l_depth" value="0x400000" since="28" summary="HDMI 1.4a 3D, L + depth"/>
       <entry name="stereo_l_depth_graphics" value="0x800000" since="28" summary="HDMI 1.4a 3D, L + depth + graphics + graphics-depth"/>
+      <entry name="stereo_sequential_displayport" value="0x1000000" since="30" summary="DisplayPort frame sequential stereo, signalled by the source"/>
 
     </enum>
 
@@ -791,6 +792,21 @@
         The first pixel means the output's top-left device pixel. Left-first
         selects the left eye on even rows, columns, or x+y parity respectively.
         Right-first reverses this order. Virtual modes are never preferred.
+
+        stereo_sequential_displayport is DisplayPort's own stereo transport:
+        the mode keeps its 2D timing, the compositor hands over both eyes side
+        by side in one frame twice the mode's width, left eye first, and the
+        source sends one eye per frame of the mode, the left eye first, telling
+        the sink which eye each frame carries (the Main Stream Attribute's MISC1
+        bits 2:1, DisplayPort 1.1a and later). Each eye is shown at half the
+        mode's refresh rate. Without virtual_stereo the display declares the
+        mode (an EDID detailed timing or a DisplayID stereo block); with
+        virtual_stereo it is the twin of a 2D mode on an output whose driver
+        accepts frame sequential stereo, which the display did not declare.
+        Unlike stereo_sequential_left_first and stereo_sequential_right_first,
+        whose eyes the compositor alternates itself with nothing sent to the
+        display, the eye order is fixed and signalled, so it has no right-first
+        twin; the output's swap_eyes still exchanges the pictures.
       </description>
       <arg name="flags" type="uint" enum="flags"/>
     </event>
