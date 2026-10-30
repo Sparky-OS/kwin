@@ -629,6 +629,14 @@ void WorkspaceScene::preparePaintGenericScreen()
     }
 }
 
+// Where a wallpaper whose copies are @a parallax pixels apart is drawn, in device pixels: the place of
+// its window without the columns either eye's copy leaves open, cut from both sides in both eyes
+static Region wallpaperPlace(const RenderViewport &viewport, const Window *window, int parallax)
+{
+    const int cut = StereoDepth::wallpaperCut(parallax);
+    return Region(viewport.mapToDeviceCoordinatesAligned(window->frameGeometry()).adjusted(cut, 0, -cut, 0));
+}
+
 static void addOpaqueRegionRecursive(SceneView *view, Item *item, const std::optional<ClipCorner> &parentCorner, Region &ret)
 {
     const std::optional<ClipCorner> corner = calculateClipCorner(item, parentCorner);
@@ -891,15 +899,13 @@ void WorkspaceScene::paintWindow(const RenderTarget &renderTarget, const RenderV
         // get it with the window's paint data.
         data.translate(shift / viewport.scale());
     }
-    if (shift && item->window()->isDesktop()) {
-        // a background behind the screen reaches past the edges of the output in both eyes: wider
-        // by what each eye's copy moves, around the middle, which keeps the level's parallax
-        const int extra = 2 * ((std::abs(parallax) + 1) / 2);
-        const qreal width = item->window()->frameGeometry().width() * viewport.scale();
-        data.setXScale((width + extra) / width);
-        data.translate(-extra / 2 / viewport.scale());
+    Region region = deviceRegion;
+    if (parallax && item->window()->isDesktop()) {
+        // a wallpaper behind the screen keeps its size: its copy moves in each eye, and the columns
+        // either copy leaves open are cut from both sides, the same columns in both eyes
+        region &= wallpaperPlace(viewport, item->window(), parallax);
     }
-    effects->paintWindow(renderTarget, viewport, effectWindow, mask, deviceRegion, data);
+    effects->paintWindow(renderTarget, viewport, effectWindow, mask, region, data);
     if (depthPainted) {
         m_depthWindow = nullptr;
         effectWindow->setData(WindowForceBlurRole, forceBlur);
@@ -1008,13 +1014,8 @@ bool WorkspaceScene::paintStereoDepth(const RenderTarget &renderTarget, const QP
             if (shift) {
                 data.translate(shift / viewport.scale());
             }
-            if (shift && window->isDesktop()) {
-                const int extra = 2 * ((std::abs(parallax) + 1) / 2);
-                const qreal width = window->frameGeometry().width() * viewport.scale();
-                data.setXScale((width + extra) / width);
-                data.translate(-extra / 2 / viewport.scale());
-            }
-            m_renderer->renderItem(desktopTarget, viewport, paintData.item, paintData.mask, Region::infinite(), data, filter, holeFilter);
+            const Region place = parallax && window->isDesktop() ? wallpaperPlace(viewport, window, parallax) : Region::infinite();
+            m_renderer->renderItem(desktopTarget, viewport, paintData.item, paintData.mask, place, data, filter, holeFilter);
         }
         if (showsOverlayInStereoPlane()) {
             const int parallax = StereoDepth::isEnabled() && painted_screen && painted_screen->hasStereoEyes() ? pointerParallax() : 0;
@@ -1117,9 +1118,18 @@ void WorkspaceScene::drawStereoShadow(const RenderTarget &renderTarget, const Re
     Region open = deviceRegion;
     for (int i = stacking_order.indexOf(caster) - 1; i >= 0 && !open.isEmpty(); --i) {
         const Window *receiver = stacking_order[i]->window();
-        const int shift = StereoDepth::eyeShift(stereoParallax(receiver), eye);
-        const Region place = receiver->isDesktop() ? Region(painted_delegate->deviceRect())
-                                                   : Region(viewport.mapToDeviceCoordinatesAligned(receiver->frameGeometry())).translated(shift, 0);
+        const int parallax = stereoParallax(receiver);
+        const int shift = StereoDepth::eyeShift(parallax, eye);
+        Region place;
+        if (receiver->isDesktop()) {
+            // the columns cut from the wallpaper's sides hold nothing to fall on
+            place = Region(painted_delegate->deviceRect());
+            if (parallax) {
+                place &= wallpaperPlace(viewport, receiver, parallax);
+            }
+        } else {
+            place = Region(viewport.mapToDeviceCoordinatesAligned(receiver->frameGeometry())).translated(shift, 0);
+        }
         if (open.intersects(place)) {
             drawOn(open.intersected(place), shift);
             open = open.subtracted(place);

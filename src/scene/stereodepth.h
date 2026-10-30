@@ -161,6 +161,13 @@ public:
      * The farthest any window's copy moves in one eye on a view that is @a viewWidth pixels wide.
      */
     static int maxEyeShift(int viewWidth);
+
+    /**
+     * How many columns are cut from each side of a wallpaper whose copies are @a parallax pixels
+     * apart: the same columns in both eyes, as many as the farther of the two copies moves. The
+     * wallpaper keeps its size and covers what is left in both eyes.
+     */
+    static int wallpaperCut(int parallax);
 };
 
 } // namespace KWin
