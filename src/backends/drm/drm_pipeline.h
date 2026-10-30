@@ -98,6 +98,7 @@ public:
     BackendOutput::RgbRange rgbRange() const;
     DrmConnector::DrmContentType contentType() const;
     const std::shared_ptr<IccProfile> &iccProfile() const;
+    bool linearScanout() const;
 
     void setCrtc(DrmCrtc *crtc);
     void setMode(const std::shared_ptr<DrmConnectorMode> &mode);
@@ -114,6 +115,11 @@ public:
     void setMaxBpc(uint32_t max);
     void setSideBySideFullTiming(SideBySideFullTiming timing);
     void setStereoDepthCoding(const std::optional<StereoDepthCoding> &coding);
+    /**
+     * Whether the primary plane scans out linear buffers only, for a configuration the
+     * driver refused with the buffers the renderer prefers (DrmGpu::testPendingConfiguration())
+     */
+    void setLinearScanout(bool linear);
 
     enum class CommitMode {
         Test,
@@ -174,6 +180,7 @@ private:
         SideBySideFullTiming sideBySideFullTiming = SideBySideFullTiming::WholeLineDoubled;
         // how the depth of a picture and depth mode is coded, for its 3D metadata
         std::optional<StereoDepthCoding> stereoDepthCoding;
+        bool linearScanout = false;
 
         QList<DrmPipelineLayer *> layers;
     };

@@ -143,12 +143,16 @@ bool DrmPlane::updateProperties()
         }
     }
     m_lowBandwidthFormats.clear();
+    m_linearFormats.clear();
     for (auto it = m_supportedFormats.begin(); it != m_supportedFormats.end(); it++) {
         const auto info = FormatInfo::get(it.key());
         if (info && info->bitsPerPixel <= 32) {
             // Mesa usually picks the modifier with lowest bandwidth requirements,
             // so prefer implicit modifiers for low bandwidth if supported
             m_lowBandwidthFormats.insert(it.key(), {DRM_FORMAT_MOD_INVALID});
+        }
+        if (it->contains(DRM_FORMAT_MOD_LINEAR)) {
+            m_linearFormats.insert(it.key(), {DRM_FORMAT_MOD_LINEAR});
         }
     }
 
@@ -225,6 +229,11 @@ bool DrmPlane::isCrtcSupported(int pipeIndex) const
 FormatModifierMap DrmPlane::lowBandwidthFormats() const
 {
     return m_lowBandwidthFormats;
+}
+
+FormatModifierMap DrmPlane::linearFormats() const
+{
+    return m_linearFormats;
 }
 
 FormatModifierMap DrmPlane::formats() const

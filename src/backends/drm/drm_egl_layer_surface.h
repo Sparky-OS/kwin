@@ -125,6 +125,8 @@ private:
         BufferTarget bufferTarget;
         double scale = 1;
         uint32_t requiredAlphaBits = 0;
+        // made for formats that allow only linear buffers
+        bool linearOnly = false;
 
         // for color management
         bool needsShadowBuffer = false;

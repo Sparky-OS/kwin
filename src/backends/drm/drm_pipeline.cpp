@@ -716,6 +716,10 @@ void DrmPipeline::setMode(const std::shared_ptr<DrmConnectorMode> &mode)
     if (oldLayout != newLayout) {
         m_frameSequentialScheduler = FrameSequentialScheduler(newLayout);
     }
+    if (mode != m_pending.mode) {
+        // linear buffers were what the old mode needed; the new one is tested with the renderer's choice first
+        m_pending.linearScanout = false;
+    }
     m_pending.mode = mode;
 }
 
@@ -780,6 +784,16 @@ void DrmPipeline::setSideBySideFullTiming(SideBySideFullTiming timing)
 void DrmPipeline::setStereoDepthCoding(const std::optional<StereoDepthCoding> &coding)
 {
     m_pending.stereoDepthCoding = coding;
+}
+
+void DrmPipeline::setLinearScanout(bool linear)
+{
+    m_pending.linearScanout = linear;
+}
+
+bool DrmPipeline::linearScanout() const
+{
+    return m_pending.linearScanout;
 }
 
 void DrmPipeline::setContentType(DrmConnector::DrmContentType type)

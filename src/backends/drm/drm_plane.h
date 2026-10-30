@@ -42,6 +42,10 @@ public:
 
     bool isCrtcSupported(int pipeIndex) const;
     FormatModifierMap lowBandwidthFormats() const;
+    /**
+     * the formats this plane scans out from linear buffers, with only the linear modifier
+     */
+    FormatModifierMap linearFormats() const;
     FormatModifierMap formats() const;
     FormatModifierMap tearingFormats() const;
     bool supportsTransformation(OutputTransform transform) const;
@@ -118,6 +122,7 @@ private:
 
     FormatModifierMap m_supportedFormats;
     FormatModifierMap m_lowBandwidthFormats;
+    FormatModifierMap m_linearFormats;
     FormatModifierMap m_supportedTearingFormats;
     uint32_t m_possibleCrtcs = 0;
     QList<QSize> m_sizeHints;

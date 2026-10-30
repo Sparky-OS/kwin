@@ -404,7 +404,8 @@ void DrmGpu::probeFrameSequential(DrmConnector *connector)
         qCDebug(KWIN_DRM) << "No free CRTC to test frame sequential stereo on" << connector->connectorName();
         return;
     }
-    // a dumb buffer, linear, which every driver that scans out takes
+    // a dumb buffer, linear, which every driver that scans out takes; where the driver takes the layout
+    // only from linear buffers, the output's configuration test falls back to them (testLinearScanout())
     GraphicsBuffer *buffer = m_drmDevice->allocator()->allocate(GraphicsBufferOptions{
         .size = frame,
         .format = DRM_FORMAT_XRGB8888,
@@ -539,6 +540,58 @@ DrmPipeline::Error DrmGpu::testPendingConfiguration()
         // got rejected; one possibility is missing memory bandwidth.
         m_forceLowBandwidthMode = true;
         err = checkCrtcAssignment(connectors, crtcs, std::chrono::steady_clock::now() + s_checkCrtcTimeout);
+    }
+    if (m_addFB2ModifiersSupported && (err == DrmPipeline::Error::InvalidArguments || err == DrmPipeline::Error::TestBufferFailed || err == DrmPipeline::Error::Unknown)) {
+        // another possibility is a layout the driver only scans out of linear buffers,
+        // like amdgpu with DisplayPort's frame sequential stereo
+        const bool lowBandwidth = m_forceLowBandwidthMode;
+        m_forceLowBandwidthMode = false;
+        if (testLinearScanout(connectors, crtcs) == DrmPipeline::Error::None) {
+            return DrmPipeline::Error::None;
+        }
+        m_forceLowBandwidthMode = lowBandwidth;
+    }
+    return err;
+}
+
+/**
+ * Tests the pending configuration again with linear buffers on the primary planes: each enabled
+ * output on its own first, so that the others keep the buffers they have, then all of them.
+ * What passes is kept for the output's mode (DrmPipeline::setLinearScanout()); otherwise nothing changes.
+ */
+DrmPipeline::Error DrmGpu::testLinearScanout(const QList<DrmConnector *> &connectors, const QList<DrmCrtc *> &crtcs)
+{
+    QList<DrmPipeline *> candidates;
+    for (DrmPipeline *pipeline : std::as_const(m_pipelines)) {
+        if (pipeline->enabled() && !pipeline->linearScanout() && !pipeline->output()->lease()) {
+            candidates.push_back(pipeline);
+        }
+    }
+    DrmPipeline::Error err = DrmPipeline::Error::InvalidArguments;
+    const auto testWithLinear = [&](const QList<DrmPipeline *> &linear) {
+        for (DrmPipeline *pipeline : linear) {
+            pipeline->setLinearScanout(true);
+        }
+        err = checkCrtcAssignment(connectors, crtcs, std::chrono::steady_clock::now() + s_checkCrtcTimeout);
+        if (err == DrmPipeline::Error::None) {
+            qCDebug(KWIN_DRM) << "The output configuration needs linear buffers on" << linear.size() << "output(s)";
+            return true;
+        }
+        for (DrmPipeline *pipeline : linear) {
+            pipeline->setLinearScanout(false);
+        }
+        return false;
+    };
+    for (DrmPipeline *pipeline : std::as_const(candidates)) {
+        if (testWithLinear({pipeline})) {
+            return err;
+        }
+        if (err == DrmPipeline::Error::NoPermission || err == DrmPipeline::Error::FramePending || err == DrmPipeline::Error::Timeout) {
+            return err;
+        }
+    }
+    if (candidates.size() > 1) {
+        testWithLinear(candidates);
     }
     return err;
 }

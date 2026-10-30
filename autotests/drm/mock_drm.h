@@ -8,6 +8,7 @@
 */
 #pragma once
 
+#include <drm_fourcc.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
@@ -128,6 +129,9 @@ public:
     MockPlane(const MockPlane &obj) = default;
     ~MockPlane() = default;
 
+    // advertises @p formats with their modifiers in an IN_FORMATS blob, as drivers with modifiers do
+    void setFormats(const QMap<uint32_t, QList<uint64_t>> &formats);
+
     MockFb *currentFb = nullptr;
     MockFb *nextFb = nullptr;
     int possibleCrtcs;
@@ -137,11 +141,13 @@ public:
 class MockFb
 {
 public:
-    MockFb(MockGpu *gpu, uint32_t width, uint32_t height);
+    MockFb(MockGpu *gpu, uint32_t width, uint32_t height, uint64_t modifier = DRM_FORMAT_MOD_INVALID);
     ~MockFb();
 
     uint32_t id;
     uint32_t width, height;
+    // the modifier the framebuffer was added with, DRM_FORMAT_MOD_INVALID without one
+    uint64_t modifier;
     MockGpu *gpu;
 };
 
@@ -212,5 +218,7 @@ public:
     QList<drmModeObjectPropertiesPtr> drmObjectProperties;
     QList<drmModePlaneResPtr> drmPlaneRes;
     QList<MockLease> leases;
+    // like amdgpu (edition kernel series 39): frame sequential stereo only from a linear framebuffer
+    bool frameSequentialNeedsLinear = false;
     std::mutex m_mutex;
 };

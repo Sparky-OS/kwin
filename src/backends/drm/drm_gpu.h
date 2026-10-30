@@ -150,6 +150,7 @@ private:
     void probeFrameSequential(DrmConnector *connector);
     DrmPipeline::Error checkCrtcAssignment(QList<DrmConnector *> connectors, const QList<DrmCrtc *> &crtcs, std::chrono::steady_clock::time_point deadline);
     DrmPipeline::Error testPipelines();
+    DrmPipeline::Error testLinearScanout(const QList<DrmConnector *> &connectors, const QList<DrmCrtc *> &crtcs);
     QList<DrmObject *> unusedModesetObjects() const;
     void assignOutputLayers();
 

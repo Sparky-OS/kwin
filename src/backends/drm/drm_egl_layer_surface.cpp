@@ -43,6 +43,15 @@ static const bool bufferAgeEnabled = environmentVariableBoolValue("KWIN_USE_BUFF
 static const bool s_forceMGPUSync = environmentVariableBoolValue("KWIN_DRM_FORCE_GL_FINISH_MGPU_COPY").value_or(false);
 static const bool s_forcePresentSync = environmentVariableBoolValue("KWIN_DRM_FORCE_GL_FINISH_PRESENT").value_or(false);
 
+static bool allowsOnlyLinear(const FormatModifierMap &formats)
+{
+    return !formats.isEmpty() && std::ranges::all_of(formats, [](const ModifierList &modifiers) {
+        return std::ranges::all_of(modifiers, [](uint64_t modifier) {
+            return modifier == DRM_FORMAT_MOD_LINEAR;
+        });
+    });
+}
+
 static gbm_format_name_desc formatName(uint32_t format)
 {
     gbm_format_name_desc ret;
@@ -840,6 +849,11 @@ bool EglGbmLayerSurface::doesSurfaceFit(Surface *surface, const QSize &size, con
         // TODO requiredAlphaBits could be a bit more conservative with reallocations?
         return false;
     }
+    if (surface->linearOnly && !allowsOnlyLinear(formats)) {
+        // linear buffers were what a configuration needed; when other modifiers are allowed again,
+        // the renderer chooses again
+        return false;
+    }
     if (surface->bufferTarget == BufferTarget::Dumb) {
         return formats.contains(surface->importDumbSwapchain->format());
     }
@@ -879,10 +893,12 @@ std::unique_ptr<EglGbmLayerSurface::Surface> EglGbmLayerSurface::createSurface(c
         }
     }
 
-    const auto doTestFormats = [this, &size, &formats, bufferTarget, tradeoff, requiredAlphaBits](const QList<FormatInfo> &gbmFormats, MultiGpuImportMode importMode) -> std::unique_ptr<Surface> {
+    const bool linearOnly = allowsOnlyLinear(formats);
+    const auto doTestFormats = [this, &size, &formats, bufferTarget, tradeoff, requiredAlphaBits, linearOnly](const QList<FormatInfo> &gbmFormats, MultiGpuImportMode importMode) -> std::unique_ptr<Surface> {
         for (const auto &format : gbmFormats) {
             auto surface = createSurface(size, format.drmFormat, formats[format.drmFormat], importMode, bufferTarget, tradeoff, requiredAlphaBits);
             if (surface) {
+                surface->linearOnly = linearOnly;
                 return surface;
             }
         }
