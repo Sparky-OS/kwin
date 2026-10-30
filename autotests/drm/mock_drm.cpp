@@ -263,6 +263,45 @@ MockPlane::MockPlane(MockGpu *gpu, PlaneType type, int crtcIndex)
     addProp("SRC_H", 0, DRM_MODE_PROP_ATOMIC);
 }
 
+void MockPlane::setFormats(const QMap<uint32_t, QList<uint64_t>> &formats)
+{
+    // the layout of the kernel's IN_FORMATS blob: a header, the formats, then each modifier
+    // with the formats it applies to as a bit mask of their indices
+    QList<uint64_t> modifiers;
+    for (const auto &list : formats) {
+        for (uint64_t modifier : list) {
+            if (!modifiers.contains(modifier)) {
+                modifiers.push_back(modifier);
+            }
+        }
+    }
+    const QList<uint32_t> formatList = formats.keys();
+    Q_ASSERT(formatList.size() <= 64);
+    drm_format_modifier_blob header{
+        .version = FORMAT_BLOB_CURRENT,
+        .flags = 0,
+        .count_formats = uint32_t(formatList.size()),
+        .formats_offset = sizeof(drm_format_modifier_blob),
+        .count_modifiers = uint32_t(modifiers.size()),
+        .modifiers_offset = uint32_t(sizeof(drm_format_modifier_blob) + formatList.size() * sizeof(uint32_t)),
+    };
+    QByteArray data(reinterpret_cast<const char *>(&header), sizeof(header));
+    data.append(reinterpret_cast<const char *>(formatList.constData()), formatList.size() * sizeof(uint32_t));
+    for (uint64_t modifier : std::as_const(modifiers)) {
+        drm_format_modifier entry{};
+        entry.modifier = modifier;
+        for (int i = 0; i < formatList.size(); i++) {
+            if (formats[formatList[i]].contains(modifier)) {
+                entry.formats |= uint64_t(1) << i;
+            }
+        }
+        data.append(reinterpret_cast<const char *>(&entry), sizeof(entry));
+    }
+    auto blob = std::make_unique<MockPropertyBlob>(gpu, data.constData(), data.size());
+    addProp("IN_FORMATS", blob->id, DRM_MODE_PROP_BLOB | DRM_MODE_PROP_IMMUTABLE);
+    gpu->propertyBlobs.push_back(std::move(blob));
+}
+
 //
 
 MockEncoder::MockEncoder(MockGpu *gpu, uint32_t possible_crtcs)
@@ -273,10 +312,11 @@ MockEncoder::MockEncoder(MockGpu *gpu, uint32_t possible_crtcs)
 
 //
 
-MockFb::MockFb(MockGpu *gpu, uint32_t width, uint32_t height)
+MockFb::MockFb(MockGpu *gpu, uint32_t width, uint32_t height, uint64_t modifier)
     : id(gpu->idCounter++)
     , width(width)
     , height(height)
+    , modifier(modifier)
     , gpu(gpu)
 {
     gpu->fbs << this;
@@ -454,7 +494,7 @@ int drmModeAddFB2WithModifiers(int fd, uint32_t width, uint32_t height,
     if (!gpu->deviceCaps.contains(DRM_CAP_ADDFB2_MODIFIERS)) {
         return -(errno = ENOTSUP);
     }
-    auto fb = new MockFb(gpu, width, height);
+    auto fb = new MockFb(gpu, width, height, (flags & DRM_MODE_FB_MODIFIERS) ? modifier[0] : DRM_FORMAT_MOD_INVALID);
     *buf_id = fb->id;
     return 0;
 }
@@ -1157,6 +1197,12 @@ int drmModeAtomicCommit(int fd, drmModeAtomicReqPtr req, uint32_t flags, void *u
                     qWarning("connector %u cannot send frame-sequential stereo", conn->id);
                     return -(errno = EINVAL);
                 }
+                // amdgpu's check: the right eye is the left one moved by an eye's width, a byte offset only in a linear buffer
+                if ((mode.flags & DRM_MODE_FLAG_3D_MASK) == frameSequential && gpu->frameSequentialNeedsLinear
+                    && (!p.primaryPlane->nextFb || p.primaryPlane->nextFb->modifier != DRM_FORMAT_MOD_LINEAR)) {
+                    qWarning("crtc %u shows frame-sequential stereo only from a linear framebuffer", p.crtc->id);
+                    return -(errno = EINVAL);
+                }
             }
         }
     }
@@ -1353,6 +1399,23 @@ void drmModeFreeConnector(drmModeConnectorPtr ptr)
         }
     }
     Q_UNREACHABLE();
+}
+
+uint32_t drmModeConnectorGetPossibleCrtcs(int fd, const drmModeConnector *connector)
+{
+    GPU(fd, 0);
+    uint32_t possibleCrtcs = 0;
+    for (int i = 0; i < connector->count_encoders; i++) {
+        const auto it = std::find_if(gpu->encoders.constBegin(), gpu->encoders.constEnd(), [id = connector->encoders[i]](const auto &e) {
+            return e->id == id;
+        });
+        if (it == gpu->encoders.constEnd()) {
+            errno = ENOENT;
+            return 0;
+        }
+        possibleCrtcs |= (*it)->possible_crtcs;
+    }
+    return possibleCrtcs;
 }
 
 void drmModeFreeEncoder(drmModeEncoderPtr ptr)

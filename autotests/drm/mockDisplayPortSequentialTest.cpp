@@ -10,8 +10,10 @@
 #include "drm_crtc.h"
 #include "drm_gpu.h"
 #include "drm_layer.h"
+#include "drm_output.h"
 #include "drm_pipeline.h"
 #include "drm_plane.h"
+#include "drm_render_backend.h"
 #include "drm_stereo.h"
 
 #include <QScopeGuard>
@@ -78,6 +80,90 @@ private:
     std::shared_ptr<DrmFramebuffer> m_framebuffer;
 };
 
+// a primary plane's layer whose renderer, like Mesa's, picks a tiled modifier wherever the layer allows one
+class AllocatingLayer : public DrmPipelineLayer
+{
+public:
+    AllocatingLayer(DrmPlane *plane, MockGpu *mockGpu)
+        : DrmPipelineLayer(plane)
+        , m_mockGpu(mockGpu)
+    {
+    }
+
+    bool preparePresentationTest() override
+    {
+        const ModifierList modifiers = supportedDrmFormats().value(DRM_FORMAT_XRGB8888);
+        if (modifiers.isEmpty()) {
+            return false;
+        }
+        const auto tiled = std::ranges::find_if(modifiers, [](uint64_t modifier) {
+            return modifier != DRM_FORMAT_MOD_LINEAR;
+        });
+        m_modifier = tiled != modifiers.end() ? *tiled : modifiers.front();
+        auto *const mockFb = new MockFb(m_mockGpu, 3840, 1080, m_modifier);
+        m_framebuffer = std::make_shared<DrmFramebuffer>(std::make_shared<DrmFramebufferData>(m_plane->gpu(), mockFb->id, nullptr), nullptr, FileDescriptor{});
+        return true;
+    }
+
+    std::shared_ptr<DrmFramebuffer> currentBuffer() const override
+    {
+        return m_framebuffer;
+    }
+
+    void releaseBuffers() override
+    {
+        m_framebuffer.reset();
+    }
+
+    uint64_t modifier() const
+    {
+        return m_modifier;
+    }
+
+protected:
+    std::optional<OutputLayerBeginFrameInfo> doBeginFrame() override
+    {
+        return std::nullopt;
+    }
+
+    bool doEndFrame(const Region &, const Region &, OutputFrame *) override
+    {
+        return true;
+    }
+
+private:
+    MockGpu *const m_mockGpu;
+    std::shared_ptr<DrmFramebuffer> m_framebuffer;
+    uint64_t m_modifier = DRM_FORMAT_MOD_INVALID;
+};
+
+class AllocatingRenderBackend : public DrmRenderBackend
+{
+public:
+    explicit AllocatingRenderBackend(MockGpu *mockGpu)
+        : m_mockGpu(mockGpu)
+    {
+    }
+
+    std::unique_ptr<DrmPipelineLayer> createDrmPlaneLayer(DrmPlane *plane) override
+    {
+        return std::make_unique<AllocatingLayer>(plane, m_mockGpu);
+    }
+
+    std::unique_ptr<DrmPipelineLayer> createDrmPlaneLayer(DrmGpu *, DrmPlane::TypeIndex) override
+    {
+        return nullptr;
+    }
+
+    std::unique_ptr<DrmOutputLayer> createLayer(DrmVirtualOutput *) override
+    {
+        return nullptr;
+    }
+
+private:
+    MockGpu *const m_mockGpu;
+};
+
 /**
  * DisplayPort's own frame sequential stereo (DRM_MODE_FLAG_3D_FRAME_SEQUENTIAL of the edition kernel):
  * the kernel alternates the halves of one frame of both eyes and signals the eye, so KWin lists the
@@ -97,6 +183,8 @@ private Q_SLOTS:
     void testProbe_data();
     void testProbe();
     void testScanout();
+    void testLinearFallback_data();
+    void testLinearFallback();
 
 private:
     struct Rig
@@ -392,6 +480,87 @@ void MockDisplayPortSequentialTest::testScanout()
     // the same mode on a connector that never opted in is refused
     rig->mockConnector->frameSequentialAllowed = false;
     QVERIFY(DrmPipeline::commitPipelines({pipeline.get()}, rig->gpu.get(), DrmPipeline::CommitMode::TestAllowModeset) != DrmPipeline::Error::None);
+}
+
+void MockDisplayPortSequentialTest::testLinearFallback_data()
+{
+    QTest::addColumn<bool>("linearOffered");
+    QTest::addRow("plane offers linear") << true;
+    QTest::addRow("plane offers no linear") << false;
+}
+
+void MockDisplayPortSequentialTest::testLinearFallback()
+{
+    // amdgpu shows DisplayPort's frame sequential stereo only from a linear framebuffer (edition kernel
+    // series 39), and its probe passes with a dumb buffer, which is linear, while the renderer picks a
+    // tiled buffer for the output. The configuration's test fails with that buffer, so it is tested
+    // again with linear buffers on that output before the mode is given up. A 2D mode on the same
+    // output, and the other output, keep the renderer's tiled buffers.
+    QFETCH(bool, linearOffered);
+    const auto mockGpu = findRenderDevice(2);
+    QVERIFY(mockGpu);
+    mockGpu->frameSequentialNeedsLinear = true;
+    const uint64_t tiled = AMD_FMT_MOD | AMD_FMT_MOD_SET(TILE_VERSION, AMD_FMT_MOD_TILE_VER_GFX9) | AMD_FMT_MOD_SET(TILE, AMD_FMT_MOD_TILE_GFX9_64K_S_X);
+    const QList<uint64_t> modifiers = linearOffered ? QList<uint64_t>{tiled, DRM_FORMAT_MOD_LINEAR} : QList<uint64_t>{tiled};
+    for (const auto &plane : std::as_const(mockGpu->planes)) {
+        plane->setFormats({{DRM_FORMAT_XRGB8888, modifiers}});
+    }
+    const auto sequentialConnector = std::make_shared<MockConnector>(mockGpu.get());
+    sequentialConnector->modes.clear();
+    sequentialConnector->addMode(1920, 1080, 120, true);
+    sequentialConnector->frameSequentialAllowed = true;
+    const auto flatConnector = std::make_shared<MockConnector>(mockGpu.get());
+    mockGpu->connectors.push_back(sequentialConnector);
+    mockGpu->connectors.push_back(flatConnector);
+
+    AllocatingRenderBackend renderBackend(mockGpu.get());
+    const auto session = Session::create(Session::Type::Noop);
+    const auto backend = std::make_unique<DrmBackend>(session.get());
+    backend->setRenderBackend(&renderBackend);
+    auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
+    QVERIFY(gpu->atomicModeSetting());
+    QVERIFY(gpu->updateOutputs());
+    gpu->createLayers();
+    QCOMPARE(gpu->drmOutputs().size(), 2);
+    DrmPipeline *sequential = nullptr;
+    DrmPipeline *flat = nullptr;
+    for (DrmOutput *output : gpu->drmOutputs()) {
+        (output->connector()->id() == sequentialConnector->id ? sequential : flat) = output->pipeline();
+    }
+    QVERIFY(sequential && flat);
+    const auto primaryModifier = [](DrmPipeline *pipeline) {
+        return static_cast<AllocatingLayer *>(pipeline->layers().front())->modifier();
+    };
+
+    const auto base = sequential->connector()->modes().front();
+    const auto twin = std::make_shared<DrmConnectorMode>(base, OutputModeline::Flag::Stereo3DSequentialDisplayPort);
+    for (DrmPipeline *pipeline : {sequential, flat}) {
+        pipeline->setEnable(true);
+        pipeline->setActive(true);
+    }
+    // both outputs in 2D: the renderer's tiled buffers
+    QCOMPARE(gpu->testPendingConfiguration(), DrmPipeline::Error::None);
+    QCOMPARE(primaryModifier(sequential), tiled);
+    QCOMPARE(primaryModifier(flat), tiled);
+
+    sequential->setMode(twin);
+    if (!linearOffered) {
+        // nothing the plane offers can show it: the mode is refused, as the kernel refuses it
+        QVERIFY(gpu->testPendingConfiguration() != DrmPipeline::Error::None);
+        gpu.reset();
+        return;
+    }
+    QCOMPARE(gpu->testPendingConfiguration(), DrmPipeline::Error::None);
+    QCOMPARE(primaryModifier(sequential), uint64_t(DRM_FORMAT_MOD_LINEAR));
+    QCOMPARE(primaryModifier(flat), tiled);
+    QCOMPARE(stereoLayoutForMode(sequential->mode()->flags()), StereoLayout::SequentialDisplayPort);
+
+    // back in 2D the output gets the renderer's choice again
+    sequential->setMode(base);
+    QCOMPARE(gpu->testPendingConfiguration(), DrmPipeline::Error::None);
+    QCOMPARE(primaryModifier(sequential), tiled);
+    QCOMPARE(primaryModifier(flat), tiled);
+    gpu.reset();
 }
 
 QTEST_GUILESS_MAIN(MockDisplayPortSequentialTest)
