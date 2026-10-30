@@ -4,6 +4,7 @@
 
 #include "core/gpumanager.h"
 #include "core/outputconfiguration.h"
+#include "core/renderbackend.h"
 #include "core/renderloop.h"
 #include "core/renderloop_p.h"
 #include "core/session.h"
@@ -106,6 +107,7 @@ private Q_SLOTS:
     void testScanout_data();
     void testScanout();
     void testHeldPairTargetsNextRefresh();
+    void testEyeOfTargetedRefresh();
 };
 
 void MockFrameSequentialTest::testScanout_data()
@@ -323,6 +325,104 @@ void MockFrameSequentialTest::testHeldPairTargetsNextRefresh()
     loop->scheduleRepaint();
     QCOMPARE(refreshesAhead(vblank), 2);
     loopPrivate->compositeTimer.stop();
+}
+
+void MockFrameSequentialTest::testEyeOfTargetedRefresh()
+{
+    // A page-flip event handled after the next refresh has passed: the frame that follows is for
+    // the refresh after that one, and carries its eye. Choosing the eye of the refresh right after
+    // the completed one would show the wrong eye on the refresh that passed and again on the one
+    // the frame lands on.
+    GpuManager::s_self = std::make_unique<GpuManager>();
+    const auto mockGpu = findRenderDevice(1);
+    QVERIFY(mockGpu);
+    const auto mockConnector = std::make_shared<MockConnector>(mockGpu.get());
+    mockConnector->addMode(1920, 1080, 120);
+    mockGpu->connectors.push_back(mockConnector);
+
+    const auto session = Session::create(Session::Type::Noop);
+    const auto backend = std::make_unique<DrmBackend>(session.get());
+    const auto renderBackend = backend->createQPainterBackend();
+    Q_UNUSED(renderBackend);
+    const auto resetManager = qScopeGuard([] {
+        GpuManager::s_self.reset();
+    });
+    auto gpu = std::make_unique<DrmGpu>(backend.get(), mockGpu->fd, DrmDevice::open(mockGpu->devNode));
+    const auto connector = std::make_shared<DrmConnector>(gpu.get(), mockConnector->id);
+    QVERIFY(connector->init());
+    const auto sequentialMode = std::make_shared<DrmConnectorMode>(connector->modes().front(), OutputModeline::Flag::Stereo3DSequentialLeftFirst);
+    auto plane = std::make_unique<DrmPlane>(gpu.get(), mockGpu->planes.front()->id);
+    QVERIFY(plane->init());
+    auto crtc = std::make_unique<DrmCrtc>(gpu.get(), mockGpu->crtcs.front()->id, 0, plane.get());
+    QVERIFY(crtc->init());
+    auto pipeline = std::make_unique<DrmPipeline>(connector.get());
+    auto output = std::make_unique<DrmOutput>(connector, pipeline.get());
+    pipeline->setCrtc(crtc.get());
+    pipeline->setMode(sequentialMode);
+    pipeline->setEnable(true);
+    pipeline->setActive(true);
+    auto *const mockFb = new MockFb(mockGpu.get(), 3840, 1080);
+    auto layer = std::make_unique<TestLayer>(plane.get(), std::make_shared<DrmFramebuffer>(std::make_shared<DrmFramebufferData>(gpu.get(), mockFb->id, nullptr), nullptr, FileDescriptor{}));
+    layer->setEnabled(true);
+    layer->setTargetRect(Rect(QPoint(0, 0), QSize(1920, 1080)));
+    layer->setSourceRect(Rect(QPoint(0, 0), QSize(1920, 1080)));
+    pipeline->setLayers({layer.get()});
+    QCOMPARE(DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset), DrmPipeline::Error::None);
+    pipeline->applyPendingChanges();
+
+    RenderLoop *loop = output->renderLoop();
+    RenderLoopPrivate *const loopPrivate = RenderLoopPrivate::get(loop);
+    loopPrivate->compositeTimer.stop();
+    const std::chrono::nanoseconds refresh(1'000'000'000'000ull / loop->refreshRate());
+    const auto now = []() {
+        return std::chrono::nanoseconds(std::chrono::steady_clock::now().time_since_epoch());
+    };
+    const auto mockPlane = mockGpu->findPlane(plane->id());
+    const auto sourceX = mockPlane->getPropId(QStringLiteral("SRC_X"));
+    const auto committedEye = [&]() -> std::optional<StereoEye> {
+        for (const Prop &property : mockGpu->atomicCommits.constLast()) {
+            if (property.obj == mockPlane->id && property.prop == sourceX) {
+                return property.value == 0 ? StereoEye::Left : StereoEye::Right;
+            }
+        }
+        return std::nullopt;
+    };
+
+    // the left eye of a pair landed on refresh 100; its event is handled a refresh and a quarter later
+    // (after the modeset's own completion, which the render loop also took as a vblank)
+    QTest::qSleep(20);
+    const auto vblank = now() - refresh * 5 / 4;
+    pipeline->pageFlipped(vblank, 100, StereoEye::Left);
+    loopPrivate->compositeTimer.stop();
+    loop->prepareNewFrame();
+    auto frame = std::make_shared<OutputFrame>(loop, refresh);
+    loop->newFramePrepared();
+    const auto target = frame->targetPageflipTime().time_since_epoch();
+    QCOMPARE(std::llround((target - vblank).count() / double(refresh.count())), 2ll);
+    // refresh 102 is a left eye's: a new pair starts there, and its frame shows the left eye
+    QVERIFY(pipeline->frameSequentialNeedsNewFrame());
+    mockGpu->atomicCommits.clear();
+    QCOMPARE(pipeline->testPresent(frame), DrmPipeline::Error::None);
+    QCOMPARE(committedEye(), std::optional(StereoEye::Left));
+    frame.reset();
+
+    // landing there, it relocks the order: the next frame, on time, is for 103, a right eye's
+    pipeline->pageFlipped(target, 102, StereoEye::Left);
+    loopPrivate->compositeTimer.stop();
+    loop->prepareNewFrame();
+    auto next = std::make_shared<OutputFrame>(loop, refresh);
+    loop->newFramePrepared();
+    QCOMPARE(std::llround((next->targetPageflipTime().time_since_epoch() - target).count() / double(refresh.count())), 1ll);
+    QVERIFY(!pipeline->frameSequentialNeedsNewFrame());
+    mockGpu->atomicCommits.clear();
+    QCOMPARE(pipeline->testPresent(next), DrmPipeline::Error::None);
+    QCOMPARE(committedEye(), std::optional(StereoEye::Right));
+    next.reset();
+
+    // a commit without a frame (a modeset) keeps the eye after the last completed refresh
+    mockGpu->atomicCommits.clear();
+    QCOMPARE(DrmPipeline::commitPipelines({pipeline.get()}, gpu.get(), DrmPipeline::CommitMode::CommitModeset), DrmPipeline::Error::None);
+    QCOMPARE(committedEye(), std::optional(StereoEye::Right));
 }
 
 int main(int argc, char **argv)

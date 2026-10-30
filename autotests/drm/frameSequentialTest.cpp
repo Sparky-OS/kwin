@@ -166,6 +166,38 @@ private Q_SLOTS:
         QCOMPARE(rightFirst.firstEye(), StereoEye::Right);
         QCOMPARE(rightFirst.nextEye(), StereoEye::Right);
     }
+
+    void eyeOfTargetedRefresh()
+    {
+        using namespace std::chrono_literals;
+        const std::chrono::nanoseconds refresh = 8'333'333ns;
+        FrameSequentialScheduler scheduler;
+        scheduler.reset(100);
+        // before any completion, the target says nothing: the first eye
+        QCOMPARE(scheduler.eyeForTarget(1s, refresh), StereoEye::Left);
+        scheduler.noteCompletion(100, StereoEye::Left, 1s);
+        QCOMPARE(scheduler.eyeForTarget(1s + refresh, refresh), StereoEye::Right);
+        // an event handled late: the frame is for 102, a left eye's, where last + 1 would give the right
+        QCOMPARE(scheduler.eyeForTarget(1s + 2 * refresh, refresh), StereoEye::Left);
+        QCOMPARE(scheduler.eyeForTarget(1s + 3 * refresh, refresh), StereoEye::Right);
+        // timestamps a little off the refresh still count whole refreshes
+        QCOMPARE(scheduler.eyeForTarget(1s + 2 * refresh + 300us, refresh), StereoEye::Left);
+        // a target at or before the completed refresh is for the next one
+        QCOMPARE(scheduler.eyeForTarget(1s, refresh), StereoEye::Right);
+        QCOMPARE(scheduler.eyeForTarget(1s - 5 * refresh, refresh), StereoEye::Right);
+        // a completion without a timestamp leaves the eye after it
+        scheduler.noteCompletion(102, StereoEye::Left);
+        QCOMPARE(scheduler.eyeForTarget(1s + 4 * refresh, refresh), scheduler.nextEye());
+        QCOMPARE(scheduler.nextEye(), StereoEye::Right);
+        // a target-chosen eye that lands where it was due is no wrong-eye slot
+        scheduler.reset(200);
+        scheduler.noteCompletion(200, StereoEye::Left, 2s);
+        const StereoEye late = scheduler.eyeForTarget(2s + 2 * refresh, refresh);
+        scheduler.noteCompletion(202, late, 2s + 2 * refresh);
+        // only refresh 201, which showed the left eye again, was wrong
+        QCOMPARE(scheduler.missedRefreshes(), 1u);
+        QCOMPARE(scheduler.wrongEyeSlots(), 1u);
+    }
 };
 
 QTEST_GUILESS_MAIN(FrameSequentialTest)

@@ -271,7 +271,7 @@ DrmPipeline::Error DrmPipeline::prepareAtomicPlane(DrmAtomicCommit *commit, DrmP
     } else if (layer->type() == OutputLayerType::Primary && isFullFrameStereo(stereoLayout)) {
         const drmModeModeInfo &mode = *m_pending.mode->nativeMode();
         if (isFrameSequential(stereoLayout)) {
-            const StereoEye eye = m_frameSequentialScheduler.nextEye();
+            const StereoEye eye = frameSequentialEye(frame ? std::optional(frame->targetPageflipTime()) : std::nullopt);
             commit->setFrameSequentialEye(this, eye);
             sourceRect = frameSequentialSourceRect(mode, eye);
             targetRect = Rect(QPoint(0, 0), m_pending.mode->size());
@@ -574,7 +574,7 @@ void DrmPipeline::pageFlipped(std::chrono::nanoseconds timestamp, std::optional<
 {
     const StereoLayout stereoLayout = m_pending.mode ? stereoLayoutForMode(m_pending.mode->flags()) : StereoLayout::None;
     if (sequence && submittedEye && isFrameSequential(stereoLayout)) {
-        m_frameSequentialScheduler.noteCompletion(*sequence, *submittedEye);
+        m_frameSequentialScheduler.noteCompletion(*sequence, *submittedEye, timestamp);
         if (m_frameSequentialScheduler.wrongEyeSlots() > 0) {
             qCDebug(KWIN_DRM) << "Frame-sequential output" << m_connector->connectorName()
                               << "showed" << m_frameSequentialScheduler.wrongEyeSlots()
@@ -608,7 +608,20 @@ bool DrmPipeline::frameSequentialNeedsNewFrame() const
     if (!isFrameSequential(layout)) {
         return true;
     }
-    return m_frameSequentialScheduler.nextEye() == (layout == StereoLayout::SequentialRightFirst ? StereoEye::Right : StereoEye::Left);
+    // asked while a frame is prepared, which targets the render loop's next presentation
+    const auto target = m_output ? std::optional(std::chrono::steady_clock::time_point(m_output->renderLoop()->nextPresentationTimestamp())) : std::nullopt;
+    return frameSequentialEye(target) == m_frameSequentialScheduler.firstEye();
+}
+
+StereoEye DrmPipeline::frameSequentialEye(std::optional<std::chrono::steady_clock::time_point> target) const
+{
+    // the eye of the refresh the frame is for, not of the one after the last completed refresh:
+    // when a page-flip event is handled late, the frame targets a later refresh
+    if (!target || !m_pending.mode || m_pending.mode->refreshRate() == 0) {
+        return m_frameSequentialScheduler.nextEye();
+    }
+    const std::chrono::nanoseconds refreshDuration(1'000'000'000'000ull / m_pending.mode->refreshRate());
+    return m_frameSequentialScheduler.eyeForTarget(target->time_since_epoch(), refreshDuration);
 }
 
 void DrmPipeline::setOutput(DrmOutput *output)

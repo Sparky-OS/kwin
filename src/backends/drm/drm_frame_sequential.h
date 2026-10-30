@@ -9,6 +9,9 @@
 #include "drm_stereo.h"
 #include "effect/globals.h"
 
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 
@@ -30,10 +33,12 @@ inline StereoEye operator!(StereoEye eye)
  * display alternates, stays the robust path.
  *
  * The pipeline submits both eyes once per pair of refreshes; when nothing has changed,
- * the previous pair is alternated again, so the glasses never lose sync. Every frame is for
- * the refresh right after the last completed one, and the render loop keeps no frame queued
- * ahead (DrmOutput::maxPendingFrames()): a held pair's re-commit, for which nothing is
- * rendered, lands on the next refresh however long rendering is predicted to take.
+ * the previous pair is alternated again, so the glasses never lose sync. The render loop keeps
+ * no frame queued ahead (DrmOutput::maxPendingFrames()): a held pair's re-commit, for which
+ * nothing is rendered, lands on the next refresh however long rendering is predicted to take.
+ * A frame carries the eye of the refresh it targets, counted in refreshes from the last
+ * completed one: when a page-flip event is handled after the next refresh has passed, the
+ * frame is for the one after it, and only the refresh that passed shows the wrong eye.
  */
 class FrameSequentialScheduler
 {
@@ -59,6 +64,20 @@ public:
         return eyeForSequence(m_lastCompleted.value_or(*m_phase - 1) + 1);
     }
 
+    /**
+     * the eye of the refresh at @p target, the presentation time a frame is rendered for, counted
+     * in refreshes of @p refreshDuration from the last completed one; the refresh after it when
+     * no completion has been seen or the target is not after it
+     */
+    StereoEye eyeForTarget(std::chrono::nanoseconds target, std::chrono::nanoseconds refreshDuration) const
+    {
+        if (!m_phase || !m_lastCompleted || !m_lastCompletedTimestamp || refreshDuration <= std::chrono::nanoseconds::zero()) {
+            return nextEye();
+        }
+        const int64_t refreshes = std::llround(double((target - *m_lastCompletedTimestamp).count()) / double(refreshDuration.count()));
+        return eyeForSequence(*m_lastCompleted + uint32_t(std::max<int64_t>(refreshes, 1)));
+    }
+
     StereoEye firstEye() const
     {
         return m_leftFirst ? StereoEye::Left : StereoEye::Right;
@@ -72,6 +91,7 @@ public:
     {
         m_phase = nextSequence;
         m_lastCompleted.reset();
+        m_lastCompletedTimestamp.reset();
         m_lastShownEye.reset();
         m_missedRefreshes = 0;
         m_wrongEyeSlots = 0;
@@ -81,18 +101,20 @@ public:
     {
         m_phase.reset();
         m_lastCompleted.reset();
+        m_lastCompletedTimestamp.reset();
         m_lastShownEye.reset();
         m_missedRefreshes = 0;
         m_wrongEyeSlots = 0;
     }
 
     /**
-     * a page-flip event: @p sequence is the vblank sequence the submitted frame took.
+     * a page-flip event: @p sequence is the vblank sequence the submitted frame took, at
+     * @p timestamp when the event carries one.
      * Counts the refreshes between this and the last completion (missed: the previous
      * buffer stayed on screen, showing the wrong eye on every second one of them) and
      * whether the submitted frame was the wrong eye for the refresh it landed on.
      */
-    void noteCompletion(uint32_t sequence, StereoEye submittedEye)
+    void noteCompletion(uint32_t sequence, StereoEye submittedEye, std::optional<std::chrono::nanoseconds> timestamp = std::nullopt)
     {
         if (!m_phase) {
             // The first event after a modeset supplies the sequence that the
@@ -113,6 +135,7 @@ public:
             }
         }
         m_lastCompleted = sequence;
+        m_lastCompletedTimestamp = timestamp;
         m_lastShownEye = submittedEye;
     }
 
@@ -135,6 +158,7 @@ private:
     bool m_leftFirst;
     std::optional<uint32_t> m_phase;
     std::optional<uint32_t> m_lastCompleted;
+    std::optional<std::chrono::nanoseconds> m_lastCompletedTimestamp;
     std::optional<StereoEye> m_lastShownEye;
     uint64_t m_missedRefreshes = 0;
     uint64_t m_wrongEyeSlots = 0;

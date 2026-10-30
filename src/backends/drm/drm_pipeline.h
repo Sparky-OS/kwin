@@ -132,6 +132,7 @@ public:
 private:
     friend class DrmGpu;
     bool isBufferForDirectScanout() const;
+    StereoEye frameSequentialEye(std::optional<std::chrono::steady_clock::time_point> target) const;
     uint32_t calculateUnderscan();
     static Error errnoToError();
     std::shared_ptr<DrmBlob> createHdrMetadata(TransferFunction::Type transferFunction) const;
