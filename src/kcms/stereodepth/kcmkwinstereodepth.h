@@ -16,6 +16,12 @@ class KcmStereoDepth : public KQuickManagedConfigModule
 {
     Q_OBJECT
     Q_PROPERTY(KWinStereoDepthSettings *settings READ settings CONSTANT)
+    /**
+     * How many columns each screen's wallpaper loses at each side to the sunk effect with the
+     * Background depth shown on the page, as KWin works it out from the screen's own width and
+     * mode: a list of maps with the screen's "name" and the "cut", 0 on a screen in 2D.
+     */
+    Q_PROPERTY(QVariantList wallpaperCuts READ wallpaperCuts NOTIFY wallpaperCutsChanged)
 
 public:
     explicit KcmStereoDepth(QObject *parent, const KPluginMetaData &metaData);
@@ -28,7 +34,19 @@ public:
 
     void save() override;
 
+    QVariantList wallpaperCuts() const
+    {
+        return m_wallpaperCuts;
+    }
+
+Q_SIGNALS:
+    void wallpaperCutsChanged();
+
+private Q_SLOTS:
+    void updateWallpaperCuts();
+
 private:
     KWinStereoDepthData *const m_data;
     KWinStereoDepthSettings *const m_settings;
+    QVariantList m_wallpaperCuts;
 };

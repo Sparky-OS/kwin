@@ -53,6 +53,26 @@ KCM.SimpleKCM {
             font: Kirigami.Theme.smallFont
             text: i18n("Inactive windows and the wallpaper sink behind the screen by up to this much. More depth: the background drifts further apart.")
         }
+        QQC2.Label {
+            // what the wallpaper loses on each screen in a 3D mode, in KWin's own numbers; the
+            // screens are named when there are several
+            readonly property var lost: kcm.wallpaperCuts.filter(screen => screen.cut > 0)
+            visible: lost.length > 0
+            Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+            wrapMode: Text.Wrap
+            font: Kirigami.Theme.smallFont
+            text: lost.map(screen => kcm.wallpaperCuts.length > 1
+                           ? i18ncp("@info %1 is a number of pixels, %2 how many of them at each side, %3 a screen's name",
+                                    "%3: %1 pixel of the wallpaper's width will be lost to the sunk effect, %2 at each side.",
+                                    "%3: %1 pixels of the wallpaper's width will be lost to the sunk effect, %2 at each side.",
+                                    2 * screen.cut, screen.cut, screen.name)
+                           : i18ncp("@info %1 is a number of pixels, %2 how many of them at each side",
+                                    "%1 pixel of the wallpaper's width will be lost to the sunk effect, %2 at each side.",
+                                    "%1 pixels of the wallpaper's width will be lost to the sunk effect, %2 at each side.",
+                                    2 * screen.cut, screen.cut)).join("\n")
+                  + "\n" + i18nc("@info", "Videos with pop effects are not expected to be comfortable with widgets or other things over it.")
+        }
 
         RowLayout {
             Kirigami.FormData.label: i18nc("@label:slider", "Pop-out:")
