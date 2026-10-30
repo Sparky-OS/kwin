@@ -38,6 +38,7 @@ private Q_SLOTS:
     void testAnaglyphOutputKeepsRawEyes();
     void testStereoPairOutputsKeepRawEyes();
     void testThreeDimensionalOutputWithoutDeclaredWindow();
+    void testUncoveredPixelsAreTransparentInBothEyes();
     void testOrdinaryCapture();
     void testWorkspaceStereoOutputOnLeft();
     void testWorkspaceStereoOutputOnRight();
@@ -192,6 +193,49 @@ void ScreenshotStereoTest::testThreeDimensionalOutputWithoutDeclaredWindow()
     QCOMPARE(image->size(), QSize(s_outputSize.width() * 2, s_outputSize.height()));
     QCOMPARE(image->pixelColor(10, 10), image->pixelColor(s_outputSize.width() + 10, 10));
     QCOMPARE(kwinApp()->scene()->renderer()->stereoEye(), StereoEye::None);
+}
+
+// What no window covers is transparent black in both eyes of a stereo capture, as in the frame the
+// eyes are rendered into, whatever the memory the joined picture is made in held before.
+void ScreenshotStereoTest::testUncoveredPixelsAreTransparentInBothEyes()
+{
+    const auto output = workspace()->outputs().front();
+    OutputConfiguration configuration;
+    configuration.changeSet(output->backendOutput())->currentMode = stereoMode();
+    workspace()->applyOutputConfiguration(configuration);
+    QVERIFY(Test::waylandSync());
+    QVERIFY(output->hasStereoEyes());
+
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get()));
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(40, 40), Qt::green);
+    QVERIFY(window);
+    window->move(QPoint(100, 80));
+    QVERIFY(Test::waylandSync());
+
+    ScreenShotManager manager;
+    for (int round = 0; round < 3; ++round) {
+        // memory of the joined picture's size, freed with white in it, as an earlier picture leaves it
+        {
+            QImage used(QSize(s_outputSize.width() * 2, s_outputSize.height()), QImage::Format_RGBA8888_Premultiplied);
+            used.fill(Qt::white);
+            QImage usedArgb(QSize(s_outputSize.width() * 2, s_outputSize.height()), QImage::Format_ARGB32_Premultiplied);
+            usedArgb.fill(Qt::white);
+        }
+        const auto image = manager.takeScreenShot(output, {}, std::nullopt);
+        QVERIFY(image);
+        QCOMPARE(image->size(), QSize(s_outputSize.width() * 2, s_outputSize.height()));
+        for (int eye = 0; eye < 2; ++eye) {
+            for (int y = 0; y < s_outputSize.height(); ++y) {
+                for (int x = 0; x < s_outputSize.width(); ++x) {
+                    const QRgb pixel = image->pixel(eye * s_outputSize.width() + x, y);
+                    const bool covered = x >= 100 && x < 140 && y >= 80 && y < 120;
+                    QVERIFY2(covered ? pixel == qRgb(0, 255, 0) : pixel == qRgba(0, 0, 0, 0),
+                             qPrintable(QStringLiteral("round %1, eye %2, %3,%4: %5").arg(round).arg(eye).arg(x).arg(y).arg(pixel, 8, 16, QLatin1Char('0'))));
+                }
+            }
+        }
+    }
 }
 
 void ScreenshotStereoTest::testDeclaredWindowOnFrameSequentialOutput()

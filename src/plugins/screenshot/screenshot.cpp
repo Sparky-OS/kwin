@@ -141,6 +141,8 @@ static QImage stereoImage(const QImage &left, const QImage &right)
     Q_ASSERT(left.size() == right.size());
     QImage image(QSize(left.width() * 2, left.height()), left.format());
     QPainter painter(&image);
+    // each eye as it is, its transparent pixels too: the new picture's memory holds anything
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
     painter.drawImage(QPoint(0, 0), left);
     painter.drawImage(QPoint(left.width(), 0), right);
     painter.end();
