@@ -544,21 +544,35 @@ int main(int argc, char *argv[])
         break;
     case BackendType::Virtual: {
         auto outputBackend = std::make_unique<KWin::VirtualBackend>();
-        // For headless proofs of stereo: KWIN_VIRTUAL_STEREO_MODES=1 gives each output the 3D modes a
-        // monitor gets from "Anaglyph" and "Other stereo formats", twins of its one 2D mode, so a
-        // saved configuration or the output management protocol can switch it into a 3D mode.
-        QList<KWin::OutputModeline> modes;
-        if (qEnvironmentVariableIntValue("KWIN_VIRTUAL_STEREO_MODES")) {
-            using Flag = KWin::OutputModeline::Flag;
-            const QSize pixelSize = (QSizeF(initialWindowSize) * outputScale).toSize();
-            modes.append(KWin::OutputModeline(pixelSize, 60000, Flag::Preferred));
-            for (const Flag layout : {Flag::Stereo3DSideBySideHalf, Flag::Stereo3DTopAndBottom, Flag::Stereo3DAnaglyphModern, Flag::Stereo3DAnaglyphCrt}) {
-                modes.append(KWin::OutputModeline(pixelSize, 60000, Flag::VirtualStereo | layout));
-            }
-        }
+        // For headless proofs on screens of different sizes: KWIN_VIRTUAL_OUTPUT_SIZES gives the
+        // outputs their own sizes, WIDTHxHEIGHT for each in turn, separated by commas; an output it
+        // leaves out has the size of --width and --height.
+        const QStringList sizes = qEnvironmentVariable("KWIN_VIRTUAL_OUTPUT_SIZES").split(QLatin1Char(','), Qt::SkipEmptyParts);
         for (int i = 0; i < outputCount; ++i) {
+            QSize size = initialWindowSize;
+            if (i < sizes.size()) {
+                const QStringList dimensions = sizes[i].split(QLatin1Char('x'));
+                const QSize given = dimensions.size() == 2 ? QSize(dimensions[0].toInt(), dimensions[1].toInt()) : QSize();
+                if (given.isEmpty()) {
+                    std::cerr << "FATAL ERROR: KWIN_VIRTUAL_OUTPUT_SIZES needs WIDTHxHEIGHT for each output" << std::endl;
+                    return 1;
+                }
+                size = given;
+            }
+            // For headless proofs of stereo: KWIN_VIRTUAL_STEREO_MODES=1 gives each output the 3D modes a
+            // monitor gets from "Anaglyph" and "Other stereo formats", twins of its one 2D mode, so a
+            // saved configuration or the output management protocol can switch it into a 3D mode.
+            QList<KWin::OutputModeline> modes;
+            if (qEnvironmentVariableIntValue("KWIN_VIRTUAL_STEREO_MODES")) {
+                using Flag = KWin::OutputModeline::Flag;
+                const QSize pixelSize = (QSizeF(size) * outputScale).toSize();
+                modes.append(KWin::OutputModeline(pixelSize, 60000, Flag::Preferred));
+                for (const Flag layout : {Flag::Stereo3DSideBySideHalf, Flag::Stereo3DTopAndBottom, Flag::Stereo3DAnaglyphModern, Flag::Stereo3DAnaglyphCrt}) {
+                    modes.append(KWin::OutputModeline(pixelSize, 60000, Flag::VirtualStereo | layout));
+                }
+            }
             outputBackend->addOutput(KWin::VirtualBackend::OutputInfo{
-                .size = initialWindowSize,
+                .size = size,
                 .scale = outputScale,
                 .modes = modes,
             });
