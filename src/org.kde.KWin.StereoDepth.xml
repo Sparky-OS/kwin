@@ -1,0 +1,32 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <interface name="org.kde.KWin.StereoDepth">
+        <!--
+            For each output, by its name, how many columns are cut from each side of its wallpaper.
+            A wallpaper lies behind the screen at the Background depth and keeps its size, so the
+            columns only one eye would see are cut from both sides, the same columns in both eyes.
+            The number comes from the Background depth the user set and the output's own width; it
+            is 0 on an output that is not in a 3D mode and with no Background depth.
+            org.freedesktop.DBus.Properties.PropertiesChanged announces each change.
+        -->
+        <property name="WallpaperCuts" type="a{si}" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName" value="KWin::DBusWallpaperCuts"/>
+        </property>
+
+        <!--
+            The same for a Background depth of @a backgroundDepth, in pixels of a screen 1920 wide,
+            that is not applied yet, such as the one a settings page's slider shows.
+        -->
+        <method name="WallpaperCutsAt">
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="KWin::DBusWallpaperCuts"/>
+            <arg type="a{si}" direction="out"/>
+            <arg name="backgroundDepth" type="d" direction="in"/>
+        </method>
+
+        <!--
+            An output was added or removed, or its size, scale or mode changed, so WallpaperCutsAt
+            may answer differently.
+        -->
+        <signal name="OutputsChanged"/>
+    </interface>
+</node>

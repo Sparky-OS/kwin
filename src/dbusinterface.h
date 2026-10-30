@@ -11,6 +11,7 @@
 
 #include <QDBusContext>
 #include <QDBusMessage>
+#include <QMap>
 #include <QObject>
 
 #include "virtualdesktopsdbustypes.h"
@@ -19,8 +20,10 @@ namespace KWin
 {
 
 class Compositor;
+class LogicalOutput;
 class PluginManager;
 class VirtualDesktopManager;
+class Workspace;
 
 /**
  * @brief This class is a wrapper for the org.kde.KWin D-Bus interface.
@@ -270,6 +273,51 @@ public Q_SLOTS:
 
 private:
     PluginManager *m_manager;
+};
+
+/**
+ * The columns each output's wallpaper loses to the sunk effect, exported on the D-Bus as
+ * /org/kde/KWin/StereoDepth, so the pages that set a wallpaper can state the cost with KWin's own
+ * numbers rather than a formula of their own.
+ */
+using DBusWallpaperCuts = QMap<QString, int>;
+
+class StereoDepthDBusInterface : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.kde.KWin.StereoDepth")
+
+    /**
+     * For each output, by its name, how many columns are cut from each side of its wallpaper with
+     * the Background depth the user set: none on an output that is not in a 3D mode.
+     */
+    Q_PROPERTY(KWin::DBusWallpaperCuts WallpaperCuts READ wallpaperCuts)
+
+public:
+    explicit StereoDepthDBusInterface(Workspace *parent);
+
+    DBusWallpaperCuts wallpaperCuts() const;
+
+public Q_SLOTS:
+    /**
+     * The same for a Background depth of @a backgroundDepth, in pixels of a screen 1920 wide, that
+     * is not applied yet, such as the one a settings page's slider shows.
+     */
+    KWin::DBusWallpaperCuts WallpaperCutsAt(double backgroundDepth) const;
+
+Q_SIGNALS:
+    /**
+     * An output was added or removed, or its size, scale or mode changed, so WallpaperCutsAt may
+     * answer differently.
+     */
+    void OutputsChanged();
+
+private:
+    void watchOutput(LogicalOutput *output);
+    void outputsChanged();
+    void update();
+
+    DBusWallpaperCuts m_wallpaperCuts;
 };
 
 } // namespace

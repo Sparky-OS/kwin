@@ -365,6 +365,16 @@ int StereoDepth::wallpaperCut(int parallax)
     return (std::abs(parallax) + 1) / 2;
 }
 
+int StereoDepth::wallpaperCut(const LogicalOutput *output, qreal sunkLimit)
+{
+    if (!output->hasStereoEyes() || sunkLimit <= 0) {
+        return 0;
+    }
+    // the width of the output's view in device pixels, as the compositor sizes the view
+    const Rect view = output->geometryF().scaled(output->scale()).rounded();
+    return wallpaperCut(parallax(-sunkLimit, view.width()));
+}
+
 void StereoDepth::Motion::setTarget(qreal depth, std::chrono::nanoseconds time)
 {
     if (!m_started) {

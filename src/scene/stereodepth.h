@@ -18,6 +18,7 @@
 namespace KWin
 {
 
+class LogicalOutput;
 class Window;
 
 /**
@@ -175,6 +176,12 @@ public:
      * wallpaper keeps its size and covers what is left in both eyes.
      */
     static int wallpaperCut(int parallax);
+
+    /**
+     * How many columns are cut from each side of the wallpaper on @a output, with the sunk limit at
+     * @a sunkLimit pixels of a view 1920 wide: none on an output that does not show the eyes.
+     */
+    static int wallpaperCut(const LogicalOutput *output, qreal sunkLimit);
 };
 
 } // namespace KWin

@@ -352,6 +352,7 @@ qt_add_dbus_adaptor(kwin_dbus_SRCS ${kwin_effects_dbus_xml} effect/effecthandler
 qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.VirtualDesktopManager.xml dbusinterface.h KWin::VirtualDesktopManagerDBusInterface)
 qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.Session.xml sm.h KWin::SessionManager)
 qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.Plugins.xml dbusinterface.h KWin::PluginManagerDBusInterface)
+qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.StereoDepth.xml dbusinterface.h KWin::StereoDepthDBusInterface)
 qt_add_dbus_interface(kwin_dbus_SRCS org.freedesktop.DBus.Properties.xml dbusproperties_interface)
 
 set_source_files_properties(net.hadess.SensorProxy.xml PROPERTIES
@@ -470,6 +471,7 @@ install(
         org.kde.kwin.Compositing.xml
         org.kde.kwin.Effects.xml
         org.kde.KWin.Plugins.xml
+        org.kde.KWin.StereoDepth.xml
         ${CMAKE_CURRENT_BINARY_DIR}/org.kde.kwin.VirtualKeyboard.xml
         ${CMAKE_CURRENT_BINARY_DIR}/org.kde.KWin.TabletModeManager.xml
     DESTINATION

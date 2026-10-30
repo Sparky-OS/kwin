@@ -11,10 +11,12 @@
 #include "dbusinterface.h"
 #include "compositingadaptor.h"
 #include "pluginsadaptor.h"
+#include "stereodepthadaptor.h"
 #include "virtualdesktopmanageradaptor.h"
 
 // kwin
 #include "compositor.h"
+#include "core/backendoutput.h"
 #include "core/output.h"
 #include "core/outputbackend.h"
 #include "core/outputconfiguration.h"
@@ -22,8 +24,10 @@
 #include "debug_console.h"
 #include "kwinadaptor.h"
 #include "main.h"
+#include "options.h"
 #include "placement.h"
 #include "pluginmanager.h"
+#include "scene/stereodepth.h"
 #include "virtualdesktops.h"
 #include "window.h"
 #include "workspace.h"
@@ -33,6 +37,7 @@
 
 // Qt
 #include <QDBusConnection>
+#include <QDBusMetaType>
 #include <QOpenGLContext>
 
 namespace KWin
@@ -518,6 +523,81 @@ bool PluginManagerDBusInterface::LoadPlugin(const QString &name)
 void PluginManagerDBusInterface::UnloadPlugin(const QString &name)
 {
     m_manager->unloadPlugin(name);
+}
+
+StereoDepthDBusInterface::StereoDepthDBusInterface(Workspace *parent)
+    : QObject(parent)
+{
+    qDBusRegisterMetaType<DBusWallpaperCuts>();
+
+    new StereoDepthAdaptor(this);
+    QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/kde/KWin/StereoDepth"),
+                                                 QStringLiteral("org.kde.KWin.StereoDepth"),
+                                                 this);
+
+    connect(options, &Options::stereoDepthChanged, this, &StereoDepthDBusInterface::update);
+    connect(parent, &Workspace::outputAdded, this, [this](LogicalOutput *output) {
+        watchOutput(output);
+        outputsChanged();
+    });
+    connect(parent, &Workspace::outputRemoved, this, &StereoDepthDBusInterface::outputsChanged);
+    connect(parent, &Workspace::outputsChanged, this, &StereoDepthDBusInterface::outputsChanged);
+    const QList<LogicalOutput *> outputs = parent->outputs();
+    for (LogicalOutput *output : outputs) {
+        watchOutput(output);
+    }
+    m_wallpaperCuts = WallpaperCutsAt(options->stereoSunkLimit());
+}
+
+DBusWallpaperCuts StereoDepthDBusInterface::wallpaperCuts() const
+{
+    return m_wallpaperCuts;
+}
+
+DBusWallpaperCuts StereoDepthDBusInterface::WallpaperCutsAt(double backgroundDepth) const
+{
+    DBusWallpaperCuts cuts;
+    const QList<LogicalOutput *> outputs = workspace()->outputs();
+    for (const LogicalOutput *output : outputs) {
+        if (!output->isPlaceholder()) {
+            cuts.insert(output->name(), StereoDepth::wallpaperCut(output, backgroundDepth));
+        }
+    }
+    return cuts;
+}
+
+void StereoDepthDBusInterface::watchOutput(LogicalOutput *output)
+{
+    connect(output, &LogicalOutput::geometryChanged, this, &StereoDepthDBusInterface::outputsChanged);
+    connect(output, &LogicalOutput::scaleChanged, this, &StereoDepthDBusInterface::outputsChanged);
+    connect(output, &LogicalOutput::currentModeChanged, this, &StereoDepthDBusInterface::outputsChanged);
+    // a stereo pair is made or undone without a new mode
+    connect(output->backendOutput(), &BackendOutput::changed, this, &StereoDepthDBusInterface::outputsChanged);
+}
+
+void StereoDepthDBusInterface::outputsChanged()
+{
+    update();
+    Q_EMIT OutputsChanged();
+}
+
+void StereoDepthDBusInterface::update()
+{
+    DBusWallpaperCuts cuts = WallpaperCutsAt(options->stereoSunkLimit());
+    if (cuts == m_wallpaperCuts) {
+        return;
+    }
+    m_wallpaperCuts = std::move(cuts);
+
+    QDBusMessage message = QDBusMessage::createSignal(QStringLiteral("/org/kde/KWin/StereoDepth"),
+                                                      QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                      QStringLiteral("PropertiesChanged"));
+    message.setArguments({
+        QStringLiteral("org.kde.KWin.StereoDepth"),
+        QVariantMap{{QStringLiteral("WallpaperCuts"), QVariant::fromValue(m_wallpaperCuts)}},
+        QStringList(),
+    });
+    QDBusConnection::sessionBus().send(message);
 }
 
 } // namespace

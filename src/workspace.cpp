@@ -166,6 +166,7 @@ Workspace::Workspace()
     connect(this, &Workspace::configChanged, m_decorationBridge.get(), &Decoration::DecorationBridge::reconfigure);
 
     new DBusInterface(this);
+    new StereoDepthDBusInterface(this);
     m_outline = std::make_unique<Outline>();
 
     m_dpmsTimer.setSingleShot(true);
