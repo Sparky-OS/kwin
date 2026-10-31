@@ -4859,6 +4859,9 @@ void X11WindowTest::testStereoChildPresentation()
             && (*values)[6] == 77 && (*values)[7] == expectedReason;
     }());
     disconnect(feedbackConnection);
+    Xcb::Property originalTerminal(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
+    const auto originalWords = originalTerminal.array<uint32_t>();
+    QVERIFY(originalWords && originalWords->size() == 16);
     if (fault == 2) {
         QTRY_VERIFY([&]() {
             waylandServer()->display()->flush();
@@ -4875,7 +4878,7 @@ void X11WindowTest::testStereoChildPresentation()
     Xcb::Property terminal(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
     auto terminalWords = terminal.array<uint32_t>();
     QVERIFY(terminalWords && terminalWords->size() == 16);
-    QCOMPARE((*terminalWords)[7], uint32_t(fault == 0 ? 0 : fault == 1 ? 1 : fault == 2 ? 8 : 12));
+    QVERIFY(std::equal(terminalWords->begin(), terminalWords->end(), originalWords->begin()));
     const uint32_t ack[] = {1, 3, 0, 255, 0, 1, 77, 0, 0, 0, 0, 0};
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, request, XCB_ATOM_CARDINAL, 32, 12, ack);
     xcb_flush(c.get());
