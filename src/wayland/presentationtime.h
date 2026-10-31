@@ -18,7 +18,7 @@ namespace KWin
 class Display;
 class SurfaceInterface;
 
-class PresentationTime : public QObject, QtWaylandServer::wp_presentation
+class KWIN_EXPORT PresentationTime : public QObject, QtWaylandServer::wp_presentation
 {
     Q_OBJECT
 

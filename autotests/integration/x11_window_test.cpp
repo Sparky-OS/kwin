@@ -21,6 +21,8 @@
 #include "scene/workspacescene.h"
 #include "virtualdesktops.h"
 #include "wayland/surface.h"
+#include "wayland/surface_p.h"
+#include "wayland/presentationtime.h"
 #include "wayland/output.h"
 #include "wayland/display.h"
 #include "wayland_server.h"
@@ -31,6 +33,7 @@
 
 #include <KWayland/Client/surface.h>
 #include <KSharedConfig>
+#include <QFile>
 #include <QSocketNotifier>
 #include <QScopeGuard>
 #include <drm_fourcc.h>
@@ -158,6 +161,7 @@ private Q_SLOTS:
     void testStereoChildWindow();
     void testStereoChildShape();
     void testStereoChildOutputs();
+    void testStereoChildPresentation_data();
     void testStereoChildPresentation();
     void testOrdinaryX11Shape();
     void testStereoChildWindowListedBeforeMapping();
@@ -4714,8 +4718,37 @@ void X11WindowTest::testStereoChildOutputs()
     xcb_flush(c.get());
 }
 
+void X11WindowTest::testStereoChildPresentation_data()
+{
+    QTest::addColumn<int>("fault");
+    QTest::newRow("presented") << 0;
+    QTest::newRow("compositor-discard") << 1;
+    QTest::newRow("backend-removed") << 2;
+    QTest::newRow("feedback-allocation") << 3;
+}
+
 void X11WindowTest::testStereoChildPresentation()
 {
+    QFETCH(int, fault);
+    if (fault == 3 && !qEnvironmentVariableIsSet("KWIN_TEST_FEEDBACK_ALLOCATION")) {
+        QSKIP("requires the Xwayland feedback-allocation fault injector");
+    }
+    const QString allocationMarker = qEnvironmentVariable("KWIN_TEST_FEEDBACK_ALLOCATION");
+    const auto removeMarker = qScopeGuard([&]() {
+        if (!allocationMarker.isEmpty()) {
+            QFile::remove(allocationMarker);
+        }
+    });
+    QPointer<PresentationTime> presentation = waylandServer()->display()->findChild<PresentationTime *>();
+    QVERIFY(presentation);
+    const auto restorePresentation = qScopeGuard([&]() {
+        if (!presentation) {
+            new PresentationTime(waylandServer()->display(), waylandServer()->display());
+            waylandServer()->display()->flush();
+        }
+    });
+    std::shared_ptr<PresentationTimeFeedback> deferredFeedback;
+
     // Ask the receipt-enabled Xwayland for a real wp_presentation feedback.
     // No synthetic feedback, null-output bypass, timer, or Present Complete oracle.
     auto c = Test::createX11Connection();
@@ -4760,11 +4793,23 @@ void X11WindowTest::testStereoChildPresentation()
             sawFeedback = true;
             acceptedPaintedOutput = bool(tracked->surface->presentationFeedback(workspace()->outputs()[0]));
             rejectedOtherOutput = !tracked->surface->presentationFeedback(workspace()->outputs()[1]);
+            if (fault == 1) {
+                // Releasing an unpresented compositor feedback sends discarded.
+                SurfaceInterfacePrivate::get(tracked->surface)->current->presentationFeedback.reset();
+            } else if (fault == 2) {
+                // Keep feedback alive so global_remove, not discarded, retires the slot.
+                deferredFeedback = std::move(SurfaceInterfacePrivate::get(tracked->surface)->current->presentationFeedback);
+                delete presentation;
+            }
         }
     });
     const auto disconnectFeedback = qScopeGuard([&]() { disconnect(feedbackConnection); });
     Xcb::Atom request(QByteArrayLiteral("_KDE_NET_WM_STEREO_PRESENTATION_REQUEST"));
     Xcb::Atom receipt(QByteArrayLiteral("_KDE_NET_WM_STEREO_PRESENTATION_RECEIPT"));
+    if (fault == 3) {
+        QFile marker(allocationMarker);
+        QVERIFY(marker.open(QIODevice::WriteOnly));
+    }
     const uint32_t arm[] = {1, 1, 0, 255, 0, 1, 77, 0, 0, 0, 0, 0};
     xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, request, XCB_ATOM_CARDINAL, 32, 12, arm);
     const auto pixmap = xcb_generate_id(c.get());
@@ -4782,6 +4827,11 @@ void X11WindowTest::testStereoChildPresentation()
     kwinApp()->scene()->addRepaintFull();
     const bool gotFeedback = QTest::qWaitFor([&]() {
         waylandServer()->display()->flush();
+        if (fault == 3) {
+            Xcb::Property result(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
+            auto values = result.array<uint32_t>();
+            return values && values->size() == 16 && (*values)[1] == 3 && (*values)[7] == 12;
+        }
         return sawFeedback;
     }, 5000);
     if (!gotFeedback) {
@@ -4793,17 +4843,65 @@ void X11WindowTest::testStereoChildPresentation()
                    << "mapped" << tracked->surface->isMapped();
     }
     QVERIFY(gotFeedback);
-    QVERIFY(acceptedPaintedOutput);
-    QVERIFY(rejectedOtherOutput);
+    QCOMPARE(sawFeedback, fault != 3);
+    QCOMPARE(acceptedPaintedOutput, fault != 3);
+    QCOMPARE(rejectedOtherOutput, fault != 3);
     kwinApp()->scene()->addRepaintFull();
     QTRY_VERIFY([&]() {
         // QTRY polls without the event dispatcher's aboutToBlock flush.
         waylandServer()->display()->flush();
         Xcb::Property result(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
         auto values = result.array<uint32_t>();
-        return values && values->size() == 16 && (*values)[1] == 1 && (*values)[6] == 77;
+        const uint32_t expectedOutcome = fault == 0 ? 1 : fault == 3 ? 3 : 2;
+        const uint32_t expectedReason = fault == 0 ? 0 : fault == 1 ? 1 : fault == 2 ? 8 : 12;
+        return values && values->size() == 16 && (*values)[1] == expectedOutcome
+            && (*values)[2] == 0 && (*values)[3] == 255 && (*values)[4] == 0 && (*values)[5] == 1
+            && (*values)[6] == 77 && (*values)[7] == expectedReason;
     }());
-    disconnect(tracked->surface, nullptr, this, nullptr);
+    disconnect(feedbackConnection);
+    if (fault == 2) {
+        QTRY_VERIFY([&]() {
+            waylandServer()->display()->flush();
+            Xcb::Property cap(false, rootWindow(), supported, XCB_ATOM_CARDINAL, 0, 8);
+            return !cap.array<uint32_t>();
+        }());
+        deferredFeedback.reset(); // A late compositor discard cannot replace reason 8.
+    }
+    const uint32_t cancel[] = {1, 2, 0, 255, 0, 1, 77, 0, 0, 0, 0, 0};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, request, XCB_ATOM_CARDINAL, 32, 12, cancel);
+    xcb_flush(c.get());
+    waylandServer()->display()->flush();
+    QTest::qWait(50);
+    Xcb::Property terminal(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
+    auto terminalWords = terminal.array<uint32_t>();
+    QVERIFY(terminalWords && terminalWords->size() == 16);
+    QCOMPARE((*terminalWords)[7], uint32_t(fault == 0 ? 0 : fault == 1 ? 1 : fault == 2 ? 8 : 12));
+    const uint32_t ack[] = {1, 3, 0, 255, 0, 1, 77, 0, 0, 0, 0, 0};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, request, XCB_ATOM_CARDINAL, 32, 12, ack);
+    xcb_flush(c.get());
+    QTRY_VERIFY([&]() {
+        Xcb::Property result(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
+        return !result.array<uint32_t>();
+    }());
+    if (!presentation) {
+        presentation = new PresentationTime(waylandServer()->display(), waylandServer()->display());
+    }
+    QTRY_VERIFY([&]() {
+        waylandServer()->display()->flush();
+        Xcb::Property cap(false, rootWindow(), supported, XCB_ATOM_CARDINAL, 0, 8);
+        return cap.array<uint32_t>().has_value();
+    }());
+    const uint32_t recovery[] = {1, 1, 0, 255, 0, 2, 78, 0, 0, 0, 0, 0};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, request, XCB_ATOM_CARDINAL, 32, 12, recovery);
+    xcb_present_pixmap(c.get(), child, pixmap, 78, 0, 0, 0, 0, 0, 0, 0, XCB_PRESENT_OPTION_COPY, 0, 0, 0, 0, nullptr);
+    xcb_flush(c.get());
+    QTRY_VERIFY([&]() {
+        kwinApp()->scene()->addRepaintFull();
+        waylandServer()->display()->flush();
+        Xcb::Property result(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
+        auto values = result.array<uint32_t>();
+        return values && values->size() == 16 && (*values)[1] == 1 && (*values)[5] == 2 && (*values)[6] == 78;
+    }());
     xcb_free_gc(c.get(), gc);
     xcb_free_pixmap(c.get(), pixmap);
     xcb_destroy_window(c.get(), window->window());
