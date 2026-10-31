@@ -127,6 +127,7 @@ private:
     void updateGeometry(X11StereoChild *child);
     void updateContent(X11StereoChild *child);
     void updateShape(X11StereoChild *child);
+    void updateOutputs();
     void setSurface(X11StereoChild *child, SurfaceInterface *surface);
     X11StereoChild *findChild(xcb_window_t window) const;
 

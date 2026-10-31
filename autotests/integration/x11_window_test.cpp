@@ -21,6 +21,8 @@
 #include "scene/workspacescene.h"
 #include "virtualdesktops.h"
 #include "wayland/surface.h"
+#include "wayland/output.h"
+#include "wayland/display.h"
 #include "wayland_server.h"
 #include "workspace.h"
 #include "x11eventfilter.h"
@@ -30,6 +32,7 @@
 #include <KWayland/Client/surface.h>
 #include <KSharedConfig>
 #include <QSocketNotifier>
+#include <QScopeGuard>
 #include <drm_fourcc.h>
 #include <linux/input-event-codes.h>
 #include <netwm.h>
@@ -154,6 +157,8 @@ private Q_SLOTS:
     void testStereoContentDeclarationRulePrecedence();
     void testStereoChildWindow();
     void testStereoChildShape();
+    void testStereoChildOutputs();
+    void testStereoChildPresentation();
     void testOrdinaryX11Shape();
     void testStereoChildWindowListedBeforeMapping();
     void testStereoChildWindowOtherVisual();
@@ -4495,7 +4500,11 @@ void X11WindowTest::testOrdinaryX11Shape()
 {
     Test::XcbConnectionPtr c = Test::createX11Connection();
     QVERIFY(!xcb_connection_has_error(c.get()));
-    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 80));
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 80), [&](xcb_window_t id) {
+        // A real parent buffer is needed before the child can be painted.
+        const uint32_t background = 0xeeeeee;
+        xcb_change_window_attributes(c.get(), id, XCB_CW_BACK_PIXEL, &background);
+    });
     QVERIFY(window);
     const xcb_rectangle_t rectangles[] = {{0, 0, 100, 20}, {0, 20, 40, 60}};
     xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, XCB_CLIP_ORDERING_UNSORTED,
@@ -4590,6 +4599,210 @@ void X11WindowTest::testStereoChildShape()
     xcb_flush(c.get());
     QTRY_COMPARE(coverage(StereoEye::Left), RegionF(item->rect()));
     QTRY_COMPARE(coverage(StereoEye::Right), RegionF(item->rect()));
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+// Native child surfaces are not Wayland subsurfaces. Their output membership must
+// follow their displayed place, not the packed raster or the parent output.
+void X11WindowTest::testStereoChildOutputs()
+{
+    auto c = Test::createX11Connection();
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200), [&](xcb_window_t id) {
+        // A real parent buffer is needed before the child can be painted.
+        const uint32_t background = 0xeeeeee;
+        xcb_change_window_attributes(c.get(), id, XCB_CW_BACK_PIXEL, &background);
+    });
+    QVERIFY(window);
+    window->move(QPointF(0, 0));
+    const auto child = xcb_generate_id(c.get());
+    const uint32_t background = 0xff0000;
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, window->window(), 10, 20, 200, 80, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &background);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_map_window(c.get(), child);
+    xcb_flush(c.get());
+    QTRY_COMPARE(window->stereoChildren()->children().size(), 1u);
+    const auto tracked = [&]() { return window->stereoChildren()->children().front().get(); };
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(tracked());
+    const auto handles = [&]() {
+        QList<LogicalOutput *> result;
+        for (auto output : tracked()->surface->outputs()) {
+            result << output->handle();
+        }
+        return result;
+    };
+    auto first = workspace()->outputs()[0];
+    auto second = workspace()->outputs()[1];
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{first});
+
+    // Move the parent, without changing any X child property.
+    window->move(QPointF(1400, 0));
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{second});
+    window->move(QPointF(0, 0));
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{first});
+
+    QFETCH_GLOBAL(qreal, scale);
+    auto place = [&](int x, int width) {
+        const uint32_t values[] = {uint32_t(x * scale), 20, uint32_t(width * scale), 80, 0};
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_child_place,
+                            XCB_ATOM_CARDINAL, 32, 5, values);
+        xcb_flush(c.get());
+    };
+    // The parent remains on output 1; only the declared logical child crosses.
+    place(1400, 80);
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{second});
+    place(1200, 160);
+    QTRY_COMPARE(handles().size(), 2);
+    QVERIFY(handles().contains(first));
+    QVERIFY(handles().contains(second));
+    place(3000, 80);
+    QTRY_VERIFY(handles().isEmpty());
+    place(100, 80);
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{first});
+
+    // Removing the declaration restores one-view placement, not packed width.
+    xcb_delete_property(c.get(), child, atoms->kde_net_wm_stereo_content_child_place);
+    const uint32_t oneView[] = {uint32_t(80 * scale), 80};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_one_view_size,
+                        XCB_ATOM_CARDINAL, 32, 2, oneView);
+    const uint32_t xy[] = {uint32_t(1180 * scale), 20};
+    xcb_configure_window(c.get(), child, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, xy);
+    xcb_flush(c.get());
+    QTRY_COMPARE(tracked()->place().width(), 80);
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{first});
+    const uint32_t wider[] = {uint32_t(200 * scale), 80};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content_one_view_size,
+                        XCB_ATOM_CARDINAL, 32, 2, wider);
+    xcb_flush(c.get());
+    QTRY_COMPARE(handles().size(), 2);
+
+    xcb_delete_property(c.get(), child, atoms->kde_net_wm_stereo_content_one_view_size);
+    const uint32_t wideRaster = uint32_t(200 * scale);
+    xcb_configure_window(c.get(), child, XCB_CONFIG_WINDOW_WIDTH, &wideRaster);
+    xcb_flush(c.get());
+    QTRY_VERIFY(tracked()->oneViewSize.isEmpty());
+    QTRY_COMPARE(handles().size(), 2);
+    const uint32_t narrowRaster = uint32_t(80 * scale);
+    xcb_configure_window(c.get(), child, XCB_CONFIG_WINDOW_WIDTH, &narrowRaster);
+    xcb_flush(c.get());
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{first});
+
+    // Reparenting within the owner replaces the child surface and association.
+    xcb_reparent_window(c.get(), child, window->window(), 10, 20);
+    xcb_flush(c.get());
+    QTRY_COMPARE(tracked()->geometry.topLeft(), Xcb::fromXNative(Rect(10, 20, 0, 0)).topLeft());
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(tracked());
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{first});
+    place(1400, 80);
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{second});
+    // Output removal must clear membership even with unchanged child placement.
+    Test::setOutputConfig({Rect(0, 0, 1280, 1024)});
+    QTRY_VERIFY(handles().isEmpty());
+    Test::setOutputConfig({Rect(0, 0, 1280, 1024), Rect(1280, 0, 1280, 1024)});
+    QTRY_COMPARE(handles(), QList<LogicalOutput *>{workspace()->outputs()[1]});
+    QPointer<SurfaceInterface> detached = tracked()->surface;
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_children);
+    xcb_flush(c.get());
+    QTRY_VERIFY(window->stereoChildren()->children().empty());
+    QVERIFY(!detached || detached->outputs().isEmpty());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoChildPresentation()
+{
+    // Ask the receipt-enabled Xwayland for a real wp_presentation feedback.
+    // No synthetic feedback, null-output bypass, timer, or Present Complete oracle.
+    auto c = Test::createX11Connection();
+    Xcb::Atom supported(QByteArrayLiteral("_KDE_NET_WM_STEREO_PRESENTATION_SUPPORTED"));
+    Xcb::Property capability(false, rootWindow(), supported, XCB_ATOM_CARDINAL, 0, 8);
+    if (!capability.array<uint32_t>()) {
+        QVERIFY2(!qEnvironmentVariableIsSet("KWIN_TEST_XWAYLAND_PRESENTATION"), "receipt-enabled Xwayland required");
+        QSKIP("Xwayland has no presentation receipt extension");
+    }
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200), [&](xcb_window_t id) {
+        // A real parent buffer is needed before the child can be painted.
+        const uint32_t background = 0xeeeeee;
+        xcb_change_window_attributes(c.get(), id, XCB_CW_BACK_PIXEL, &background);
+    });
+    QVERIFY(window);
+    QTRY_VERIFY(window->surface() && window->surface()->isMapped());
+    window->move(QPointF(0, 0));
+    const auto child = xcb_generate_id(c.get());
+    const uint32_t background = 0xff0000;
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, window->window(), 10, 20, 100, 80, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &background);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_map_window(c.get(), child);
+    xcb_flush(c.get());
+    QTRY_COMPARE(window->stereoChildren()->children().size(), 1u);
+    const auto tracked = window->stereoChildren()->children().front().get();
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(tracked);
+    QTRY_VERIFY(window->readyForPainting());
+    QTRY_VERIFY(tracked->surface->isMapped());
+    QSignalSpy initialFrame(kwinApp()->scene(), &WorkspaceScene::frameRendered);
+    kwinApp()->scene()->addRepaintFull();
+    QVERIFY(initialFrame.wait());
+    bool sawFeedback = false;
+    bool acceptedPaintedOutput = false;
+    bool rejectedOtherOutput = false;
+    const auto feedbackConnection = connect(tracked->surface, &SurfaceInterface::committed, this, [&]() {
+        if (tracked->surface->hasPresentationFeedback()) {
+            sawFeedback = true;
+            acceptedPaintedOutput = bool(tracked->surface->presentationFeedback(workspace()->outputs()[0]));
+            rejectedOtherOutput = !tracked->surface->presentationFeedback(workspace()->outputs()[1]);
+        }
+    });
+    const auto disconnectFeedback = qScopeGuard([&]() { disconnect(feedbackConnection); });
+    Xcb::Atom request(QByteArrayLiteral("_KDE_NET_WM_STEREO_PRESENTATION_REQUEST"));
+    Xcb::Atom receipt(QByteArrayLiteral("_KDE_NET_WM_STEREO_PRESENTATION_RECEIPT"));
+    const uint32_t arm[] = {1, 1, 0, 255, 0, 1, 77, 0, 0, 0, 0, 0};
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, request, XCB_ATOM_CARDINAL, 32, 12, arm);
+    const auto pixmap = xcb_generate_id(c.get());
+    xcb_create_pixmap(c.get(), 24, pixmap, child, 100, 80);
+    const auto gc = xcb_generate_id(c.get());
+    xcb_create_gc(c.get(), gc, pixmap, XCB_GC_FOREGROUND, &background);
+    const xcb_rectangle_t rect = {0, 0, 100, 80};
+    xcb_poly_fill_rectangle(c.get(), pixmap, gc, 1, &rect);
+    const auto present = xcb_present_pixmap_checked(c.get(), child, pixmap, 77, 0, 0, 0, 0, 0, 0, 0, XCB_PRESENT_OPTION_COPY, 0, 0, 0, 0, nullptr);
+    const auto error = xcb_request_check(c.get(), present);
+    const int errorCode = error ? error->error_code : 0;
+    free(error);
+    QCOMPARE(errorCode, 0);
+    xcb_flush(c.get());
+    kwinApp()->scene()->addRepaintFull();
+    const bool gotFeedback = QTest::qWaitFor([&]() { return sawFeedback; }, 5000);
+    if (!gotFeedback) {
+        Xcb::Property result(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
+        auto values = result.array<uint32_t>();
+        qWarning() << "Receipt before feedback" << (values ? values->size() : 0)
+                   << (values && values->size() >= 8 ? (*values)[1] : 0)
+                   << (values && values->size() >= 8 ? (*values)[7] : 0)
+                   << "mapped" << tracked->surface->isMapped();
+    }
+    QVERIFY(gotFeedback);
+    QVERIFY(acceptedPaintedOutput);
+    QVERIFY(rejectedOtherOutput);
+    kwinApp()->scene()->addRepaintFull();
+    QTRY_VERIFY([&]() {
+        // QTRY polls without the event dispatcher's aboutToBlock flush.
+        waylandServer()->display()->flush();
+        Xcb::Property result(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
+        auto values = result.array<uint32_t>();
+        return values && values->size() == 16 && (*values)[1] == 1 && (*values)[6] == 77;
+    }());
+    disconnect(tracked->surface, nullptr, this, nullptr);
+    xcb_free_gc(c.get(), gc);
+    xcb_free_pixmap(c.get(), pixmap);
     xcb_destroy_window(c.get(), window->window());
     xcb_flush(c.get());
 }

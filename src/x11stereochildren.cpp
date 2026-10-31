@@ -12,9 +12,11 @@
 #include "utils/c_ptr.h"
 #include "utils/xcbutils.h"
 #include "wayland/surface.h"
+#include "wayland/display.h"
 #include "wayland/xwaylandshell_v1.h"
 #include "wayland_server.h"
 #include "x11window.h"
+#include "workspace.h"
 
 #include <xcb/composite.h>
 #include <xcb/shape.h>
@@ -25,6 +27,9 @@ namespace KWin
 X11StereoChildren::X11StereoChildren(X11Window *window)
     : m_window(window)
 {
+    connect(this, &X11StereoChildren::changed, this, &X11StereoChildren::updateOutputs);
+    connect(window, &Window::bufferGeometryChanged, this, &X11StereoChildren::updateOutputs);
+    connect(workspace(), &Workspace::outputsChanged, this, &X11StereoChildren::updateOutputs);
 }
 
 X11StereoChildren::~X11StereoChildren() = default;
@@ -171,6 +176,7 @@ void X11StereoChildren::unwatch(X11StereoChild *child)
         }
     }
     if (child->surface) {
+        child->surface->setOutputs({}, nullptr);
         disconnect(child->surface, nullptr, this, nullptr);
     }
 }
@@ -268,12 +274,36 @@ void X11StereoChildren::updateContent(X11StereoChild *child)
     }
 }
 
+void X11StereoChildren::updateOutputs()
+{
+    if (m_window->isDeleted()) {
+        return;
+    }
+    for (const auto &child : m_children) {
+        if (!child->surface) {
+            continue;
+        }
+        // Native X11 children are independent Wayland surfaces, so they do not
+        // inherit the parent's output membership through wl_subsurface. Use
+        // the scene's logical placement relative to the parent buffer, never
+        // the child's packed raster or the parent's chosen output.
+        const Rect rect = child->place().translated(m_window->bufferGeometry().topLeft()).toAlignedRect();
+        if (!child->mapped || rect.isEmpty()) {
+            child->surface->setOutputs({}, nullptr);
+        } else {
+            auto display = waylandServer()->display();
+            child->surface->setOutputs(display->outputsIntersecting(rect), display->largestIntersectingOutput(rect));
+        }
+    }
+}
+
 void X11StereoChildren::setSurface(X11StereoChild *child, SurfaceInterface *surface)
 {
     if (child->surface == surface) {
         return;
     }
     if (child->surface) {
+        child->surface->setOutputs({}, nullptr);
         disconnect(child->surface, nullptr, this, nullptr);
     }
     child->surface = surface;
