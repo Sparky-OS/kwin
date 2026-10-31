@@ -6,17 +6,27 @@
 
 #include "kwin_wayland_test.h"
 
+#include "compositor.h"
 #include "core/output.h"
 #include "core/outputconfiguration.h"
 #include "effect/effectloader.h"
+#include "opengl/eglbackend.h"
+#include "opengl/eglcontext.h"
+#include "opengl/glframebuffer.h"
+#include "opengl/gltexture.h"
+#include "options.h"
 #include "plugins/screenshot/screenshot.h"
+#include "plugins/screenshot/screenshotlayer.h"
 #include "scene/itemrenderer.h"
+#include "scene/scene.h"
 #include "scene/workspacescene.h"
 #include "wayland_server.h"
 #include "window.h"
 #include "workspace.h"
 
 #include <KConfigGroup>
+#include <KWayland/Client/compositor.h>
+#include <KWayland/Client/region.h>
 #include <KWayland/Client/surface.h>
 
 #include <QDir>
@@ -39,6 +49,10 @@ private Q_SLOTS:
     void testStereoPairOutputsKeepRawEyes();
     void testThreeDimensionalOutputWithoutDeclaredWindow();
     void testUncoveredPixelsAreTransparentInBothEyes();
+    void testTranslucentPixelsUnderOpaqueRegion_data();
+    void testTranslucentPixelsUnderOpaqueRegion();
+    void testEyePassOverEarlierPicture_data();
+    void testEyePassOverEarlierPicture();
     void testOrdinaryCapture();
     void testWorkspaceStereoOutputOnLeft();
     void testWorkspaceStereoOutputOnRight();
@@ -491,6 +505,240 @@ void ScreenshotStereoTest::testWorkspaceWithoutStereoIsUnchanged()
     QCOMPARE(image->pixelColor(110, 90), expected->pixelColor(110, 90));
     QCOMPARE(image->pixelColor(s_outputSize.width() + 110, 90), expected->pixelColor(s_outputSize.width() + 110, 90));
     QCOMPARE(*image, *expected);
+}
+
+// Windows that say they are opaque where their pixels are not ("marking transparent content as opaque
+// will result in repaint artifacts", wl_surface.set_opaque_region): the left half of one is at alpha
+// one half, (0.8, 0.2, 0.2, 0.5) as a client's GL clear writes it, over a window its opaque region
+// hides; beside it a surface without an alpha channel, drawn without blending. Desktop depth is off, so
+// that the 2D windows are one picture in both eyes.
+struct OpaqueRegionWindows
+{
+    OpaqueRegionWindows()
+        : sunkLimit(options->stereoSunkLimit())
+        , poppedLimit(options->stereoPoppedLimit())
+        , effectSunkLimit(options->stereoEffectSunkLimit())
+        , effectPoppedLimit(options->stereoEffectPoppedLimit())
+    {
+        options->setStereoSunkLimit(0);
+        options->setStereoPoppedLimit(0);
+        options->setStereoEffectSunkLimit(0);
+        options->setStereoEffectPoppedLimit(0);
+    }
+
+    ~OpaqueRegionWindows()
+    {
+        options->setStereoSunkLimit(sunkLimit);
+        options->setStereoPoppedLimit(poppedLimit);
+        options->setStereoEffectSunkLimit(effectSunkLimit);
+        options->setStereoEffectPoppedLimit(effectPoppedLimit);
+    }
+
+    bool create()
+    {
+        below = createWindow(Qt::green, QPoint(90, 70));
+        if (!below.window) {
+            return false;
+        }
+
+        QImage image(QSize(40, 40), QImage::Format_ARGB32_Premultiplied);
+        image.fill(0xffcc3333);
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width() / 2; ++x) {
+                image.setPixel(x, y, 0x80cc3333);
+            }
+        }
+        translucent.surface = Test::createSurface();
+        translucent.shellSurface = Test::createXdgToplevelSurface(translucent.surface.get());
+        const auto opaqueRegion = Test::waylandCompositor()->createRegion(QRegion(QRect(QPoint(), image.size())));
+        translucent.surface->setOpaqueRegion(opaqueRegion.get());
+        translucent.window = Test::renderAndWaitForShown(translucent.surface.get(), image);
+        if (!translucent.window) {
+            return false;
+        }
+        translucent.window->move(QPoint(100, 80));
+
+        QImage solidImage(QSize(40, 40), QImage::Format_RGB32);
+        solidImage.fill(0xff2266aa);
+        solid.surface = Test::createSurface();
+        solid.shellSurface = Test::createXdgToplevelSurface(solid.surface.get());
+        solid.window = Test::renderAndWaitForShown(solid.surface.get(), solidImage);
+        if (!solid.window) {
+            return false;
+        }
+        solid.window->move(QPoint(130, 100));
+        return Test::waylandSync();
+    }
+
+    // the 2D picture: the translucent half over transparent black, not over the window below it
+    static void checkFlat(const QImage &flat)
+    {
+        QCOMPARE(flat.size(), s_outputSize);
+        QCOMPARE(flat.pixel(105, 85), 0x80cc3333);
+        QCOMPARE(flat.pixel(125, 85), 0xffcc3333);
+    }
+
+    const qreal sunkLimit;
+    const qreal poppedLimit;
+    const qreal effectSunkLimit;
+    const qreal effectPoppedLimit;
+    TestWindow below;
+    TestWindow translucent;
+    TestWindow solid;
+};
+
+static int countDiffering(const QImage &flat, const QImage &eye, int eyeOffset, const Rect &skip, const char *name)
+{
+    int differing = 0;
+    for (int y = 0; y < s_outputSize.height(); ++y) {
+        for (int x = 0; x < s_outputSize.width(); ++x) {
+            if (skip.contains(QPoint(x, y))) {
+                continue;
+            }
+            const QRgb expected = flat.pixel(x, y);
+            const QRgb actual = eye.pixel(eyeOffset + x, y);
+            if (actual != expected && ++differing <= 4) {
+                qWarning("%s %d,%d: 2D %08x, eye %08x", name, x, y, expected, actual);
+            }
+        }
+    }
+    return differing;
+}
+
+// Both eyes of a stereo capture are drawn into one target, the right eye after the left: the right eye
+// is the same picture as the left and as a 2D capture, never the window over the left eye's picture,
+// and what lies below the opaque region is still not drawn.
+void ScreenshotStereoTest::testTranslucentPixelsUnderOpaqueRegion_data()
+{
+    QTest::addColumn<bool>("stereoOutput");
+
+    QTest::newRow("declared window on a 2D output") << false;
+    QTest::newRow("3D output") << true;
+}
+
+void ScreenshotStereoTest::testTranslucentPixelsUnderOpaqueRegion()
+{
+    QFETCH(bool, stereoOutput);
+
+    OpaqueRegionWindows windows;
+    QVERIFY(windows.create());
+
+    const auto output = workspace()->outputs().front();
+    ScreenShotManager manager;
+    const auto flat = manager.takeScreenShot(output, {}, std::nullopt);
+    QVERIFY(flat);
+    saveEvidence(QStringLiteral("opaque-region-2d"), *flat);
+    OpaqueRegionWindows::checkFlat(*flat);
+    if (QTest::currentTestFailed()) {
+        return;
+    }
+
+    Rect stereoPlace;
+    std::unique_ptr<KWayland::Client::Surface> stereoClient;
+    std::unique_ptr<Test::StereoContentV1> declaration;
+    std::unique_ptr<Test::XdgToplevel> stereoShell;
+    if (stereoOutput) {
+        OutputConfiguration configuration;
+        configuration.changeSet(output->backendOutput())->currentMode = stereoMode();
+        workspace()->applyOutputConfiguration(configuration);
+        QVERIFY(Test::waylandSync());
+        QVERIFY(output->hasStereoEyes());
+    } else {
+        stereoClient = Test::createSurface();
+        declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*stereoClient));
+        declaration->set_content(Test::StereoContentV1::content_side_by_side_full);
+        stereoShell = Test::createXdgToplevelSurface(stereoClient.get());
+        Window *stereoWindow = Test::renderAndWaitForShown(stereoClient.get(), stereoSurface());
+        QVERIFY(stereoWindow);
+        stereoWindow->move(QPoint(240, 160));
+        QVERIFY(Test::waylandSync());
+        stereoPlace = stereoWindow->frameGeometry().toRect();
+    }
+
+    for (int round = 0; round < 3; ++round) {
+        const auto image = manager.takeScreenShot(output, {}, std::nullopt);
+        QVERIFY(image);
+        if (round == 0) {
+            saveEvidence(stereoOutput ? QStringLiteral("opaque-region-3d-output") : QStringLiteral("opaque-region-declared"), *image);
+        }
+        QCOMPARE(image->size(), QSize(s_outputSize.width() * 2, s_outputSize.height()));
+        QCOMPARE(countDiffering(*flat, *image, 0, stereoPlace, "left"), 0);
+        QCOMPARE(countDiffering(*flat, *image, s_outputSize.width(), stereoPlace, "right"), 0);
+    }
+}
+
+// Each eye of a 3D output is drawn into buffers of its own, which hold that eye's earlier frames: an eye
+// pass into a target that holds another picture is the same picture as a 2D capture.
+void ScreenshotStereoTest::testEyePassOverEarlierPicture_data()
+{
+    QTest::addColumn<bool>("rightEye");
+
+    QTest::newRow("left") << false;
+    QTest::newRow("right") << true;
+}
+
+void ScreenshotStereoTest::testEyePassOverEarlierPicture()
+{
+    QFETCH(bool, rightEye);
+    const StereoEye eye = rightEye ? StereoEye::Right : StereoEye::Left;
+
+    OpaqueRegionWindows windows;
+    QVERIFY(windows.create());
+
+    const auto output = workspace()->outputs().front();
+    ScreenShotManager manager;
+    const auto flat = manager.takeScreenShot(output, {}, std::nullopt);
+    QVERIFY(flat);
+    OpaqueRegionWindows::checkFlat(*flat);
+    if (QTest::currentTestFailed()) {
+        return;
+    }
+
+    OutputConfiguration configuration;
+    configuration.changeSet(output->backendOutput())->currentMode = stereoMode();
+    workspace()->applyOutputConfiguration(configuration);
+    QVERIFY(Test::waylandSync());
+    QVERIFY(output->hasStereoEyes());
+
+    const auto eglBackend = dynamic_cast<EglBackend *>(Compositor::self()->backend());
+    QVERIFY(eglBackend);
+    EglContext *context = eglBackend->openglContext();
+    QVERIFY(context && context->makeCurrent());
+    const auto texture = GLTexture::allocate(GL_RGBA8, s_outputSize);
+    QVERIFY(texture);
+    GLFramebuffer target(texture.get());
+    QVERIFY(target.valid());
+    // the earlier picture
+    GLFramebuffer::pushFramebuffer(&target);
+    glClearColor(1, 1, 1, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    GLFramebuffer::popFramebuffer();
+
+    ScreenshotLayer layer(output, &target);
+    QVERIFY(layer.preparePresentationTest());
+    const auto beginInfo = layer.beginFrame();
+    QVERIFY(beginInfo);
+    SceneView view(kwinApp()->scene(), output, nullptr, &layer);
+    ItemTreeView cursorView(&view, kwinApp()->scene()->cursorItem(), output, nullptr, nullptr);
+    cursorView.setExclusive(true);
+    const Rect whole(QPoint(), s_outputSize);
+    view.setViewport(output->geometryF());
+    view.setScale(1);
+    view.prePaint();
+    ItemRenderer *renderer = kwinApp()->scene()->renderer();
+    renderer->setStereoEye(eye);
+    view.paint(beginInfo->renderTarget, QPoint(), whole);
+    renderer->setStereoEye(StereoEye::None);
+    QImage picture(s_outputSize, QImage::Format_RGBA8888_Premultiplied);
+    GLFramebuffer::pushFramebuffer(&target);
+    glReadPixels(0, 0, picture.width(), picture.height(), GL_RGBA, GL_UNSIGNED_BYTE, picture.bits());
+    GLFramebuffer::popFramebuffer();
+    view.postPaint();
+    QVERIFY(layer.endFrame(whole, whole, nullptr));
+    picture = picture.flipped(Qt::Vertical);
+    saveEvidence(rightEye ? QStringLiteral("opaque-region-right-over-white") : QStringLiteral("opaque-region-left-over-white"), picture);
+
+    QCOMPARE(countDiffering(*flat, picture, 0, Rect(), rightEye ? "right" : "left"), 0);
 }
 
 }
