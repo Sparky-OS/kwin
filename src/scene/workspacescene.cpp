@@ -673,6 +673,29 @@ static void addOpaqueRegionRecursive(SceneView *view, Item *item, const std::opt
     }
 }
 
+// The part of an item tree's opaque region that replaces whatever the render target holds: the
+// surfaces whose buffers have no alpha channel, drawn without blending, at full opacity and not cut
+// by a rounded corner
+static void addSolidRegionRecursive(SceneView *view, Item *item, const std::optional<ClipCorner> &parentCorner, qreal parentOpacity, Region &ret)
+{
+    if (!item->explicitVisible() || !view->shouldRenderItem(item)) {
+        return;
+    }
+    const std::optional<ClipCorner> corner = calculateClipCorner(item, parentCorner);
+    const qreal opacity = parentOpacity * item->opacity();
+    const auto surfaceItem = qobject_cast<SurfaceItem *>(item);
+    if (surfaceItem && !surfaceItem->hasAlphaChannel() && !corner.has_value() && opacity == 1.0) {
+        const Rect deviceRect = snapToPixelGrid(view->mapToDeviceCoordinates(item->mapToView(item->rect(), view)));
+        for (const RectF &rect : item->opaque().rects()) {
+            ret |= snapToPixelGrid(view->mapToDeviceCoordinates(item->mapToView(rect, view))) & deviceRect;
+        }
+    }
+    const auto children = item->childItems();
+    for (Item *child : children) {
+        addSolidRegionRecursive(view, child, corner, opacity, ret);
+    }
+}
+
 void WorkspaceScene::preparePaintSimpleScreen()
 {
     for (WindowItem *windowItem : std::as_const(stacking_order)) {
@@ -842,6 +865,15 @@ void WorkspaceScene::paintOverlay(const RenderTarget &renderTarget, const Render
 // to reduce painting and improve performance.
 void WorkspaceScene::paintSimpleScreen(const RenderTarget &renderTarget, const RenderViewport &viewport, int, const Region &deviceRegion)
 {
+    // In an eye of a stereo frame the target holds another picture where windows hide what is below
+    // them: the other eye of a capture, or this eye's earlier frames. A surface that is not opaque where
+    // it says it is ("marking transparent content as opaque will result in repaint artifacts",
+    // wl_surface.set_opaque_region) would blend over that picture, and the two eyes of a 2D window
+    // would differ. So the background is drawn below every window whose content blends, as a 2D
+    // capture has it; what lies below such a window is still not drawn.
+    const bool stereoEye = m_renderer->stereoEye() != StereoEye::None;
+    Region background = deviceRegion;
+
     // This is the occlusion culling pass
     Region visible = deviceRegion;
     for (int i = m_paintContext.phase2Data.size() - 1; i >= 0; --i) {
@@ -856,12 +888,17 @@ void WorkspaceScene::paintSimpleScreen(const RenderTarget &renderTarget, const R
             const bool canCover = painted_delegate->shouldRenderItem(data->item->surfaceItem())
                 || painted_delegate->shouldRenderHole(data->item->surfaceItem());
             if (!(data->mask & PAINT_WINDOW_TRANSLUCENT) && canCover) {
+                if (stereoEye) {
+                    Region solid;
+                    addSolidRegionRecursive(painted_delegate, data->item, std::nullopt, 1.0, solid);
+                    background -= solid & data->deviceOpaque & visible;
+                }
                 visible -= data->deviceOpaque;
             }
         }
     }
 
-    m_renderer->renderBackground(renderTarget, viewport, visible);
+    m_renderer->renderBackground(renderTarget, viewport, stereoEye ? background : visible);
 
     for (const Phase2Data &paintData : std::as_const(m_paintContext.phase2Data)) {
         paintWindow(renderTarget, viewport, paintData.item, paintData.mask, paintData.deviceRegion);
