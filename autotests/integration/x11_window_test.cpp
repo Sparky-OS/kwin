@@ -4780,7 +4780,10 @@ void X11WindowTest::testStereoChildPresentation()
     QCOMPARE(errorCode, 0);
     xcb_flush(c.get());
     kwinApp()->scene()->addRepaintFull();
-    const bool gotFeedback = QTest::qWaitFor([&]() { return sawFeedback; }, 5000);
+    const bool gotFeedback = QTest::qWaitFor([&]() {
+        waylandServer()->display()->flush();
+        return sawFeedback;
+    }, 5000);
     if (!gotFeedback) {
         Xcb::Property result(false, child, receipt, XCB_ATOM_CARDINAL, 0, 16);
         auto values = result.array<uint32_t>();
