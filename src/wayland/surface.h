@@ -347,6 +347,7 @@ public:
      * The surface's declared stereo content from kde_stereo_content_v1.
      */
     StereoContent stereoContent() const;
+    std::optional<RectF> stereoViewSource() const;
 
     /**
      * Whether the client marked the surface's pair as the desktop's own depth, its elements drawn

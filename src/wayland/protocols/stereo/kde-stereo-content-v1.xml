@@ -6,12 +6,12 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-<interface name="kde_stereo_content_manager_v1" version="3">
+<interface name="kde_stereo_content_manager_v1" version="4">
   <description summary="declare stereo content of surfaces">
     A program tells the compositor that a surface's picture holds two
-    views, one per eye, packed full side by side, with the left eye first.
-    The compositor renders the declared surface once per eye with that
-    eye's view. The global being present announces support.
+    views packed full side by side, with the left view first.
+    The compositor renders the declared surface using each view.
+    The global being present announces support.
 
     Since version 3, a program may also follow a surface's desktop depth
     with get_depth, to draw the elements inside the surface at their own
@@ -52,25 +52,27 @@
   </request>
 </interface>
 
-<interface name="kde_stereo_content_v1" version="3">
+<interface name="kde_stereo_content_v1" version="4">
   <description summary="stereo content declaration of one surface">
     The declaration of one surface, created with
     kde_stereo_content_manager_v1.create.
 
-    Since version 2, a surface declared side_by_side_full is one eye
-    wide and its buffer holds both eyes: unless a wp_viewport destination
+    Since version 2, a surface declared side_by_side_full is one view
+    wide and its buffer holds both views: unless a wp_viewport destination
     is set, the surface's size is half the width the buffer would give it
     (after the buffer scale, the buffer transform and a viewport source)
     by the full height. A viewport destination, when set, is the size of
-    one eye. With version 1 the surface's size follows its buffer as for
+    one view. With version 1 the surface's size follows its buffer as for
     any other surface, so a client that declares at version 1 maps the
-    buffer onto one eye's size itself, for example with a viewport.
+    buffer onto one view's size itself, for example with a viewport.
 
     Version 3 changes nothing in this interface.
+    Version 4 adds a double-buffered native source rectangle for each view.
   </description>
 
   <enum name="error">
     <entry name="no_surface" value="0" summary="the surface no longer exists"/>
+    <entry name="bad_source" value="1" since="4" summary="invalid per-view source rectangle"/>
   </enum>
 
   <request name="destroy" type="destructor">
@@ -85,7 +87,7 @@
       The value matches the X11 property _KDE_NET_WM_STEREO_CONTENT.
     </description>
     <entry name="none" value="0" summary="no stereo content"/>
-    <entry name="side_by_side_full" value="3" summary="side by side, full width per eye, left first"/>
+    <entry name="side_by_side_full" value="3" summary="side by side, native width per view, left first"/>
   </enum>
 
   <request name="set_content">
@@ -94,9 +96,33 @@
       are treated as none. Declaring none clears the format and does not
       destroy the declaration object.
     </description>
-    <arg name="content" type="uint" enum="content" summary="packing and eye order"/>
+    <arg name="content" type="uint" enum="content" summary="packing and view order"/>
   </request>
 
+  <request name="set_view_source" since="4">
+    <description summary="select the same native source rectangle in both views">
+      Select a rectangle independently within each view of side_by_side_full
+      content. Coordinates are native buffer pixels after the buffer transform,
+      relative to the top left of each half of the viewport source rectangle.
+      The viewport destination remains the logical size of one drawing area.
+      No new packing or view-order value is introduced.
+
+      The rectangle is double buffered with wl_surface.commit. Initially it is
+      unset. Set all four values to -1 to unset it. Otherwise x and y must be
+      nonnegative and width and height strictly positive. The rectangle must
+      fit inside each view when a buffer is committed; otherwise bad_source is
+      raised. With no viewport destination, the rectangle's size divided by
+      buffer scale gives the surface size. Fractional edges are retained.
+
+      Setting content to none or destroying the declaration also unsets the
+      rectangle. This request on a destroyed wl_surface raises no_surface.
+      Existing clients which do not set a view source keep their behavior.
+    </description>
+    <arg name="x" type="fixed"/>
+    <arg name="y" type="fixed"/>
+    <arg name="width" type="fixed"/>
+    <arg name="height" type="fixed"/>
+  </request>
 </interface>
 
 <interface name="kde_stereo_depth_v1" version="3">
@@ -105,7 +131,7 @@
     active window at the screen, the windows lying behind it sunk, menus,
     tooltips and popups popped. This object lets a client show depth
     inside a surface as well, by drawing the surface's elements once per
-    eye at their own depths and handing the two views over full side by
+    view at their own depths and handing the two views over full side by
     side, declared with kde_stereo_content_v1:
 
     - the compositor tells the client when the elements inside the surface
@@ -165,11 +191,11 @@
     <description summary="Mark the surface's pair as the desktop's own depth">
       Nonzero marks the full side-by-side pair the surface shows, declared
       with kde_stereo_content_v1 by this client or its graphics library, as
-      the desktop's own elements drawn once per eye rather than stereo
+      the desktop's own elements drawn once per view rather than stereo
       content: where the compositor treats stereo content differently, for
       example in switching a display into a 3D mode, in stereo screenshots
       or in estimating the depth of content, the surface counts as part of
-      the desktop. The compositor still shows each view in its eye. Zero
+      the desktop. The compositor still presents each view separately. Zero
       withdraws the mark.
 
       Takes effect with the next wl_surface commit.

@@ -35,11 +35,14 @@ class StereoContentSurfaceV1 : private QtWaylandServer::kde_stereo_content_v1
 public:
     explicit StereoContentSurfaceV1(wl_client *client, uint32_t id, uint32_t version, SurfaceInterface *surface);
     ~StereoContentSurfaceV1() override;
+    void postBadSource();
 
 private:
     void kde_stereo_content_v1_destroy_resource(Resource *resource) override;
     void kde_stereo_content_v1_destroy(Resource *resource) override;
     void kde_stereo_content_v1_set_content(Resource *resource, uint32_t content) override;
+
+    void kde_stereo_content_v1_set_view_source(Resource *resource, wl_fixed_t x, wl_fixed_t y, wl_fixed_t width, wl_fixed_t height) override;
 
     const QPointer<SurfaceInterface> m_surface;
 };

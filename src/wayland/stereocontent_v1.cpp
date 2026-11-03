@@ -15,7 +15,7 @@
 namespace KWin
 {
 
-static constexpr uint32_t s_version = 3;
+static constexpr uint32_t s_version = 4;
 
 static constexpr StereoContent toStereoContent(uint32_t content)
 {
@@ -68,7 +68,8 @@ StereoContentSurfaceV1::~StereoContentSurfaceV1()
         const auto priv = SurfaceInterfacePrivate::get(m_surface);
         priv->stereoContent = nullptr;
         priv->pending->stereoContent = StereoContentNone;
-        priv->pending->stereoContentOneEyeWide = false;
+        priv->pending->stereoContentOneViewWide = false;
+        priv->pending->stereoViewSource.reset();
         priv->pending->committed |= SurfaceState::Field::StereoContent;
     }
 }
@@ -91,7 +92,34 @@ void StereoContentSurfaceV1::kde_stereo_content_v1_set_content(Resource *resourc
     }
     const auto priv = SurfaceInterfacePrivate::get(m_surface);
     priv->pending->stereoContent = toStereoContent(content);
-    priv->pending->stereoContentOneEyeWide = resource->version() >= 2;
+    if (priv->pending->stereoContent == StereoContentNone) {
+        priv->pending->stereoViewSource.reset();
+    }
+    priv->pending->stereoContentOneViewWide = resource->version() >= 2;
+    priv->pending->committed |= SurfaceState::Field::StereoContent;
+}
+
+void StereoContentSurfaceV1::postBadSource()
+{
+    wl_resource_post_error(resource()->handle, error_bad_source, "per-view source rectangle is outside the native view");
+}
+
+void StereoContentSurfaceV1::kde_stereo_content_v1_set_view_source(Resource *resource, wl_fixed_t x, wl_fixed_t y, wl_fixed_t width, wl_fixed_t height)
+{
+    if (!m_surface) {
+        wl_resource_post_error(resource->handle, error_no_surface, "wl_surface was destroyed before set_view_source");
+        return;
+    }
+    const auto priv = SurfaceInterfacePrivate::get(m_surface);
+    if (x == wl_fixed_from_int(-1) && y == x && width == x && height == x) {
+        priv->pending->stereoViewSource.reset();
+    } else if (x < 0 || y < 0 || width <= 0 || height <= 0) {
+        postBadSource();
+        return;
+    } else {
+        priv->pending->stereoViewSource = RectF(wl_fixed_to_double(x), wl_fixed_to_double(y),
+                                              wl_fixed_to_double(width), wl_fixed_to_double(height));
+    }
     priv->pending->committed |= SurfaceState::Field::StereoContent;
 }
 

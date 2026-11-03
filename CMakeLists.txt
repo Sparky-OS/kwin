@@ -235,7 +235,8 @@ endif()
 # kde_stereo_depth_v1 came with version 3 of kde-stereo-content-v1; stereo_glasses with version 29 of kde-output-device-v2,
 # stereo_sequential_displayport with version 30
 if(NOT _kwin_output_device_xml MATCHES "stereo_l_depth_graphics" OR NOT _kwin_output_device_xml MATCHES "stereo_glasses"
-   OR NOT _kwin_output_device_xml MATCHES "stereo_sequential_displayport" OR NOT _kwin_stereo_content_xml MATCHES "kde_stereo_depth_v1")
+   OR NOT _kwin_output_device_xml MATCHES "stereo_sequential_displayport" OR NOT _kwin_stereo_content_xml MATCHES "kde_stereo_depth_v1"
+   OR NOT _kwin_stereo_content_xml MATCHES "set_view_source")
     set(KWIN_STEREO_PROTOCOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/wayland/protocols/stereo)
     set(KWIN_STEREO_PROTOCOLS_IN_TREE TRUE)
 endif()

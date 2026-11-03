@@ -643,7 +643,8 @@ void SurfaceState::mergeInto(SurfaceState *target)
     target->renderingIntent = renderingIntent;
     target->alphaMultiplier = alphaMultiplier;
     target->stereoContent = stereoContent;
-    target->stereoContentOneEyeWide = stereoContentOneEyeWide;
+    target->stereoContentOneViewWide = stereoContentOneViewWide;
+    target->stereoViewSource = stereoViewSource;
     target->stereoDesktopDepth = stereoDesktopDepth;
     target->stereoPlace = stereoPlace;
     target->yuvCoefficients = yuvCoefficients;
@@ -703,6 +704,16 @@ void SurfaceInterfacePrivate::applyState(SurfaceState *next)
 
     if (current->buffer) {
         bufferSourceBox = computeBufferSourceBox();
+        if (current->stereoContent == StereoContentSideBySideFull && current->stereoViewSource) {
+            const RectF source = current->bufferTransform.inverted().map(bufferSourceBox, current->buffer->size());
+            const RectF crop = *current->stereoViewSource;
+            if (crop.right() > source.width() / 2 || crop.bottom() > source.height()) {
+                if (stereoContent) {
+                    stereoContent->postBadSource();
+                }
+                return;
+            }
+        }
 
         if (current->viewport.destinationSize.isValid()) {
             surfaceSize = current->viewport.destinationSize;
@@ -711,10 +722,14 @@ void SurfaceInterfacePrivate::applyState(SurfaceState *next)
         } else {
             surfaceSize = current->bufferTransform.map(current->buffer->size() / current->bufferScale);
         }
-        // the surface is one eye wide, its buffer holds both eyes side by side
-        if (!current->viewport.destinationSize.isValid() && current->stereoContentOneEyeWide
+        // the surface is one view wide, its buffer holds both views side by side
+        if (!current->viewport.destinationSize.isValid() && current->stereoContentOneViewWide
             && current->stereoContent == StereoContentSideBySideFull) {
-            surfaceSize.setWidth(surfaceSize.width() / 2);
+            if (current->stereoViewSource) {
+                surfaceSize = current->stereoViewSource->size() / current->bufferScale;
+            } else {
+                surfaceSize.setWidth(surfaceSize.width() / 2);
+            }
         }
         surfaceSize /= serverScale;
 
@@ -1331,6 +1346,11 @@ std::shared_ptr<SyncReleasePoint> SurfaceInterface::bufferReleasePoint() const
 double SurfaceInterface::alphaMultiplier() const
 {
     return d->current->alphaMultiplier;
+}
+
+std::optional<RectF> SurfaceInterface::stereoViewSource() const
+{
+    return d->current->stereoViewSource;
 }
 
 StereoContent SurfaceInterface::stereoContent() const

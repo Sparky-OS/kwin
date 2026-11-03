@@ -103,8 +103,9 @@ struct SurfaceState
     std::shared_ptr<SyncObjReleasePoint> releasePoint;
     double alphaMultiplier = 1;
     StereoContent stereoContent = StereoContentNone;
-    // declared with kde_stereo_content_v1 version 2: a full side-by-side buffer is two eyes of the surface
-    bool stereoContentOneEyeWide = false;
+    // declared with kde_stereo_content_v1 version 2: a full side-by-side buffer holds two views
+    bool stereoContentOneViewWide = false;
+    std::optional<RectF> stereoViewSource;
     // marked with kde_stereo_depth_v1: the pair is the desktop's own depth, not stereo content
     bool stereoDesktopDepth = false;
     // declared with kde_stereo_depth_v1: where a popup surface sits, from -1 to 1 of the user's limits

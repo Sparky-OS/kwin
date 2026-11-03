@@ -61,8 +61,10 @@ SurfaceItemWayland::SurfaceItemWayland(SurfaceInterface *surface, Item *parent)
     SubSurfaceInterface *subsurface = surface->subSurface();
     if (subsurface) {
         setStereoContent(surface->stereoContent());
+        setStereoViewSource(surface->stereoViewSource());
         connect(surface, &SurfaceInterface::stereoContentChanged, this, [this, surface] {
             setStereoContent(surface->stereoContent());
+            setStereoViewSource(surface->stereoViewSource());
         });
         connect(subsurface, &SubSurfaceInterface::positionChanged,
                 this, &SurfaceItemWayland::handleSubSurfacePositionChanged);
@@ -269,7 +271,7 @@ SurfaceItemXwaylandChild::SurfaceItemXwaylandChild(SurfaceInterface *surface, It
 }
 
 // The child window's place in its X11 window. Its buffer can be larger than the child, as it is
-// twice the child's width when it holds both eyes at full size; it is drawn at the child's size.
+// twice the child's width when it holds packed views; it is drawn at the child's size.
 void SurfaceItemXwaylandChild::setChildGeometry(const RectF &geometry)
 {
     setPosition(geometry.topLeft());
@@ -297,7 +299,7 @@ RegionF SurfaceItemXwaylandChild::shapeForSourceBox(const RectF &sourceBox) cons
     RegionF nativeShape = m_nativeShape;
     // The GLX version-4 route keeps a one-eye X window and a twice-wide backing
     // pixmap. Its X shape applies to both views. A packed-raster child instead
-    // has native coordinates spanning both eyes, including independent holes.
+    // has native coordinates spanning both views, including independent holes.
     if (stereoContent() != StereoContentNone
         && bufferSize() == QSize(2 * m_nativeSize.width(), m_nativeSize.height())) {
         nativeShape |= m_nativeShape.translated(m_nativeSize.width(), 0);
@@ -357,7 +359,7 @@ SurfaceItemXwayland::SurfaceItemXwayland(X11Window *window, Item *parent)
 }
 
 // Declared children keep their native buffers and independent place relative to the parent,
-// one view for each eye; the rest of the window is the same in both eyes.
+// Each view fills the child; the rest of the window is copied into both output eyes.
 void SurfaceItemXwayland::updateStereoChildren()
 {
     std::vector<std::unique_ptr<SurfaceItemXwaylandChild>> items;

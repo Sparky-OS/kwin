@@ -39,6 +39,7 @@ private Q_SLOTS:
     void testOneEyeWide();
     void testOneEyeWideViewportDestination();
     void testSubsurface();
+    void testFractionalViewSource();
     void testSetContentInvalidValue();
     void testRemoveOnDestroy();
     void testRecreateAfterDestroy();
@@ -115,7 +116,7 @@ void StereoContentTest::testOneEyeWide_data()
     QTest::addRow("scale 2") << 2;
 }
 
-// From version 2, a full side-by-side surface is one eye wide: its buffer holds both eyes.
+// From version 2, a full side-by-side surface is one eye wide: its buffer holds both views.
 void StereoContentTest::testOneEyeWide()
 {
     QFETCH(int, bufferScale);
@@ -183,6 +184,60 @@ void StereoContentTest::testSubsurface()
     surface->commit(KWayland::Client::Surface::CommitFlag::None);
     QVERIFY(committed.wait());
     QCOMPARE(item->stereoContent(), StereoContentNone);
+}
+
+// The two view lattices stay three native pixels apart even when a crop is
+// only 2.5 pixels wide. Source corners must not be rounded to integer pixels.
+void StereoContentTest::testFractionalViewSource()
+{
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shell(Test::createXdgToplevelSurface(surface.get()));
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
+    QVERIFY(window);
+    std::unique_ptr<KWayland::Client::Surface> child(Test::createSurface());
+    auto subsurface = Test::createSubSurface(child.get(), surface.get());
+    auto viewport = Test::viewporter()->createViewport(*child);
+    viewport->setDestination(QSize(10, 8));
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*child));
+    declaration->set_content(3);
+    Test::render(child.get(), QSize(6, 2), Qt::red);
+    QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    const auto children = window->surfaceItem()->childItems();
+    QCOMPARE(children.size(), 1);
+    auto *item = qobject_cast<SurfaceItem *>(children.front());
+    QVERIFY(item);
+
+    declaration->set_view_source(wl_fixed_from_double(0.25), 0,
+                                wl_fixed_from_double(2.5), wl_fixed_from_int(2));
+    QVERIFY(Test::waylandSync());
+    QCOMPARE(item->eyeQuads(StereoEye::Right).front()[0].u(), 3.0);
+    child->commit(KWayland::Client::Surface::CommitFlag::None);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    const auto left = item->eyeQuads(StereoEye::Left);
+    const auto right = item->eyeQuads(StereoEye::Right);
+    QCOMPARE(left.size(), 1);
+    QCOMPARE(right.size(), 1);
+    QCOMPARE(left.front()[0].u(), 0.25);
+    QCOMPARE(left.front()[1].u(), 2.75);
+    QCOMPARE(right.front()[0].u(), 3.25);
+    QCOMPARE(right.front()[1].u(), 5.75);
+    QCOMPARE(left.front()[2].v(), 2.0);
+    QCOMPARE(left.front()[1].x(), 10.0);
+
+    declaration->set_content(0);
+    child->commit(KWayland::Client::Surface::CommitFlag::None);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    QCOMPARE(item->stereoContent(), StereoContentNone);
+    declaration->set_content(3);
+    child->commit(KWayland::Client::Surface::CommitFlag::None);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    QCOMPARE(item->eyeQuads(StereoEye::Right).front()[0].u(), 3.0);
+    QCOMPARE(item->eyeQuads(StereoEye::Left).front()[1].u(), 3.0);
 }
 
 // A value other than 0 or 3 is read as none.
