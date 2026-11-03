@@ -58,13 +58,15 @@ SurfaceItemWayland::SurfaceItemWayland(SurfaceInterface *surface, Item *parent)
             this, &SurfaceItemWayland::handleSurfaceMappedChanged);
     setVisible(surface->isMapped());
 
+    setStereoViewSource(surface->stereoViewSource());
+    connect(surface, &SurfaceInterface::stereoContentChanged, this, [this, surface] {
+        setStereoViewSource(surface->stereoViewSource());
+    });
     SubSurfaceInterface *subsurface = surface->subSurface();
     if (subsurface) {
         setStereoContent(surface->stereoContent());
-        setStereoViewSource(surface->stereoViewSource());
         connect(surface, &SurfaceInterface::stereoContentChanged, this, [this, surface] {
             setStereoContent(surface->stereoContent());
-            setStereoViewSource(surface->stereoViewSource());
         });
         connect(subsurface, &SubSurfaceInterface::positionChanged,
                 this, &SurfaceItemWayland::handleSubSurfacePositionChanged);
