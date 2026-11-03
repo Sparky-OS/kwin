@@ -125,7 +125,7 @@
   </request>
 </interface>
 
-<interface name="kde_stereo_depth_v1" version="3">
+<interface name="kde_stereo_depth_v1" version="4">
   <description summary="desktop depth of one surface">
     The compositor shows the desktop's own surfaces at depth levels: the
     active window at the screen, the windows lying behind it sunk, menus,

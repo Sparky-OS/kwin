@@ -40,6 +40,9 @@ private Q_SLOTS:
     void testOneEyeWideViewportDestination();
     void testSubsurface();
     void testFractionalViewSource();
+    void testViewSourceSizeAndReset();
+    void testViewSourceInvalid_data();
+    void testViewSourceInvalid();
     void testSetContentInvalidValue();
     void testRemoveOnDestroy();
     void testRecreateAfterDestroy();
@@ -238,6 +241,59 @@ void StereoContentTest::testFractionalViewSource()
     QVERIFY(committed.wait());
     QCOMPARE(item->eyeQuads(StereoEye::Right).front()[0].u(), 3.0);
     QCOMPARE(item->eyeQuads(StereoEye::Left).front()[1].u(), 3.0);
+}
+
+void StereoContentTest::testViewSourceSizeAndReset()
+{
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shell(Test::createXdgToplevelSurface(surface.get()));
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(6, 2), Qt::blue);
+    QVERIFY(window);
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
+    declaration->set_content(3);
+    declaration->set_view_source(wl_fixed_from_double(.25), 0, wl_fixed_from_double(2.5), wl_fixed_from_int(2));
+    QSignalSpy committed(window->surface(), &SurfaceInterface::committed);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    QCOMPARE(window->surface()->size(), QSizeF(2.5, 2));
+    QCOMPARE(window->surfaceItem()->eyeQuads(StereoEye::Right).front()[0].u(), 3.25);
+    declaration->set_view_source(wl_fixed_from_int(-1), wl_fixed_from_int(-1), wl_fixed_from_int(-1), wl_fixed_from_int(-1));
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    QCOMPARE(window->surface()->size(), QSizeF(3, 2));
+    QCOMPARE(window->surfaceItem()->eyeQuads(StereoEye::Right).front()[0].u(), 3.0);
+    declaration->set_view_source(wl_fixed_from_double(.25), 0, wl_fixed_from_double(2.5), wl_fixed_from_int(2));
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    declaration.reset();
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(committed.wait());
+    QCOMPARE(window->surface()->size(), QSizeF(6, 2));
+    QVERIFY(!window->surface()->stereoViewSource());
+}
+
+void StereoContentTest::testViewSourceInvalid_data()
+{
+    QTest::addColumn<RectF>("crop");
+    QTest::addRow("negative origin") << RectF(-.25, 0, 2, 2);
+    QTest::addRow("zero width") << RectF(0, 0, 0, 2);
+    QTest::addRow("past right eye edge") << RectF(.25, 0, 3, 2);
+    QTest::addRow("past bottom edge") << RectF(0, .25, 3, 2);
+}
+
+void StereoContentTest::testViewSourceInvalid()
+{
+    QFETCH(RectF, crop);
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shell(Test::createXdgToplevelSurface(surface.get()));
+    QVERIFY(Test::renderAndWaitForShown(surface.get(), QSize(6, 2), Qt::blue));
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*surface));
+    QSignalSpy error(Test::waylandConnection(), &KWayland::Client::ConnectionThread::errorOccurred);
+    declaration->set_content(3);
+    declaration->set_view_source(wl_fixed_from_double(crop.x()), wl_fixed_from_double(crop.y()),
+                                wl_fixed_from_double(crop.width()), wl_fixed_from_double(crop.height()));
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(error.wait());
 }
 
 // A value other than 0 or 3 is read as none.
