@@ -6,6 +6,7 @@
 
 #include "scene/stereodepth.h"
 
+#include "core/backendoutput.h"
 #include "core/output.h"
 #include "effect/effecthandler.h"
 #include "options.h"
