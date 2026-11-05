@@ -13,6 +13,8 @@
 #include "window.h"
 #include "workspace.h"
 
+#include <stereo-policy.h>
+
 #include <QEasingCurve>
 
 #include <algorithm>
@@ -24,6 +26,9 @@ namespace KWin
 
 // the width of the view the limits are given for
 static constexpr qreal s_referenceWidth = 1920;
+// the defaults of SunkLimit and PoppedLimit in kwin.kcfg: the depth libstereo-policy gives the reference monitor
+static constexpr qreal s_referenceSunk = 10;
+static constexpr qreal s_referencePopped = 4;
 
 // how long a change of level lasts at the default animation speed: towards the viewer quickly, so
 // that nothing is drawn behind what it is over for more than an instant, and away from it gently
@@ -278,7 +283,51 @@ qreal StereoDepth::effectSunkLimit()
 qreal StereoDepth::levelDepth(const Window *window)
 {
     const qreal level = StereoDepth::level(window);
-    return level * (level > 0 ? options->stereoPoppedLimit() : options->stereoSunkLimit());
+    const LogicalOutput *output = window->output();
+    return level * (level > 0 ? poppedLimit(output) : sunkLimit(output));
+}
+
+static bool displayDepth(const LogicalOutput *output, stereo_policy_depth *depth)
+{
+    if (!output || !output->backendOutput() || !output->backendOutput()->currentMode()) {
+        return false;
+    }
+    const QSize mm = output->physicalSize();
+    if (mm.isEmpty()) {
+        return false;
+    }
+    const OutputModeline::Flags flags = output->backendOutput()->currentMode()->flags();
+    int kind = STEREO_POLICY_DISPLAY_FRAMED;
+    if (flags & (OutputModeline::Flag::Stereo3DAnaglyphModern | OutputModeline::Flag::Stereo3DAnaglyphCrt)) {
+        kind = STEREO_POLICY_DISPLAY_ANAGLYPH;
+    } else if (flags & OutputModeline::Flag::VirtualStereo) {
+        kind = STEREO_POLICY_DISPLAY_HEADSET;
+    }
+    // The person's choice is the limits themselves, with the factor on top of them: strength 100 and no override, so
+    // the library returns the display's own depth.
+    return stereo_policy_display_depth(kind, mm.width(), mm.height(), 100, 0, 0, depth) == 0 && depth->size_known;
+}
+
+qreal StereoDepth::sunkFactor(const LogicalOutput *output)
+{
+    stereo_policy_depth depth{};
+    return displayDepth(output, &depth) && depth.sunk_px > 0 ? depth.sunk_px / s_referenceSunk : 1.0;
+}
+
+qreal StereoDepth::poppedFactor(const LogicalOutput *output)
+{
+    stereo_policy_depth depth{};
+    return displayDepth(output, &depth) && depth.popped_px > 0 ? depth.popped_px / s_referencePopped : 1.0;
+}
+
+qreal StereoDepth::sunkLimit(const LogicalOutput *output)
+{
+    return options->stereoSunkLimit() * sunkFactor(output);
+}
+
+qreal StereoDepth::poppedLimit(const LogicalOutput *output)
+{
+    return options->stereoPoppedLimit() * poppedFactor(output);
 }
 
 qreal StereoDepth::coveredDepth(const RectF &area, const Window *window)
@@ -349,10 +398,21 @@ int StereoDepth::eyeShift(int parallax, StereoEye eye)
     }
 }
 
+int StereoDepth::maxEyeShift(int viewWidth, const LogicalOutput *output)
+{
+    const qreal limit = std::max(sunkLimit(output), poppedLimit(output));
+    return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
+}
+
 int StereoDepth::maxEyeShift(int viewWidth)
 {
     const qreal limit = std::max(options->stereoSunkLimit(), options->stereoPoppedLimit());
     return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
+}
+
+qreal StereoDepth::wallpaperDepth(const LogicalOutput *output)
+{
+    return -sunkLimit(output);
 }
 
 qreal StereoDepth::wallpaperDepth()

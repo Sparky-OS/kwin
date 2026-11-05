@@ -371,7 +371,7 @@ public:
      * shown in depth now (@a awake) and which of its edges lie on its output's edge. Only changes
      * are sent.
      */
-    void setStereoDepthState(bool awake, Qt::Edges outputEdges);
+    void setStereoDepthState(bool awake, Qt::Edges outputEdges, qreal sunk, qreal popped);
 
     /**
      * Returns the current release point for the buffer on this surface. The buffer keeps the

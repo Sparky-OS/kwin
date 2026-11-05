@@ -1373,12 +1373,12 @@ bool SurfaceInterface::followsStereoDepth() const
     return !d->stereoDepths.isEmpty();
 }
 
-void SurfaceInterface::setStereoDepthState(bool awake, Qt::Edges outputEdges)
+void SurfaceInterface::setStereoDepthState(bool awake, Qt::Edges outputEdges, qreal sunk, qreal popped)
 {
-    const auto state = std::make_pair(awake, uint32_t(outputEdges.toInt()));
+    const SurfaceInterfacePrivate::StereoDepthState state{awake, uint32_t(outputEdges.toInt()), sunk, popped};
     d->stereoDepthState = state;
     for (StereoDepthSurfaceV1 *depth : std::as_const(d->stereoDepths)) {
-        depth->sendState(state.first, state.second);
+        depth->sendState(state.awake, state.outputEdges, state.sunk, state.popped);
     }
 }
 

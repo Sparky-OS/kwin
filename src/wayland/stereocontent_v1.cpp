@@ -15,7 +15,7 @@
 namespace KWin
 {
 
-static constexpr uint32_t s_version = 4;
+static constexpr uint32_t s_version = 5;
 
 static constexpr StereoContent toStereoContent(uint32_t content)
 {
@@ -52,7 +52,7 @@ void StereoContentManagerV1::kde_stereo_content_manager_v1_get_depth(Resource *r
     Q_EMIT surf->stereoDepthFollowed();
     // a surface whose state is known tells a new follower at once
     if (const auto state = SurfaceInterfacePrivate::get(surf)->stereoDepthState) {
-        depth->sendState(state->first, state->second);
+        depth->sendState(state->awake, state->outputEdges, state->sunk, state->popped);
     }
 }
 
@@ -161,14 +161,21 @@ quint64 StereoDepthSurfaceV1::placeSerial() const
     return m_placeSerial;
 }
 
-void StereoDepthSurfaceV1::sendState(bool awake, uint32_t outputEdges)
+void StereoDepthSurfaceV1::sendState(bool awake, uint32_t outputEdges, qreal sunk, qreal popped)
 {
-    const auto state = std::make_pair(awake, outputEdges);
-    if (!m_surface || m_sent == state) {
+    if (!m_surface) {
         return;
     }
-    m_sent = state;
-    send_depth_state(awake ? 1 : 0, outputEdges);
+    const auto state = std::make_pair(awake, outputEdges);
+    if (m_sent != state) {
+        m_sent = state;
+        send_depth_state(awake ? 1 : 0, outputEdges);
+    }
+    const auto limits = std::make_pair(sunk, popped);
+    if (m_sentLimits != limits) {
+        m_sentLimits = limits;
+        send_depth_limits(wl_fixed_from_double(sunk), wl_fixed_from_double(popped));
+    }
 }
 
 void StereoDepthSurfaceV1::kde_stereo_depth_v1_destroy_resource(Resource *resource)

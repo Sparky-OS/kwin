@@ -395,6 +395,8 @@ if(KWIN_BUILD_GLOBALSHORTCUTS)
 endif()
 
 pkg_check_modules(libdisplayinfo REQUIRED IMPORTED_TARGET libdisplay-info>=0.2.0)
+pkg_check_modules(StereoPolicy REQUIRED IMPORTED_TARGET stereo-policy>=1.15.0)
+add_feature_info(StereoPolicy StereoPolicy_FOUND "The depth of a display, one source for the desktop and the browser: libstereo-policy")
 add_feature_info(libdisplayinfo libdisplayinfo_FOUND "EDID and DisplayID library: https://gitlab.freedesktop.org/emersion/libdisplay-info")
 if (libdisplayinfo_VERSION VERSION_GREATER_EQUAL 0.4.0)
     set(HAVE_LIBDISPLAY_INFO_CTA_VIC 1)

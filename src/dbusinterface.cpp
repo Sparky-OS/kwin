@@ -560,7 +560,7 @@ DBusWallpaperCuts StereoDepthDBusInterface::WallpaperCutsAt(double backgroundDep
     const QList<LogicalOutput *> outputs = workspace()->outputs();
     for (const LogicalOutput *output : outputs) {
         if (!output->isPlaceholder()) {
-            cuts.insert(output->name(), StereoDepth::wallpaperCut(output, backgroundDepth));
+            cuts.insert(output->name(), StereoDepth::wallpaperCut(output, backgroundDepth * StereoDepth::sunkFactor(output)));
         }
     }
     return cuts;

@@ -6,7 +6,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-<interface name="kde_stereo_content_manager_v1" version="4">
+<interface name="kde_stereo_content_manager_v1" version="5">
   <description summary="declare stereo content of surfaces">
     A program tells the compositor that a surface's picture holds two
     views packed full side by side, with the left view first.
@@ -52,7 +52,7 @@
   </request>
 </interface>
 
-<interface name="kde_stereo_content_v1" version="4">
+<interface name="kde_stereo_content_v1" version="5">
   <description summary="stereo content declaration of one surface">
     The declaration of one surface, created with
     kde_stereo_content_manager_v1.create.
@@ -125,7 +125,7 @@
   </request>
 </interface>
 
-<interface name="kde_stereo_depth_v1" version="4">
+<interface name="kde_stereo_depth_v1" version="5">
   <description summary="desktop depth of one surface">
     The compositor shows the desktop's own surfaces at depth levels: the
     active window at the screen, the windows lying behind it sunk, menus,
@@ -141,7 +141,13 @@
       stereo content;
     - a popup surface may declare its place.
 
-    The depth limits are the user's settings; the client reads them itself.
+    The depth limits are the user's settings, built on the display they are
+    shown on: since version 5 the compositor tells the client the limits of
+    the output the surface mainly sits on (depth_limits), the same limits it
+    applies to its own surfaces there, so that an element drawn inside the
+    surface at the popped limit and a menu the compositor pops lie at the same
+    depth on the same screen. Before version 5 the client reads the user's
+    settings itself.
 
     A surface may have any number of these objects. The depth state is sent
     to each of them. The surface is marked as desktop depth while any of
@@ -185,6 +191,24 @@
     </description>
     <arg name="awake" type="uint" summary="nonzero while depth may be shown inside the surface"/>
     <arg name="output_edges" type="uint" enum="edge" summary="the surface's edges on its output's edge"/>
+  </event>
+
+  <event name="depth_limits" since="5">
+    <description summary="The depth limits on the surface's output">
+      Sent after depth_state once the object is created and again whenever
+      either value changes, such as when the surface moves to another output,
+      the output's mode or kind changes, or the user changes the settings.
+
+      sunk and popped are how far behind and in front of the screen the
+      compositor lets anything go on the output the surface mainly sits on,
+      in pixels of a view 1920 wide. They are the user's limits built on the
+      output's display: a headset gets more separation, a framed 3D screen
+      less (the display's kind and physical size, libstereo-policy). A
+      surface scales them to its own view's width, and nothing it draws
+      reaches beyond them.
+    </description>
+    <arg name="sunk" type="fixed" summary="the sunk limit, pixels of a view 1920 wide"/>
+    <arg name="popped" type="fixed" summary="the popped limit, pixels of a view 1920 wide"/>
   </event>
 
   <request name="set_desktop_depth">

@@ -63,7 +63,7 @@ public:
     quint64 placeSerial() const;
 
     // sends the state unless it is the one this object last received
-    void sendState(bool awake, uint32_t outputEdges);
+    void sendState(bool awake, uint32_t outputEdges, qreal sunk, qreal popped);
 
 private:
     void kde_stereo_depth_v1_destroy_resource(Resource *resource) override;
@@ -77,6 +77,7 @@ private:
     std::optional<qreal> m_place;
     quint64 m_placeSerial = 0;
     std::optional<std::pair<bool, uint32_t>> m_sent;
+    std::optional<std::pair<qreal, qreal>> m_sentLimits;
 };
 
 }

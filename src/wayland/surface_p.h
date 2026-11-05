@@ -220,7 +220,14 @@ public:
     StereoContentSurfaceV1 *stereoContent = nullptr;
     QList<StereoDepthSurfaceV1 *> stereoDepths;
     // the depth state the compositor last gave the surface: awake and the edges on the output's edge
-    std::optional<std::pair<bool, uint32_t>> stereoDepthState;
+    struct StereoDepthState
+    {
+        bool awake = false;
+        uint32_t outputEdges = 0;
+        qreal sunk = 0;
+        qreal popped = 0;
+    };
+    std::optional<StereoDepthState> stereoDepthState;
     // takes the desktop depth mark and the place from the surface's kde_stereo_depth_v1 objects
     void updatePendingStereoDepth();
     FifoV1Surface *fifoSurface = nullptr;

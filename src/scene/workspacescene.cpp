@@ -759,7 +759,7 @@ Region WorkspaceScene::collectDamage()
         if (painted_screen && painted_screen->hasStereoEyes() && StereoDepth::isEnabled()) {
             // what is damaged is drawn at its level in each eye, a little to either side
             const int width = painted_delegate->deviceRect().width();
-            const int shift = StereoDepth::maxEyeShift(width);
+            const int shift = StereoDepth::maxEyeShift(width, painted_screen);
             // the pointer draws at the level of what is under it, which can change while it stays still
             int &pointerParallax = m_pointerParallax[painted_screen];
             const int parallax = this->pointerParallax();
@@ -847,7 +847,7 @@ void WorkspaceScene::paintOverlay(const RenderTarget &renderTarget, const Render
         const int width = painted_delegate->deviceRect().width();
         const int shift = StereoDepth::eyeShift(pointerParallax(), eye);
         data.translate(shift / viewport.scale());
-        bounds.adjust(-StereoDepth::maxEyeShift(width), 0, StereoDepth::maxEyeShift(width), 0);
+        bounds.adjust(-StereoDepth::maxEyeShift(width, painted_screen), 0, StereoDepth::maxEyeShift(width, painted_screen), 0);
     }
     const Region deviceRepaint = deviceRegion & bounds;
     if (deviceRepaint.isEmpty()) {
@@ -1248,7 +1248,7 @@ int WorkspaceScene::wallpaperParallax() const
     if (!painted_screen || !painted_screen->hasStereoEyes() || !StereoDepth::isEnabled()) {
         return 0;
     }
-    return StereoDepth::parallax(StereoDepth::wallpaperDepth(), painted_delegate->deviceRect().width());
+    return StereoDepth::parallax(StereoDepth::wallpaperDepth(painted_screen), painted_delegate->deviceRect().width());
 }
 
 // Draws @a part of @a windowItem's items on its own, where it lies in the window, with the window's

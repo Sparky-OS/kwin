@@ -120,6 +120,23 @@ public:
     static qreal levelDepth(const Window *window);
 
     /**
+     * The factor that turns the person's limits (SunkLimit and PoppedLimit, pixels of a view 1920 wide) into the limits that
+     * suit @a output: libstereo-policy's stereo_policy_display_depth() reads the output's kind (a framed screen, an
+     * anaglyph output, a headset: VirtualStereo) and physical size, and returns the depth of that display against the
+     * reference monitor's. The browser asks the same function for its WebXR flat modes, so a page and the desktop agree
+     * on the same screen. The person's choice stays on top: the limits are theirs, the factor builds on the display.
+     * 1 when the output reports no physical size or is not an output of KWin's.
+     */
+    static qreal sunkFactor(const LogicalOutput *output);
+    static qreal poppedFactor(const LogicalOutput *output);
+
+    /**
+     * The limits of @a output in pixels of a view 1920 wide: the person's limits times the output's factor.
+     */
+    static qreal sunkLimit(const LogicalOutput *output);
+    static qreal poppedLimit(const LogicalOutput *output);
+
+    /**
      * The depth of the nearest thing beneath @a window in the stack that lies under @a area (in
      * logical coordinates), in pixels of a view 1920 wide, or the lowest qreal when nothing does.
      * A piece of @a window that is drawn over @a area must not go behind it: nothing is behind
@@ -162,6 +179,7 @@ public:
      * The farthest any window's copy moves in one eye on a view that is @a viewWidth pixels wide.
      */
     static int maxEyeShift(int viewWidth);
+    static int maxEyeShift(int viewWidth, const LogicalOutput *output);
 
     /**
      * The depth of a wallpaper in pixels of a view 1920 wide: the sunk limit, the deepest layer,
@@ -169,6 +187,7 @@ public:
      * there too.
      */
     static qreal wallpaperDepth();
+    static qreal wallpaperDepth(const LogicalOutput *output);
 
     /**
      * How many columns are cut from each side of a wallpaper whose copies are @a parallax pixels

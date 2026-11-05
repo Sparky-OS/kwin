@@ -1084,12 +1084,18 @@ public:
     bool awake = false;
     uint32_t outputEdges = 0;
     int states = 0;
+    // the last depth_limits (pixels of a view 1920 wide), and how many arrived
+    double sunk = 0;
+    double popped = 0;
+    int limits = 0;
 
 Q_SIGNALS:
     void stateReceived();
+    void limitsReceived();
 
 protected:
     void kde_stereo_depth_v1_depth_state(uint32_t awake, uint32_t output_edges) override;
+    void kde_stereo_depth_v1_depth_limits(wl_fixed_t sunk, wl_fixed_t popped) override;
 };
 
 class WlKeyboard;

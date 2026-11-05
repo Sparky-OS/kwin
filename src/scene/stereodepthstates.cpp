@@ -8,6 +8,7 @@
 
 #include "core/backendoutput.h"
 #include "core/output.h"
+#include "options.h"
 #include "scene/stereodepth.h"
 #include "wayland/surface.h"
 #include "window.h"
@@ -35,6 +36,8 @@ StereoDepthStates::StereoDepthStates(QObject *parent)
     };
     connect(ws, &Workspace::outputAdded, this, watchOutput);
     connect(ws, &Workspace::outputsChanged, this, &StereoDepthStates::scheduleUpdate);
+    // the person changes the limits
+    connect(options, &Options::stereoDepthChanged, this, &StereoDepthStates::scheduleUpdate);
     const auto outputs = ws->outputs();
     for (LogicalOutput *output : outputs) {
         watchOutput(output);
@@ -89,9 +92,12 @@ void StereoDepthStates::update()
         }
         const bool awake = StereoDepth::isAwake(window);
         const Qt::Edges edges = StereoDepth::outputEdges(window);
-        surface->traverseTree([awake, edges](SurfaceInterface *child) {
+        // the limits of the output the window mainly sits on: the person's, built on that display
+        const qreal sunk = StereoDepth::sunkLimit(window->output());
+        const qreal popped = StereoDepth::poppedLimit(window->output());
+        surface->traverseTree([awake, edges, sunk, popped](SurfaceInterface *child) {
             if (child->followsStereoDepth()) {
-                child->setStereoDepthState(awake, edges);
+                child->setStereoDepthState(awake, edges, sunk, popped);
             }
         });
     }

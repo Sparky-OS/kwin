@@ -2088,6 +2088,14 @@ void StereoDepthV1::kde_stereo_depth_v1_depth_state(uint32_t awake, uint32_t out
     Q_EMIT stateReceived();
 }
 
+void StereoDepthV1::kde_stereo_depth_v1_depth_limits(wl_fixed_t sunk, wl_fixed_t popped)
+{
+    this->sunk = wl_fixed_to_double(sunk);
+    this->popped = wl_fixed_to_double(popped);
+    limits++;
+    Q_EMIT limitsReceived();
+}
+
 FifoManagerV1::FifoManagerV1(::wl_registry *registry, uint32_t id, int version)
     : QtWayland::wp_fifo_manager_v1(registry, id, version)
 {

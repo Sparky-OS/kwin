@@ -48,6 +48,7 @@ private Q_SLOTS:
     void testPopupIsAwake();
     void testDesktopDepthIsNotStereoContent();
     void testDeclaredPlace();
+    void testLimitsFollowTheOutput();
     void testInertWithoutSurface();
 };
 
@@ -142,7 +143,7 @@ void StereoDepthExchangeTest::init()
         .modes = {plainMode(), stereoMode()},
     }});
     QVERIFY(Test::setupWaylandConnection(Test::AdditionalWaylandInterface::StereoContentV1));
-    QCOMPARE(Test::stereoContentManager()->version(), 3u);
+    QCOMPARE(Test::stereoContentManager()->version(), 5u);
     QVERIFY(stereoOutput(true));
     options->setStereoSunkLimit(10);
     options->setStereoPoppedLimit(4);
@@ -388,6 +389,63 @@ void StereoDepthExchangeTest::testDeclaredPlace()
 }
 
 // Once its surface is gone, an object's requests are ignored.
+// The limits the program is told are the user's limits built on the display of the output the surface sits on
+// (libstereo-policy): an output of no known size gives the user's limits as they are, a large framed screen
+// less separation than a small one, a headset more than either, and the user's own choice stays on top.
+void StereoDepthExchangeTest::testLimitsFollowTheOutput()
+{
+    struct Limits
+    {
+        double sunk;
+        double popped;
+    };
+    // a window on an output of the given physical size and mode kind; the limits it is told
+    auto limitsOn = [](const QSize &mm, OutputModeline::Flags kind) {
+        Test::setOutputConfig({Test::OutputInfo{
+            .geometry = Rect(QPoint(), s_outputSize),
+            .physicalSizeInMM = mm,
+            .modes = {plainMode(), OutputModeline(s_outputSize, 60000, OutputModeline::Flag::Stereo3DSideBySideFull | kind)},
+        }});
+        if (!stereoOutput(true)) {
+            return Limits{-1, -1};
+        }
+        workspace()->setActiveOutput(QPoint(640, 512));
+        auto window = createWindow(QPointF(100, 100));
+        if (!window->window) {
+            return Limits{-1, -1};
+        }
+        auto depth = follow(window->surface.get());
+        if (!waitFor(depth.get(), [&depth]() {
+                return depth->limits > 0;
+            })) {
+            return Limits{-1, -1};
+        }
+        return Limits{depth->sunk, depth->popped};
+    };
+
+    // no physical size: the limits as the user set them
+    const Limits unknown = limitsOn(QSize(), {});
+    QCOMPARE(unknown.sunk, 10.0);
+    QCOMPARE(unknown.popped, 4.0);
+    // the same screen size always gives the same limits, and the sunk and popped limits scale together
+    const Limits monitor = limitsOn(QSize(531, 299), {});
+    QVERIFY(monitor.sunk > 0);
+    QVERIFY(qAbs(monitor.popped / monitor.sunk - 0.4) < 0.01);
+    // a large television seen from further away is given less separation than a small monitor
+    const Limits television = limitsOn(QSize(1440, 810), {});
+    QVERIFY(television.sunk > 0 && television.sunk < monitor.sunk);
+    // a headset more than either
+    const Limits headset = limitsOn(QSize(531, 299), OutputModeline::Flag::VirtualStereo);
+    QVERIFY(headset.sunk > monitor.sunk);
+    QVERIFY(qAbs(headset.popped / headset.sunk - 0.4) < 0.01);
+    // the user's choice stays on top: doubling the limits doubles what the display gives
+    options->setStereoSunkLimit(20);
+    options->setStereoPoppedLimit(8);
+    const Limits doubled = limitsOn(QSize(531, 299), {});
+    QVERIFY(qAbs(doubled.sunk - 2 * monitor.sunk) < 0.01);
+    QVERIFY(qAbs(doubled.popped - 2 * monitor.popped) < 0.01);
+}
+
 void StereoDepthExchangeTest::testInertWithoutSurface()
 {
     auto window = createWindow(QPointF(100, 100));

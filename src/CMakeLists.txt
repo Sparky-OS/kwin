@@ -292,6 +292,7 @@ target_link_libraries(kwin
         Threads::Threads
         lcms2::lcms2
         PkgConfig::libdisplayinfo
+        PkgConfig::StereoPolicy
 )
 
 if (TARGET K::KGlobalAccelD)
