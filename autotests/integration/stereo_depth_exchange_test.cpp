@@ -401,12 +401,16 @@ void StereoDepthExchangeTest::testLimitsFollowTheOutput()
     };
     // a window on an output of the given physical size and mode kind; the limits it is told
     auto limitsOn = [](const QSize &mm, OutputModeline::Flags kind) {
+        const OutputModeline mode(s_outputSize, 60000, OutputModeline::Flag::Stereo3DSideBySideFull | kind);
         Test::setOutputConfig({Test::OutputInfo{
             .geometry = Rect(QPoint(), s_outputSize),
             .physicalSizeInMM = mm,
-            .modes = {plainMode(), OutputModeline(s_outputSize, 60000, OutputModeline::Flag::Stereo3DSideBySideFull | kind)},
+            .modes = {plainMode(), mode},
         }});
-        if (!stereoOutput(true)) {
+        OutputConfiguration configuration;
+        configuration.changeSet(workspace()->outputs().front()->backendOutput())->currentMode = mode;
+        workspace()->applyOutputConfiguration(configuration);
+        if (!Test::waylandSync() || !workspace()->outputs().front()->hasStereoEyes()) {
             return Limits{-1, -1};
         }
         workspace()->setActiveOutput(QPoint(640, 512));
