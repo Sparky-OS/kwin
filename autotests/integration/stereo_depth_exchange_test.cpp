@@ -390,8 +390,8 @@ void StereoDepthExchangeTest::testDeclaredPlace()
 
 // Once its surface is gone, an object's requests are ignored.
 // The limits the program is told are the user's limits built on the display of the output the surface sits on
-// (libstereo-policy): an output of no known size gives the user's limits as they are, a large framed screen
-// less separation than a small one, a headset more than either, and the user's own choice stays on top.
+// (libstereo-policy): an output of no known size gives the user's limits as they are, a screen of another size and
+// distance another angle-keeping value, a headset more than a framed screen, and the user's own choice stays on top.
 void StereoDepthExchangeTest::testLimitsFollowTheOutput()
 {
     struct Limits
@@ -431,12 +431,14 @@ void StereoDepthExchangeTest::testLimitsFollowTheOutput()
     const Limits monitor = limitsOn(QSize(531, 299), {});
     QVERIFY(monitor.sunk > 0);
     QVERIFY(qAbs(monitor.popped / monitor.sunk - 0.4) < 0.01);
-    // a large television seen from further away is given less separation than a small monitor
+    // the display's size and the distance it is seen from matter: a large television, seen from further away, keeps the
+    // angle between the eyes' copies (its pixels are larger, so it takes more of them)
     const Limits television = limitsOn(QSize(1440, 810), {});
-    QVERIFY(television.sunk > 0 && television.sunk < monitor.sunk);
+    QVERIFY(television.sunk > monitor.sunk);
     // a headset more than either
     const Limits headset = limitsOn(QSize(531, 299), OutputModeline::Flag::VirtualStereo);
     QVERIFY(headset.sunk > monitor.sunk);
+    QVERIFY(headset.sunk > television.sunk);
     QVERIFY(qAbs(headset.popped / headset.sunk - 0.4) < 0.01);
     // the user's choice stays on top: doubling the limits doubles what the display gives
     options->setStereoSunkLimit(20);
