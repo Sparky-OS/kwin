@@ -67,6 +67,12 @@ static bool isPopup(const Window *window)
         || window->isOnScreenDisplay() || window->isAppletPopup() || window->isPopupWindow();
 }
 
+// what the panel shell shows to be noticed, not to be worked in: notifications and on-screen displays
+static bool isAlert(const Window *window)
+{
+    return window->isNotification() || window->isCriticalNotification() || window->isOnScreenDisplay();
+}
+
 static Role roleOf(const Window *window);
 
 static bool isOnStage(const Window *window, const LogicalOutput *output)
@@ -169,6 +175,10 @@ qreal StereoDepth::level(const Window *window)
         if (const auto place = declaredPlace(window)) {
             // where the program declared it, under the rules below
             level = std::clamp(*place, -1.0, 1.0);
+        } else if (isAlert(window)) {
+            // a notification or an on-screen display is the nearest thing on the output, at the
+            // popped limit whatever else is popped: the share below is for what is worked in
+            level = 1;
         } else {
             // the popped limit is shared by what is popped over each other, the topmost at the
             // limit; a popup with a declared place takes no share
@@ -176,7 +186,7 @@ qreal StereoDepth::level(const Window *window)
             int below = 0;
             bool found = false;
             for (const Window *other : stack) {
-                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other) && !declaredPlace(other)) {
+                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other) && !declaredPlace(other) && !isAlert(other)) {
                     count++;
                     found |= other == window;
                     below += !found;
