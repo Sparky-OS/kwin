@@ -102,6 +102,34 @@ KCM.SimpleKCM {
             text: i18n("Menus, dialogs and tooltips of the active window come forward by up to this much. More pop-out: things near the screen's edges and long reading get harder.")
         }
 
+        RowLayout {
+            Kirigami.FormData.label: i18nc("@label:slider", "Popup border:")
+            QQC2.Slider {
+                id: popupBorderSlider
+                from: 0
+                to: 60
+                stepSize: 1
+                snapMode: QQC2.Slider.SnapAlways
+                value: kcm.settings.popupBorder
+                onMoved: kcm.settings.popupBorder = value
+                KCM.SettingStateBinding {
+                    configObject: kcm.settings
+                    settingName: "PopupBorder"
+                }
+            }
+            QQC2.Label {
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 4
+                text: popupBorderSlider.value === 0 ? i18nc("@label no border", "Off") : i18ncp("@label pixels", "%1 pixel", "%1 pixels", popupBorderSlider.value)
+            }
+        }
+        QQC2.Label {
+            Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+            wrapMode: Text.Wrap
+            font: Kirigami.Theme.smallFont
+            text: i18n("Menus, tooltips and notifications on a screen that shows 3D keep at least this far from the screen's edges, so a popped-out menu is never cut by the edge.")
+        }
+
         QQC2.Label {
             Kirigami.FormData.isSection: true
             Layout.fillWidth: true

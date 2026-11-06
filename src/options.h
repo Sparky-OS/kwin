@@ -651,6 +651,11 @@ public:
      */
     qreal stereoSunkLimit() const;
     qreal stereoPoppedLimit() const;
+    /**
+     * The invisible border, in logical pixels, that keeps popups away from the edges of an output that shows stereo 3D.
+     * Zero switches it off.
+     */
+    qreal stereoPopupBorder() const;
     qreal stereoEffectSunkLimit() const;
     qreal stereoEffectPoppedLimit() const;
     bool interactiveWindowMoveEnabled() const;
@@ -717,6 +722,7 @@ public:
     void setAllowTearing(bool allow);
     void setStereoSunkLimit(qreal limit);
     void setStereoPoppedLimit(qreal limit);
+    void setStereoPopupBorder(qreal border);
     void setStereoEffectSunkLimit(qreal limit);
     void setStereoEffectPoppedLimit(qreal limit);
     void setInteractiveWindowMoveEnabled(bool set);
@@ -971,6 +977,7 @@ private:
     bool m_allowTearing = true;
     qreal m_stereoSunkLimit = 10;
     qreal m_stereoPoppedLimit = 4;
+    qreal m_stereoPopupBorder = 10;
     qreal m_stereoEffectSunkLimit = 30;
     qreal m_stereoEffectPoppedLimit = 12;
     bool m_interactiveWindowMoveEnabled = true;

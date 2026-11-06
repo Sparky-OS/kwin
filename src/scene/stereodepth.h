@@ -115,6 +115,28 @@ public:
     static qreal effectSunkLimit();
 
     /**
+     * The invisible border that keeps popups off the edges of an output that shows stereo 3D (the person's PopupBorder,
+     * default 10, in logical pixels like every other KWin geometry: on an output of scale 2 it is 20 device pixels). A
+     * popped thing that touches an output's edge is flattened to the screen's level (see above), so the border is the gap
+     * that makes the touch not happen. It is zero on an output that does not show 3D, and when the person set it to zero.
+     * This one function is the scope: change it to change where the border applies.
+     */
+    static qreal popupBorder(const LogicalOutput *output);
+
+    /**
+     * @a area (a placement area, a client area) with the border taken off the sides where @a area meets @a output's own
+     * edge; a side next to a panel keeps the panel's edge. An axis on which the border would leave less than
+     * @a minimum (the size of the popup, when known) keeps @a area as it is, so a popup that cannot fit stays where stock
+     * KWin puts it, and stays at the screen's level by the edge rule.
+     */
+    static RectF popupArea(const RectF &area, const LogicalOutput *output, const QSizeF &minimum = QSizeF());
+
+    /**
+     * @a geometry moved (not resized) into popupArea(@a area, @a output, geometry.size()) as far as needed.
+     */
+    static RectF keepPopupInside(const RectF &geometry, const RectF &area, const LogicalOutput *output);
+
+    /**
      * The depth of @a window's level in pixels of a view 1920 wide, positive in front of the screen.
      */
     static qreal levelDepth(const Window *window);

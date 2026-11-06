@@ -15,6 +15,11 @@
       <min>0</min>
       <max>12</max>
     </entry>
+    <entry name="PopupBorder" type="Double">
+      <default>10</default>
+      <min>0</min>
+      <max>60</max>
+    </entry>
     <entry name="EffectSunkLimit" type="Double">
       <default>30</default>
       <min>0</min>

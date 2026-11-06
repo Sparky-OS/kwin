@@ -623,6 +623,19 @@ void Options::setStereoPoppedLimit(qreal limit)
     }
 }
 
+qreal Options::stereoPopupBorder() const
+{
+    return m_stereoPopupBorder;
+}
+
+void Options::setStereoPopupBorder(qreal border)
+{
+    if (border != m_stereoPopupBorder) {
+        m_stereoPopupBorder = border;
+        Q_EMIT stereoDepthChanged();
+    }
+}
+
 qreal Options::stereoEffectSunkLimit() const
 {
     return m_stereoEffectSunkLimit;
@@ -810,6 +823,7 @@ void Options::syncFromKcfgc()
     setAllowTearing(m_settings->allowTearing());
     setStereoSunkLimit(m_settings->sunkLimit());
     setStereoPoppedLimit(m_settings->poppedLimit());
+    setStereoPopupBorder(m_settings->popupBorder());
     setStereoEffectSunkLimit(m_settings->effectSunkLimit());
     setStereoEffectPoppedLimit(m_settings->effectPoppedLimit());
     setInteractiveWindowMoveEnabled(m_settings->interactiveWindowMoveEnabled());

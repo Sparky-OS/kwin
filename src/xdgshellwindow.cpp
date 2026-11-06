@@ -20,6 +20,7 @@
 #include "input.h"
 #include "killprompt.h"
 #include "placement.h"
+#include "scene/stereodepth.h"
 #include "tiles/tilemanager.h"
 #include "utils/subsurfacemonitor.h"
 #include "virtualdesktops.h"
@@ -339,7 +340,15 @@ void XdgSurfaceWindow::installPlasmaShellSurface(PlasmaShellSurfaceInterface *sh
 
     auto updatePosition = [this, shellSurface] {
         if (!isInteractiveMoveResize()) {
-            place(shellSurface->position());
+            QPointF position = shellSurface->position();
+            // a popup of the panel's shell (notification, on-screen display, tooltip, applet popup) keeps the invisible
+            // border of an output that shows 3D (ORDER 418)
+            if (isNotification() || isCriticalNotification() || isOnScreenDisplay() || isTooltip() || isAppletPopup()) {
+                LogicalOutput *const output = workspace()->outputAt(position);
+                const RectF area = workspace()->clientArea(PlacementArea, this, output);
+                position = StereoDepth::keepPopupInside(RectF(position, size()), area, output).topLeft();
+            }
+            place(position);
         }
     };
     auto showUnderCursor = [this] {
@@ -403,6 +412,12 @@ void XdgSurfaceWindow::installPlasmaShellSurface(PlasmaShellSurfaceInterface *sh
         }
     };
     connect(shellSurface, &PlasmaShellSurfaceInterface::positionChanged, this, updatePosition);
+    // the border is kept for the popup's real size, which arrives with its first buffer
+    connect(this, &Window::frameGeometryChanged, this, [this, shellSurface, updatePosition](const RectF &old) {
+        if (shellSurface->isPositionSet() && old.size() != size()) {
+            updatePosition();
+        }
+    });
     connect(shellSurface, &PlasmaShellSurfaceInterface::openUnderCursorRequested, this, showUnderCursor);
     connect(shellSurface, &PlasmaShellSurfaceInterface::roleChanged, this, updateRole);
     connect(shellSurface, &PlasmaShellSurfaceInterface::panelTakesFocusChanged, this, [this] {
@@ -1925,13 +1940,27 @@ void XdgPopupWindow::handleRepositionRequested(quint32 token)
 void XdgPopupWindow::updateRelativePlacement()
 {
     const QPointF parentPosition = transientFor()->nextFramePosToClientPos(transientFor()->pos());
-    const RectF bounds = workspace()->clientArea(transientFor()->isFullScreen() ? FullScreenArea : PlacementArea, transientFor()).translated(-parentPosition);
+    const RectF area = workspace()->clientArea(transientFor()->isFullScreen() ? FullScreenArea : PlacementArea, transientFor());
+    const RectF bounds = area.translated(-parentPosition);
     const XdgPositioner positioner = m_shellSurface->positioner();
+    // the invisible border of an output that shows 3D (ORDER 418): the popup keeps this far from the output's edges
+    LogicalOutput *const output = transientFor()->output();
+    const RectF inside = StereoDepth::popupArea(area, output).translated(-parentPosition);
 
     if (m_plasmaShellSurface && m_plasmaShellSurface->isPositionSet()) {
-        m_relativePlacement = RectF(m_plasmaShellSurface->position(), positioner.size()).translated(-parentPosition);
-    } else {
+        const RectF placed = RectF(m_plasmaShellSurface->position(), positioner.size());
+        m_relativePlacement = StereoDepth::keepPopupInside(placed, area, output).translated(-parentPosition);
+    } else if (inside == bounds) {
         m_relativePlacement = positioner.placement(bounds);
+    } else {
+        // the positioner's slide, flip and resize work against the border; an axis the popup cannot fit in even
+        // there keeps what stock KWin does, and the edge rule keeps it at the screen's level
+        const RectF shrunk = positioner.placement(inside);
+        const RectF stock = positioner.placement(bounds);
+        const bool fitsX = shrunk.left() >= inside.left() && shrunk.right() <= inside.right();
+        const bool fitsY = shrunk.top() >= inside.top() && shrunk.bottom() <= inside.bottom();
+        m_relativePlacement = RectF(fitsX ? shrunk.left() : stock.left(), fitsY ? shrunk.top() : stock.top(),
+                                    fitsX ? shrunk.width() : stock.width(), fitsY ? shrunk.height() : stock.height());
     }
 }
 

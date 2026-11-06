@@ -309,6 +309,68 @@ static bool displayDepth(const LogicalOutput *output, stereo_policy_depth *depth
     return stereo_policy_display_depth(kind, mm.width(), mm.height(), 100, 0, 0, depth) == 0 && depth->size_known;
 }
 
+qreal StereoDepth::popupBorder(const LogicalOutput *output)
+{
+    if (!output || !output->hasStereoEyes()) {
+        return 0;
+    }
+    return std::max<qreal>(0, options->stereoPopupBorder());
+}
+
+RectF StereoDepth::popupArea(const RectF &area, const LogicalOutput *output, const QSizeF &minimum)
+{
+    const qreal border = popupBorder(output);
+    if (border <= 0) {
+        return area;
+    }
+    const RectF screen = output->geometryF();
+    RectF result = area;
+    // only the sides on the output's own edge: a side next to a panel is the panel's edge, not the output's
+    if (area.left() <= screen.left()) {
+        result.setLeft(screen.left() + border);
+    }
+    if (area.right() >= screen.right()) {
+        result.setRight(screen.right() - border);
+    }
+    if (area.top() <= screen.top()) {
+        result.setTop(screen.top() + border);
+    }
+    if (area.bottom() >= screen.bottom()) {
+        result.setBottom(screen.bottom() - border);
+    }
+    if (result.width() < std::max<qreal>(minimum.width(), 1)) {
+        result.setLeft(area.left());
+        result.setRight(area.right());
+    }
+    if (result.height() < std::max<qreal>(minimum.height(), 1)) {
+        result.setTop(area.top());
+        result.setBottom(area.bottom());
+    }
+    return result;
+}
+
+RectF StereoDepth::keepPopupInside(const RectF &geometry, const RectF &area, const LogicalOutput *output)
+{
+    const RectF inside = popupArea(area, output, geometry.size());
+    if (inside == area) {
+        return geometry;
+    }
+    RectF result = geometry;
+    if (result.right() > inside.right()) {
+        result.moveRight(inside.right());
+    }
+    if (result.left() < inside.left()) {
+        result.moveLeft(inside.left());
+    }
+    if (result.bottom() > inside.bottom()) {
+        result.moveBottom(inside.bottom());
+    }
+    if (result.top() < inside.top()) {
+        result.moveTop(inside.top());
+    }
+    return result;
+}
+
 qreal StereoDepth::sunkFactor(const LogicalOutput *output)
 {
     stereo_policy_depth depth{};

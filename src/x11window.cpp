@@ -24,6 +24,7 @@
 #include "killprompt.h"
 #include "netinfo.h"
 #include "placement.h"
+#include "scene/stereodepth.h"
 #include "scene/windowitem.h"
 #include "shadow.h"
 #include "utils/envvar.h"
@@ -338,6 +339,19 @@ bool X11Window::track(xcb_window_t w)
     getResourceClass();
     getWmClientLeader();
     getWmClientMachine();
+    // A menu, tooltip or the like that the program mapped itself (override-redirect) keeps the invisible border of an
+    // output that shows 3D (ORDER 418). The program placed it, so KWin moves it, once, as it is tracked.
+    if (m_output && (isDropdownMenu() || isPopupMenu() || isComboBox() || isTooltip() || isNotification()
+                     || isCriticalNotification() || isOnScreenDisplay() || isAppletPopup())) {
+        const RectF kept = StereoDepth::keepPopupInside(m_frameGeometry, m_output->geometryF(), m_output);
+        if (kept != m_frameGeometry) {
+            Xcb::moveWindow(w, Xcb::toXNative(kept.topLeft()));
+            m_frameGeometry = kept;
+            m_bufferGeometry = kept;
+            m_clientGeometry = kept;
+            checkOutput();
+        }
+    }
     if (Xcb::Extensions::self()->isShapeAvailable()) {
         xcb_shape_select_input(kwinApp()->x11Connection(), w, true);
     }
