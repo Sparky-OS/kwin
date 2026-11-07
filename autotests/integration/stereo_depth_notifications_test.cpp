@@ -255,7 +255,8 @@ void StereoDepthNotificationsTest::testMenusKeepTheirShare()
 
 void StereoDepthNotificationsTest::testOverAPinnedWindow()
 {
-    // a window kept above the others is popped; a notification over it is no further back
+    // a window kept above the others is at the popped limit; a notification shown over it is
+    // further out, one step beyond the limit (the pinned stack, stereo_depth_pinned_stack_test.cpp)
     auto surface = Test::createSurface();
     auto toplevel = Test::createXdgToplevelSurface(surface.get());
     auto window = Test::renderAndWaitForShown(surface.get(), QSize(120, 120), Qt::red);
@@ -269,7 +270,7 @@ void StereoDepthNotificationsTest::testOverAPinnedWindow()
     TestBox pinned;
     pinned.color = Qt::red;
     QCOMPARE(parallaxOf(*image, pinned, 190), s_popped);
-    QCOMPARE(parallaxOf(*image, *notification, 110), s_popped);
+    QCOMPARE(parallaxOf(*image, *notification, 110), 2 * s_popped);
 }
 
 void StereoDepthNotificationsTest::testWithinThePoppedLimit()
