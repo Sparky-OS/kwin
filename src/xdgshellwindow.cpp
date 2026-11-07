@@ -126,6 +126,7 @@ void XdgSurfaceWindow::sendConfigure()
     configureEvent->flags |= m_configureFlags;
     configureEvent->scale = m_nextTargetScale;
     m_configureFlags = {};
+    m_configureRequestsSize = false;
     if (!isInteractiveMoveResize()) {
         m_nextGravity = Gravity::None;
     }
@@ -181,8 +182,11 @@ void XdgSurfaceWindow::handleRoleCommit()
 
 void XdgSurfaceWindow::maybeUpdateMoveResizeGeometry(const RectF &rect)
 {
-    // We are about to send a configure event, ignore the committed window geometry.
-    if (m_configureTimer->isActive()) {
+    // We are about to send a configure event that asks for a size, ignore the committed window geometry.
+    // A configure that only changes states (a window activated again after its popup closed, say) asks for
+    // none: the client's own size stays the size, or the configure would send it back to the old one.
+    // A move after the request clears ConfigurePosition but leaves the request standing.
+    if (m_configureTimer->isActive() && m_configureRequestsSize) {
         return;
     }
 
@@ -277,6 +281,7 @@ void XdgSurfaceWindow::moveResizeInternal(const RectF &rect, MoveResizeMode mode
             updateGeometry(m_nextGravity.apply(snappedRect, rect));
         } else {
             m_configureFlags |= XdgSurfaceConfigure::ConfigurePosition;
+            m_configureRequestsSize = true;
             scheduleConfigure();
         }
     } else {

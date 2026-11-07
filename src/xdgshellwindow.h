@@ -101,6 +101,7 @@ private:
     XdgSurfaceInterface *m_shellSurface;
     QTimer *m_configureTimer;
     XdgSurfaceConfigure::ConfigureFlags m_configureFlags;
+    bool m_configureRequestsSize = false;
     QQueue<XdgSurfaceConfigure *> m_configureEvents;
     std::unique_ptr<XdgSurfaceConfigure> m_lastAcknowledgedConfigure;
     std::optional<quint32> m_lastAcknowledgedConfigureSerial;
