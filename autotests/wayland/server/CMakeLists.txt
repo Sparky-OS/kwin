@@ -146,3 +146,11 @@ target_sources(testTextInputV3Interface PRIVATE test_textinputv3_interface.cpp $
 target_link_libraries(testTextInputV3Interface Qt::Test kwin Plasma::KWaylandClient Wayland::Client)
 add_test(NAME kwayland-testTextInputV3Interface COMMAND testTextInputV3Interface)
 ecm_mark_as_test(testTextInputV3Interface)
+
+########################################################
+# Test Surface Extension Interface
+########################################################
+add_executable(testSurfaceExtensionInterface test_surface_extension_interface.cpp)
+target_link_libraries(testSurfaceExtensionInterface Qt::Test kwin Plasma::KWaylandClient Wayland::Client)
+add_test(NAME kwayland-testSurfaceExtensionInterface COMMAND testSurfaceExtensionInterface)
+ecm_mark_as_test(testSurfaceExtensionInterface)
