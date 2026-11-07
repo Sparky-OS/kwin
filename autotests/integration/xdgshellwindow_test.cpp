@@ -68,6 +68,9 @@ private Q_SLOTS:
     void testMaximizeHorizontal();
     void testMaximizeVertical();
     void testMaximizeFull();
+    void testSelfResizeWhileActivationConfigureIsPending();
+    void testMaximizeWinsOverSelfResizeBeforeConfigure();
+    void testResizeThenMoveKeepsRequestedSizeBeforeConfigure();
     void testMaximizedToFullscreen_data();
     void testMaximizedToFullscreen();
     void testSendMaximizedWindowToAnotherOutput();
@@ -1638,6 +1641,113 @@ void TestXdgShellWindow::testDoubleFullscreenSeparatedByCommit()
     auto window = Test::renderAndWaitForShown(surface.get(), QSize(1280, 1024), Qt::blue);
     QVERIFY(window->isFullScreen());
     QCOMPARE(window->frameGeometry(), RectF(0, 0, 1280, 1024));
+}
+
+// A client that resizes itself while a state-only configure (here: activation) is pending keeps its size: the configure
+// carries the size the client committed, not the one it had before.
+void TestXdgShellWindow::testSelfResizeWhileActivationConfigureIsPending()
+{
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get(), Test::CreationSetup::CreateOnly));
+    QSignalSpy toplevelConfigureRequestedSpy(shellSurface.get(), &Test::XdgToplevel::configureRequested);
+    QSignalSpy surfaceConfigureRequestedSpy(shellSurface->xdgSurface(), &Test::XdgSurface::configureRequested);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    shellSurface->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(800, 600), Qt::blue);
+    QVERIFY(window);
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    shellSurface->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
+    Test::render(surface.get(), QSize(800, 600), Qt::blue);
+
+    // Another window takes the focus, then the first one is activated again, as when a popup closes.
+    std::unique_ptr<KWayland::Client::Surface> otherSurface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> otherShellSurface(Test::createXdgToplevelSurface(otherSurface.get()));
+    Window *other = Test::renderAndWaitForShown(otherSurface.get(), QSize(300, 200), Qt::red);
+    QVERIFY(other);
+    QVERIFY(other->isActive());
+    QVERIFY(!window->isActive());
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    shellSurface->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
+    Test::render(surface.get(), QSize(800, 600), Qt::blue);
+
+    // The client resizes itself; its commit is handled after the activation has scheduled a configure.
+    Test::render(surface.get(), QSize(500, 400), Qt::blue);
+    workspace()->activateWindow(window);
+    waylandServer()->display()->dispatchEvents();
+    const int configureCount = surfaceConfigureRequestedSpy.count();
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    QCOMPARE(surfaceConfigureRequestedSpy.count(), configureCount + 1);
+    QVERIFY(toplevelConfigureRequestedSpy.last().at(1).value<Test::XdgToplevel::States>().testFlag(Test::XdgToplevel::State::Activated));
+    QCOMPARE(toplevelConfigureRequestedSpy.last().at(0).toSize(), QSize(500, 400));
+
+    otherShellSurface.reset();
+    otherSurface.reset();
+    QVERIFY(Test::waitForWindowClosed(other));
+    shellSurface.reset();
+    surface.reset();
+    QVERIFY(Test::waitForWindowClosed(window));
+}
+
+// A size KWin imposes still wins over the client's own: maximizing before the configure goes out.
+void TestXdgShellWindow::testMaximizeWinsOverSelfResizeBeforeConfigure()
+{
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get(), Test::CreationSetup::CreateOnly));
+    QSignalSpy toplevelConfigureRequestedSpy(shellSurface.get(), &Test::XdgToplevel::configureRequested);
+    QSignalSpy surfaceConfigureRequestedSpy(shellSurface->xdgSurface(), &Test::XdgSurface::configureRequested);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    shellSurface->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(800, 600), Qt::blue);
+    QVERIFY(window);
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    shellSurface->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
+    Test::render(surface.get(), QSize(800, 600), Qt::blue);
+
+    Test::render(surface.get(), QSize(500, 400), Qt::blue);
+    workspace()->slotWindowMaximize();
+    waylandServer()->display()->dispatchEvents();
+    const int configureCount = surfaceConfigureRequestedSpy.count();
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    QCOMPARE(surfaceConfigureRequestedSpy.count(), configureCount + 1);
+    QVERIFY(toplevelConfigureRequestedSpy.last().at(1).value<Test::XdgToplevel::States>().testFlag(Test::XdgToplevel::State::Maximized));
+    QCOMPARE(toplevelConfigureRequestedSpy.last().at(0).toSize(), QSize(1280, 1024));
+
+    shellSurface.reset();
+    surface.reset();
+    QVERIFY(Test::waitForWindowClosed(window));
+}
+
+// A move after a resize clears the position flag of the pending configure but not the size request: KWin's size still wins.
+void TestXdgShellWindow::testResizeThenMoveKeepsRequestedSizeBeforeConfigure()
+{
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> shellSurface(Test::createXdgToplevelSurface(surface.get(), Test::CreationSetup::CreateOnly));
+    QSignalSpy toplevelConfigureRequestedSpy(shellSurface.get(), &Test::XdgToplevel::configureRequested);
+    QSignalSpy surfaceConfigureRequestedSpy(shellSurface->xdgSurface(), &Test::XdgSurface::configureRequested);
+    surface->commit(KWayland::Client::Surface::CommitFlag::None);
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    shellSurface->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(800, 600), Qt::blue);
+    QVERIFY(window);
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    shellSurface->xdgSurface()->ack_configure(surfaceConfigureRequestedSpy.last().at(0).value<quint32>());
+    Test::render(surface.get(), QSize(800, 600), Qt::blue);
+
+    // KWin asks for a size, then moves the window before the configure goes out; the client commits its old size meanwhile.
+    Test::render(surface.get(), QSize(800, 600), Qt::blue);
+    window->moveResize(RectF(window->pos(), QSizeF(500, 400)));
+    window->move(window->pos() + QPointF(10, 10));
+    waylandServer()->display()->dispatchEvents();
+    const int configureCount = surfaceConfigureRequestedSpy.count();
+    QVERIFY(surfaceConfigureRequestedSpy.wait());
+    QCOMPARE(surfaceConfigureRequestedSpy.count(), configureCount + 1);
+    QCOMPARE(toplevelConfigureRequestedSpy.last().at(0).toSize(), QSize(500, 400));
+
+    shellSurface.reset();
+    surface.reset();
+    QVERIFY(Test::waitForWindowClosed(window));
 }
 
 void TestXdgShellWindow::testMaximizeHorizontal()
