@@ -64,6 +64,26 @@ static std::optional<OutputModeline> glassesTwin(const OutputModeline &mode)
     return OutputModeline(mode.size(), mode.refreshRate(), (mode.flags() & ~OutputModeline::Flags(OutputModeline::Flag::Preferred)) | OutputModeline::Flag::VirtualStereo | OutputModeline::Flag::Stereo3DSideBySideFull);
 }
 
+// The right eye first twins of rows, columns, checkerboard and frame sequential are no longer listed: the eye order
+// of an output is its one swap eyes setting, applied to every 3D mode. A twin saved by an earlier KWin is the left
+// eye first mode with the swap flipped, which draws the same picture.
+static std::optional<OutputModeline> withLeftEyeFirst(const OutputModeline &mode)
+{
+    using Flag = OutputModeline::Flag;
+    static constexpr std::pair<Flag, Flag> twins[] = {
+        {Flag::Stereo3DRowsRightFirst, Flag::Stereo3DRowsLeftFirst},
+        {Flag::Stereo3DColumnsRightFirst, Flag::Stereo3DColumnsLeftFirst},
+        {Flag::Stereo3DCheckerboardRightFirst, Flag::Stereo3DCheckerboardLeftFirst},
+        {Flag::Stereo3DSequentialRightFirst, Flag::Stereo3DSequentialLeftFirst},
+    };
+    for (const auto &[rightFirst, leftFirst] : twins) {
+        if (mode.flags() & rightFirst) {
+            return OutputModeline(mode.size(), mode.refreshRate(), (mode.flags() & ~OutputModeline::Flags(rightFirst)) | leftFirst);
+        }
+    }
+    return std::nullopt;
+}
+
 static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &saved, bool anaglyph, bool otherStereoFormats, const std::optional<QList<CustomModeDefinition>> &customModes)
 {
     using Flag = OutputModeline::Flag;
@@ -77,7 +97,10 @@ static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &s
     const bool spatialLayout = layouts == Flag::Stereo3DRowsLeftFirst || layouts == Flag::Stereo3DRowsRightFirst
         || layouts == Flag::Stereo3DColumnsLeftFirst || layouts == Flag::Stereo3DColumnsRightFirst
         || layouts == Flag::Stereo3DCheckerboardLeftFirst || layouts == Flag::Stereo3DCheckerboardRightFirst;
-    if (!(anaglyph && anaglyphLayout) && !(otherStereoFormats && (halfLayout || spatialLayout))) {
+    // frame sequential: KWin's own twins and DisplayPort's
+    const bool sequentialLayout = layouts == Flag::Stereo3DSequentialLeftFirst || layouts == Flag::Stereo3DSequentialRightFirst
+        || layouts == Flag::Stereo3DSequentialDisplayPort;
+    if (!(anaglyph && anaglyphLayout) && !(otherStereoFormats && (halfLayout || spatialLayout || sequentialLayout))) {
         return false;
     }
     if ((anaglyphLayout || spatialLayout) && output->edid().requiresYcbcr420(saved.size(), saved.refreshRate())) {
@@ -1418,6 +1441,12 @@ void OutputConfigurationStore::load()
             const int level = it->toInt(-1);
             if (level >= 0 && level <= 4) {
                 state.abmLevel = level;
+            }
+        }
+        if (state.mode) {
+            if (const auto leftFirst = withLeftEyeFirst(*state.mode)) {
+                state.mode = *leftFirst;
+                state.stereoSwapEyes = !state.stereoSwapEyes.value_or(false);
             }
         }
         outputDatas.push_back(state);

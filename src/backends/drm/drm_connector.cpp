@@ -305,6 +305,8 @@ QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QL
             layouts << OutputModeline::Flag::Stereo3DAnaglyphModern << OutputModeline::Flag::Stereo3DAnaglyphCrt;
         }
         if (otherStereoFormats) {
+            // every packing is offered left eye first only: the output's swap eyes setting turns any of them right eye
+            // first, so a twin per eye order would be a second way to set the same thing
             layouts << OutputModeline::Flag::Stereo3DSideBySideHalf << OutputModeline::Flag::Stereo3DTopAndBottom;
             // a mode two eyes wide, as USB-C 3D glasses take their 3D picture: one eye copied into each half
             if (isTwoEyesWide(mode->size())) {
@@ -314,7 +316,6 @@ QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QL
             // any size, but the rate per eye is half the refresh
             if (mode->refreshRate() >= 100000) {
                 layouts << OutputModeline::Flag::Stereo3DSequentialLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DSequentialRightFirst;
                 // DisplayPort's own frame sequential stereo, where the kernel alternates the eyes and tells
                 // the display which one each frame carries: where a TEST_ONLY commit took it, and the
                 // display does not declare it itself (then it is one of its 3D modes)
@@ -329,11 +330,8 @@ QList<std::shared_ptr<OutputMode>> DrmConnector::withVirtualStereoModes(const QL
             }
             if (mode->size() == nativeSize && !base->requiresYcbcr420()) {
                 layouts << OutputModeline::Flag::Stereo3DRowsLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DRowsRightFirst;
                 layouts << OutputModeline::Flag::Stereo3DColumnsLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DColumnsRightFirst;
                 layouts << OutputModeline::Flag::Stereo3DCheckerboardLeftFirst;
-                layouts << OutputModeline::Flag::Stereo3DCheckerboardRightFirst;
             }
         }
         for (const auto layout : layouts) {

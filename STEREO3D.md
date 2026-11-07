@@ -95,8 +95,10 @@ Two toggles per output, both off by default, so the mode list stays as it is unt
   - rows, for passive polarised panels;
   - columns, for parallax-barrier and lenticular panels;
   - checkerboard, for 3D-ready DLP televisions;
-  - frame sequential at 100 or 120 Hz, for gear with its own glasses sync: KWin's own twins alternate the eyes in software, one commit per refresh, left or right eye first, with nothing sent to the display (a refresh KWin misses shows one eye twice); DisplayPort's twin above alternates them in the kernel and signals them, and both are offered where both work;
+  - frame sequential at 100 or 120 Hz, for gear with its own glasses sync: KWin's own twins alternate the eyes in software, one commit per refresh, left eye first, with nothing sent to the display (a refresh KWin misses shows one eye twice); DisplayPort's twin above alternates them in the kernel and signals them, and both are offered where both work;
   - two outputs as one pair, for dual projectors, mirror rigs and dual-panel monitors.
+
+Every packing is listed left eye first only. A display that shows the eyes reversed, in any of them, takes the output's "Swap eyes", which applies to every 3D mode of the output; there is no right eye first twin of any mode. A right eye first mode saved by an earlier KWin comes back as its left eye first mode with the swap flipped, the same picture (frame sequential included: both start on the right view after a mode set).
 
 **VR is one more filter:** each eye goes to the headset through OpenXR, instead of through a colour filter.
 
