@@ -107,6 +107,11 @@ target_link_libraries(testMockDrmGlasses LibDrmTest Qt::Test)
 add_test(NAME kwin-testMockDrmGlasses COMMAND testMockDrmGlasses)
 ecm_mark_as_test(testMockDrmGlasses)
 
+add_executable(testMockDrmEyeOrder mockEyeOrderTest.cpp)
+target_link_libraries(testMockDrmEyeOrder LibDrmTest Qt::Test)
+add_test(NAME kwin-testMockDrmEyeOrder COMMAND testMockDrmEyeOrder)
+ecm_mark_as_test(testMockDrmEyeOrder)
+
 add_executable(testFrameSequential frameSequentialTest.cpp)
 target_link_libraries(testFrameSequential LibDrmTest Qt::Test)
 add_test(NAME kwin-testFrameSequential COMMAND testFrameSequential)

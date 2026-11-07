@@ -381,7 +381,8 @@ void MockDisplayPortSequentialTest::testTwin()
     QVERIFY(std::ranges::any_of(listed, [](const auto &mode) {
         return mode->flags() & OutputModeline::Flag::Stereo3DSequentialLeftFirst;
     }));
-    QVERIFY(std::ranges::any_of(listed, [](const auto &mode) {
+    // no right eye first twin: the output's swap eyes setting is the one eye order
+    QVERIFY(!std::ranges::any_of(listed, [](const auto &mode) {
         return mode->flags() & OutputModeline::Flag::Stereo3DSequentialRightFirst;
     }));
 

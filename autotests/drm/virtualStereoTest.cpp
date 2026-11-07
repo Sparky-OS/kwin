@@ -31,8 +31,8 @@ private Q_SLOTS:
         QTest::addColumn<int>("count");
         QTest::newRow("off") << false << false << 4;
         QTest::newRow("anaglyph") << true << false << 10;
-        QTest::newRow("other") << false << true << 22;
-        QTest::newRow("both") << true << true << 28;
+        QTest::newRow("other") << false << true << 16;
+        QTest::newRow("both") << true << true << 22;
     }
 
     void modes()
@@ -76,6 +76,9 @@ private Q_SLOTS:
                 QCOMPARE(mode->size(), QSize(1920, 1080));
             }
             QVERIFY(isAnaglyph(layout) ? anaglyph : other);
+            // one eye order: the output's swap eyes setting turns a left eye first mode right eye first
+            QVERIFY(!(mode->flags() & (OutputModeline::Flag::Stereo3DRowsRightFirst | OutputModeline::Flag::Stereo3DColumnsRightFirst
+                                       | OutputModeline::Flag::Stereo3DCheckerboardRightFirst | OutputModeline::Flag::Stereo3DSequentialRightFirst)));
         }
         // Rebuilding an unchanged list must preserve mode objects and their protocol lifetime.
         QCOMPARE(DrmConnector::withVirtualStereoModes(bases, modes, anaglyph, other), modes);
@@ -189,15 +192,14 @@ private Q_SLOTS:
                 sequential.append(std::static_pointer_cast<DrmConnectorMode>(mode));
             }
         }
-        QCOMPARE(sequential.size(), 4);
-        QCOMPARE(sequential[0]->flags() & (OutputModeline::Flag::Stereo3DSequentialLeftFirst | OutputModeline::Flag::Stereo3DSequentialRightFirst),
-                 OutputModeline::Flags(OutputModeline::Flag::Stereo3DSequentialLeftFirst));
-        QCOMPARE(sequential[1]->flags() & (OutputModeline::Flag::Stereo3DSequentialLeftFirst | OutputModeline::Flag::Stereo3DSequentialRightFirst),
-                 OutputModeline::Flags(OutputModeline::Flag::Stereo3DSequentialRightFirst));
+        // one twin per base mode, left eye first: the output's swap eyes setting turns it right eye first
+        QCOMPARE(sequential.size(), 2);
+        for (const auto &twin : sequential) {
+            QCOMPARE(twin->flags() & (OutputModeline::Flag::Stereo3DSequentialLeftFirst | OutputModeline::Flag::Stereo3DSequentialRightFirst),
+                     OutputModeline::Flags(OutputModeline::Flag::Stereo3DSequentialLeftFirst));
+        }
         QCOMPARE(sequential[0]->virtualBase(), base120);
-        QCOMPARE(sequential[1]->virtualBase(), base120);
-        QCOMPARE(sequential[2]->virtualBase(), base100);
-        QCOMPARE(sequential[3]->virtualBase(), base100);
+        QCOMPARE(sequential[1]->virtualBase(), base100);
         // sequential twins share the base mode blob: the timing is sent unchanged
         QCOMPARE(sequential[0]->nativeMode()->flags, base120->nativeMode()->flags);
         QCOMPARE(sequential[0]->nativeMode()->clock, base120->nativeMode()->clock);
@@ -230,11 +232,10 @@ private Q_SLOTS:
         auto base = std::make_shared<DrmConnectorMode>(nullptr, timing, OutputModeline::Flags{}, true);
         QCOMPARE(base->refreshRate(), 120000u);
         const auto modes = DrmConnector::withVirtualStereoModes({base}, {}, false, true);
-        QCOMPARE(modes.size(), 5);
+        QCOMPARE(modes.size(), 4);
         QCOMPARE(stereoLayoutForMode(modes[1]->flags()), StereoLayout::SideBySideHalf);
         QCOMPARE(stereoLayoutForMode(modes[2]->flags()), StereoLayout::TopAndBottom);
         QCOMPARE(stereoLayoutForMode(modes[3]->flags()), StereoLayout::SequentialLeftFirst);
-        QCOMPARE(stereoLayoutForMode(modes[4]->flags()), StereoLayout::SequentialRightFirst);
         for (int i = 0; i < modes.size(); ++i) {
             const auto mode = std::static_pointer_cast<DrmConnectorMode>(modes[i]);
             QCOMPARE(mode->nativeMode()->clock, timing.clock);
