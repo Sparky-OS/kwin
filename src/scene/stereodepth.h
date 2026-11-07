@@ -25,13 +25,17 @@ class Window;
  * The depth levels of the desktop's own elements on a stereo output, and who sits at which one.
  *
  * A level runs from -1 (the sunk limit, behind the screen) through 0 (the screen) to +1 (the
- * popped limit, in front of it). Anything between is valid, nothing goes beyond. The active
+ * popped limit, in front of it). Anything between is valid, nothing goes beyond (but for what
+ * opens over a pinned window, below). The active
  * window is at the screen's level and what pops up over it (menus, dialogs, tooltips) is popped,
  * the inactive windows share the sunk range evenly in their stacking order, the wallpaper is at
  * the sunk limit, panels are at the screen's level, and a popped thing that touches the edge of
  * its output stays at the screen's level. A window the user or a rule pinned above the others
  * (Keep Above) stays at the popped limit and one pinned below (Keep Below) at the sunk limit,
- * whatever is active. Fullscreen windows and windows that are not part of
+ * whatever is active. What opens over a pinned-above window (its menus and sub-menus, and the
+ * notifications and on-screen displays shown over it) is the one exception to "nothing goes
+ * beyond": it stacks further out than the popped limit, each layer a step nearer than the layer
+ * under it, the layers sharing one more popped limit. Fullscreen windows and windows that are not part of
  * the desktop's own elements stay at the screen's level.
  *
  * Nothing is behind what it covers: the active window comes to the screen's level once it is on

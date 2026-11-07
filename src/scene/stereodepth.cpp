@@ -31,6 +31,12 @@ static constexpr qreal s_referenceWidth = 1920;
 static constexpr qreal s_referenceSunk = 10;
 static constexpr qreal s_referencePopped = 4;
 
+// What opens over a window kept above the others (its menus and sub-menus, and a notification or an on-screen display
+// shown over it) stacks further out than the person's popped limit, where that window stays. The layers over one pinned
+// window share this many popped limits beyond it, so each is a step of span / layers nearer the viewer than the layer
+// under it: the spacing the popped share had before notifications were put at the limit (limit / surfaces in the pile).
+static constexpr qreal s_pinnedStackSpan = 1.0;
+
 // how long a change of level lasts at the default animation speed: towards the viewer quickly, so
 // that nothing is drawn behind what it is over for more than an instant, and away from it gently
 static constexpr std::chrono::milliseconds s_riseDuration(80);
@@ -124,6 +130,29 @@ static Role roleOf(const Window *window)
     return active && mainWindow(active) == window && !isCovered(window) ? Role::Active : Role::Sunk;
 }
 
+// the window kept above the others that @a window opens over: the one it is transient for, or for a notification or an
+// on-screen display the topmost pinned window below it in the stack whose frame it overlaps
+static const Window *pinnedBase(const Window *window)
+{
+    const Window *main = mainWindow(window);
+    if (main != window) {
+        return roleOf(main) == Role::Above ? main : nullptr;
+    }
+    if (!isAlert(window)) {
+        return nullptr;
+    }
+    const QList<Window *> &stack = workspace()->stackingOrder();
+    const RectF frame = window->frameGeometry();
+    for (qsizetype i = stack.indexOf(const_cast<Window *>(window)) - 1; i >= 0; --i) {
+        const Window *other = stack[i];
+        if (other == mainWindow(other) && isOnStage(other, window->output()) && roleOf(other) == Role::Above
+            && other->frameGeometry().intersects(frame)) {
+            return other;
+        }
+    }
+    return nullptr;
+}
+
 // where the program declared a popup sits (kde_stereo_depth_v1.set_place), from -1 to 1
 static std::optional<qreal> declaredPlace(const Window *window)
 {
@@ -175,6 +204,19 @@ qreal StereoDepth::level(const Window *window)
         if (const auto place = declaredPlace(window)) {
             // where the program declared it, under the rules below
             level = std::clamp(*place, -1.0, 1.0);
+        } else if (const Window *base = pinnedBase(window); base && !touchesEdge(base)) {
+            // over a pinned window, which stays at the limit: one step further out than the layer under it
+            int count = 0;
+            int below = 0;
+            bool found = false;
+            for (const Window *other : stack) {
+                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other) && !declaredPlace(other) && pinnedBase(other) == base) {
+                    count++;
+                    found |= other == window;
+                    below += !found;
+                }
+            }
+            level = found ? 1 + s_pinnedStackSpan * qreal(below + 1) / count : 1;
         } else if (isAlert(window)) {
             // a notification or an on-screen display is the nearest thing on the output, at the
             // popped limit whatever else is popped: the share below is for what is worked in
@@ -473,13 +515,13 @@ int StereoDepth::eyeShift(int parallax, StereoEye eye)
 
 int StereoDepth::maxEyeShift(int viewWidth, const LogicalOutput *output)
 {
-    const qreal limit = std::max(sunkLimit(output), poppedLimit(output));
+    const qreal limit = std::max(sunkLimit(output), poppedLimit(output) * (1 + s_pinnedStackSpan));
     return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
 }
 
 int StereoDepth::maxEyeShift(int viewWidth)
 {
-    const qreal limit = std::max(options->stereoSunkLimit(), options->stereoPoppedLimit());
+    const qreal limit = std::max(options->stereoSunkLimit(), options->stereoPoppedLimit() * (1 + s_pinnedStackSpan));
     return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
 }
 
