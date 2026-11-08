@@ -6,6 +6,7 @@ integrationTest(NAME testDesktopSwitchingAnimation SRCS desktop_switching_animat
 integrationTest(NAME testMinimizeAnimation SRCS minimize_animation_test.cpp BUILTIN_EFFECTS)
 integrationTest(NAME testMaximizeAnimation SRCS maximize_animation_test.cpp BUILTIN_EFFECTS)
 integrationTest(NAME testQuickStereo SRCS quick_stereo_test.cpp ${PROJECT_SOURCE_DIR}/src/scene/stereodepth.cpp LIBS screenshot_test_support)
+integrationTest(NAME testStartupFeedbackStereo SRCS startup_feedback_stereo_test.cpp LIBS screenshot_test_support BUILTIN_EFFECTS)
 integrationTest(NAME testFallApartStereo SRCS fallapart_stereo_test.cpp LIBS screenshot_test_support BUILTIN_EFFECTS)
 
 if(KWIN_BUILD_X11)
