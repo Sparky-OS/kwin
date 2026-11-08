@@ -19,6 +19,7 @@
 #include <KWayland/Client/surface.h>
 
 #include <QDir>
+#include <vector>
 #include <linux/input.h>
 #include <QFile>
 #include <QFileInfo>
@@ -50,6 +51,8 @@ private Q_SLOTS:
     // first: it needs the state of a session that has just started
     void testDesktopWindowsLeaveTheActiveOutputOnTheMainScreen();
     void testTheDesktopOfAnotherScreenStillMovesItWhenTheyAreClicked();
+    void testTheSplashLeavesTheActiveOutputOnTheMainScreen_data();
+    void testTheSplashLeavesTheActiveOutputOnTheMainScreen();
 };
 
 static const QSize s_outputSize(320, 240);
@@ -79,19 +82,13 @@ struct Desktop
     Window *window = nullptr;
 };
 
-// the client's wl_output of an output, found by where it is
+// the client's wl_output of an output: the clients list them in the order of the workspace's outputs (as layershellv1window_test relies on)
 static KWayland::Client::Output *clientOutput(LogicalOutput *output)
 {
-    const auto outputs = Test::waylandOutputs();
-    for (KWayland::Client::Output *candidate : outputs) {
-        if (candidate->globalPosition() == output->geometry().topLeft()) {
-            return candidate;
-        }
-    }
-    return nullptr;
+    return Test::waylandOutputs().value(workspace()->outputs().indexOf(output));
 }
 
-static Desktop createDesktop(LogicalOutput *output)
+static Desktop createLayerWindow(LogicalOutput *output, const QString &scope, Test::LayerShellV1::layer layer)
 {
     Desktop desktop;
     KWayland::Client::Output *wlOutput = clientOutput(output);
@@ -99,7 +96,7 @@ static Desktop createDesktop(LogicalOutput *output)
         return desktop;
     }
     desktop.surface = Test::createSurface();
-    desktop.shellSurface = Test::createLayerSurfaceV1(desktop.surface.get(), QStringLiteral("desktop"), wlOutput, Test::LayerShellV1::layer_background);
+    desktop.shellSurface = Test::createLayerSurfaceV1(desktop.surface.get(), scope, wlOutput, layer);
     desktop.shellSurface->set_keyboard_interactivity(1);
     desktop.shellSurface->set_size(0, 0);
     desktop.shellSurface->set_exclusive_zone(-1);
@@ -110,6 +107,11 @@ static Desktop createDesktop(LogicalOutput *output)
         desktop.window = Test::renderAndWaitForShown(desktop.surface.get(), configureSpy.last().at(1).toSize(), Qt::blue);
     }
     return desktop;
+}
+
+static Desktop createDesktop(LogicalOutput *output)
+{
+    return createLayerWindow(output, QStringLiteral("desktop"), Test::LayerShellV1::layer_background);
 }
 
 void SessionStartTest::initTestCase()
@@ -198,6 +200,58 @@ void SessionStartTest::testTheDesktopOfAnotherScreenStillMovesItWhenTheyAreClick
     Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::green);
     QVERIFY(window);
     QCOMPARE(window->output(), s_second);
+}
+
+
+void SessionStartTest::testTheSplashLeavesTheActiveOutputOnTheMainScreen_data()
+{
+    QTest::addColumn<int>("mainPosition");
+    // the splash makes one window per screen in the order Qt lists the screens, and each is activated as it maps: the last one
+    // took the active output, so the main screen was only right when the splash happened to serve it last
+    QTest::newRow("main first") << 0;
+    QTest::newRow("main in the middle") << 1;
+    QTest::newRow("main last") << 2;
+}
+
+void SessionStartTest::testTheSplashLeavesTheActiveOutputOnTheMainScreen()
+{
+    QFETCH(int, mainPosition);
+    // the state of a session that has just started: nothing active, the active output on the screen marked main
+    QVERIFY(!workspace()->activeWindow());
+    workspace()->setActiveOutput(s_main);
+    QCOMPARE(workspace()->activeOutput(), s_main);
+
+    // ksplashqml: an overlay layer surface with the exclusive keyboard on every screen, the main screen at the given position
+    QList<LogicalOutput *> order{s_first, s_second};
+    order.insert(mainPosition, s_main);
+    std::vector<Desktop> splash;
+    for (LogicalOutput *output : std::as_const(order)) {
+        Desktop window = createLayerWindow(output, QStringLiteral("ksplashqml"), Test::LayerShellV1::layer_overlay);
+        QVERIFY(window.window);
+        QCOMPARE(window.window->output(), output);
+        splash.push_back(std::move(window));
+    }
+    QCOMPARE(workspace()->activeOutput(), s_main);
+
+    // an autostart program maps while the splash is up
+    {
+        std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+        std::unique_ptr<Test::XdgToplevel> toplevel(Test::createXdgToplevelSurface(surface.get()));
+        Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::red);
+        QVERIFY(window);
+        QCOMPARE(window->output(), s_main);
+        QCOMPARE(workspace()->activeOutput(), s_main);
+    }
+
+    // the splash closes and the next window still opens on the main screen
+    splash.clear();
+    QTRY_VERIFY(workspace()->windows().isEmpty());
+    std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
+    std::unique_ptr<Test::XdgToplevel> toplevel(Test::createXdgToplevelSurface(surface.get()));
+    Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);
+    QVERIFY(window);
+    QCOMPARE(window->output(), s_main);
+    QCOMPARE(workspace()->activeOutput(), s_main);
 }
 
 }
