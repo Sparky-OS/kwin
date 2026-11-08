@@ -257,7 +257,7 @@ void StereoDepthPinnedStackTest::testOneMenu()
 
 void StereoDepthPinnedStackTest::testMenuAndSubMenu()
 {
-    // two layers: the menu a half step out, the sub-menu a whole span out
+    // the menu two limits out (one over the pinned window), the sub-menu three: one limit per level (Daniel, 2026-11-08)
     auto pinned = createPinned();
     auto menu = createMenu(*pinned, Qt::green, QPoint(20, 20), QSize(60, 40));
     auto subMenu = createMenu(*menu, Qt::blue, QPoint(50, 10), QSize(60, 40));
@@ -266,14 +266,14 @@ void StereoDepthPinnedStackTest::testMenuAndSubMenu()
     const auto image = capture();
     QVERIFY(image);
     QCOMPARE(parallaxOf(*image, *pinned, 200), s_popped);
-    QCOMPARE(parallaxOf(*image, *menu, 112), 15);
-    QCOMPARE(parallaxOf(*image, *subMenu, 155), 2 * s_popped);
+    QCOMPARE(parallaxOf(*image, *menu, 112), 2 * s_popped);
+    QCOMPARE(parallaxOf(*image, *subMenu, 155), 3 * s_popped);
 }
 
 void StereoDepthPinnedStackTest::testMenuSubMenuAndNotification()
 {
-    // three layers, each nearer than the one under it: 1 1/3, 1 2/3 and 2 limits. A critical
-    // notification is stacked over the menus
+    // the menu two limits out and the sub-menu three; a critical notification stacked over the menus keeps the share of ORDER 442 (the
+    // layers over the pinned window share one more limit), so it is at 2 limits
     auto pinned = createPinned();
     auto menu = createMenu(*pinned, Qt::green, QPoint(20, 20), QSize(60, 40));
     auto subMenu = createMenu(*menu, Qt::blue, QPoint(50, 10), QSize(60, 40));
@@ -286,10 +286,10 @@ void StereoDepthPinnedStackTest::testMenuSubMenuAndNotification()
     const int subMenuParallax = parallaxOf(*image, *subMenu, 155);
     const int notificationParallax = parallaxOf(*image, *notification, 185);
     QCOMPARE(pinnedParallax, s_popped);
-    QCOMPARE(menuParallax, 13);
-    QCOMPARE(subMenuParallax, 17);
+    QCOMPARE(menuParallax, 2 * s_popped);
+    QCOMPARE(subMenuParallax, 3 * s_popped);
     QCOMPARE(notificationParallax, 2 * s_popped);
-    QVERIFY(pinnedParallax < menuParallax && menuParallax < subMenuParallax && subMenuParallax < notificationParallax);
+    QVERIFY(pinnedParallax < menuParallax && menuParallax < subMenuParallax);
 }
 
 void StereoDepthPinnedStackTest::testNotificationBelowTheMenus()
@@ -306,8 +306,8 @@ void StereoDepthPinnedStackTest::testNotificationBelowTheMenus()
     const auto image = capture();
     QVERIFY(image);
     QCOMPARE(parallaxOf(*image, *notification, 185), 13);
-    QCOMPARE(parallaxOf(*image, *menu, 112), 17);
-    QCOMPARE(parallaxOf(*image, *subMenu, 155), 2 * s_popped);
+    QCOMPARE(parallaxOf(*image, *menu, 112), 2 * s_popped);
+    QCOMPARE(parallaxOf(*image, *subMenu, 155), 3 * s_popped);
 }
 
 void StereoDepthPinnedStackTest::testOnScreenDisplayOverPinned()
@@ -335,7 +335,7 @@ void StereoDepthPinnedStackTest::testNotificationAwayFromPinned()
 
 void StereoDepthPinnedStackTest::testMenusOfAWindowThatIsNotPinned()
 {
-    // a control: menus of an ordinary window share the popped limit as before, none beyond it
+    // a control: menus of an ordinary window are one limit per level from the screen, a menu alone at the limit
     auto window = createWindow(Qt::red, QPoint(100, 90), QSize(120, 120));
     QVERIFY(window->window);
     workspace()->activateWindow(window->window);
@@ -345,8 +345,8 @@ void StereoDepthPinnedStackTest::testMenusOfAWindowThatIsNotPinned()
     QVERIFY(menu->window && subMenu->window && notification->window);
     const auto image = capture();
     QVERIFY(image);
-    QCOMPARE(parallaxOf(*image, *menu, 112), s_popped / 2);
-    QCOMPARE(parallaxOf(*image, *subMenu, 155), s_popped);
+    QCOMPARE(parallaxOf(*image, *menu, 112), s_popped);
+    QCOMPARE(parallaxOf(*image, *subMenu, 155), 2 * s_popped);
     QCOMPARE(parallaxOf(*image, *notification, 185), s_popped);
 }
 

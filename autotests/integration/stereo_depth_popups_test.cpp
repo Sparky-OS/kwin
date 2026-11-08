@@ -253,12 +253,11 @@ void StereoDepthPopupsTest::testSubMenu()
     const QList<Window *> stack = workspace()->stackingOrder();
     qInfo() << "measured popup" << appletParallax << "menu" << menuParallax << "sub-menu" << subMenuParallax
             << "menu below sub-menu in the stack:" << (stack.indexOf(menu->window) < stack.indexOf(subMenu->window));
-    QVERIFY(appletParallax > 0);
-    QVERIFY(menuParallax >= appletParallax);
-    // never behind the menu it came from, and at the popped limit at most
-    QVERIFY(subMenuParallax >= menuParallax);
-    QVERIFY(subMenuParallax <= s_popped);
-    QCOMPARE(std::max({appletParallax, menuParallax, subMenuParallax}), s_popped);
+    // one popped limit per level of the chain, from the screen (the panel's popup is the first level), whatever the order the windows were
+    // raised in; never behind what a popup was opened from (Daniel, 2026-11-08)
+    QCOMPARE(appletParallax, s_popped);
+    QCOMPARE(menuParallax, 2 * s_popped);
+    QCOMPARE(subMenuParallax, (subMenuOfMenu ? 3 : 2) * s_popped);
 }
 
 void StereoDepthPopupsTest::testHoverRaise()
@@ -312,8 +311,9 @@ void StereoDepthPopupsTest::testDanielsLimit()
     const int menuParallax = parallaxOf(*image, *menu, 100);
     const int subMenuParallax = parallaxOf(*image, *subMenu, 160);
     qInfo() << "measured at Daniel's limit: popup" << appletParallax << "menu" << menuParallax << "sub-menu" << subMenuParallax;
-    QCOMPARE(menuParallax, 5);
-    QCOMPARE(subMenuParallax, 5);
+    // one limit per level: the panel's popup 5, its menu and the sub-menu beside it 10 (ORDER 464; before, the share put both at 5)
+    QCOMPARE(menuParallax, 10);
+    QCOMPARE(subMenuParallax, 10);
 }
 
 void StereoDepthPopupsTest::testTwoDimensionalOutputIsUnchanged()

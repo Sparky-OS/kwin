@@ -59,6 +59,8 @@ static const QSize s_outputSize(320, 240);
 static constexpr qreal s_sunkLimit = 96;
 static constexpr qreal s_poppedLimit = 48;
 static constexpr int s_sunk = -16;
+// the window right beneath the active one: one layer of the sunk range, a fifth of the limit (ORDER 464; before it was the limit itself)
+static constexpr int s_beneath = -3;
 static constexpr int s_popped = 8;
 
 static KSharedConfigPtr s_rulesConfig;
@@ -231,7 +233,7 @@ void StereoDepthPinnedTest::testCursorFollowsWindowDepth()
         QCOMPARE(a.window->keepAbove(), above);
         auto image = capture(true);
         QVERIFY(image);
-        const int expected = above ? s_popped : s_sunk;
+        const int expected = above ? s_popped : s_beneath;
         QCOMPARE(parallaxOf(*image, a), expected);
         const int left = firstX(*image, 0, 40, Qt::green);
         const int right = firstX(*image, s_outputSize.width(), 40, Qt::green);
@@ -261,13 +263,13 @@ void StereoDepthPinnedTest::testNothingPinned()
     auto image = capture();
     QVERIFY(image);
     QCOMPARE(parallaxOf(*image, b), 0);
-    QCOMPARE(parallaxOf(*image, a), s_sunk);
+    QCOMPARE(parallaxOf(*image, a), s_beneath);
 
     activate(a);
     image = capture();
     QVERIFY(image);
     QCOMPARE(parallaxOf(*image, a), 0);
-    QCOMPARE(parallaxOf(*image, b), s_sunk);
+    QCOMPARE(parallaxOf(*image, b), s_beneath);
 }
 
 void StereoDepthPinnedTest::testKeepAboveStaysPopped()
@@ -338,7 +340,7 @@ void StereoDepthPinnedTest::testUnpinReturnsToTheNormalRule()
     a.window->setKeepAbove(false);
     image = capture();
     QVERIFY(image);
-    QCOMPARE(parallaxOf(*image, a), s_sunk);
+    QCOMPARE(parallaxOf(*image, a), s_beneath);
     QCOMPARE(parallaxOf(*image, b), 0);
 
     // unpinned and active: at the screen
@@ -351,7 +353,7 @@ void StereoDepthPinnedTest::testUnpinReturnsToTheNormalRule()
     image = capture();
     QVERIFY(image);
     QCOMPARE(parallaxOf(*image, a), 0);
-    QCOMPARE(parallaxOf(*image, b), s_sunk);
+    QCOMPARE(parallaxOf(*image, b), s_beneath);
 }
 
 void StereoDepthPinnedTest::testPinnedByWindowRule()

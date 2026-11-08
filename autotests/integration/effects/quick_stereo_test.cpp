@@ -381,7 +381,8 @@ void QuickStereoTest::testScanout()
 
 void QuickStereoTest::testPointer()
 {
-    options->setStereoSunkLimit(12);
+    // the window beneath the active one is a layer of the limit, a fifth: 12 pixels of a view 1920 wide, 2 of this one (ORDER 464)
+    options->setStereoSunkLimit(60);
     std::unique_ptr<KWayland::Client::Surface> surface(Test::createSurface());
     std::unique_ptr<Test::XdgToplevel> toplevel(Test::createXdgToplevelSurface(surface.get()));
     Window *window = Test::renderAndWaitForShown(surface.get(), QSize(100, 50), Qt::blue);

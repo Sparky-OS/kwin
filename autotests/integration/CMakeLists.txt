@@ -167,6 +167,8 @@ integrationTest(NAME testStereoDepthExchange SRCS stereo_depth_exchange_test.cpp
 integrationTest(NAME testScreenshotStereo SRCS screenshot_stereo_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testStereoDepthPinned SRCS stereo_depth_pinned_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testStereoDepthPinnedStack SRCS stereo_depth_pinned_stack_test.cpp LIBS screenshot_test_support)
+integrationTest(NAME testOutputOrder SRCS output_order_test.cpp)
+integrationTest(NAME testStereoDepthStack SRCS stereo_depth_stack_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testStereoDepthPopups SRCS stereo_depth_popups_test.cpp LIBS screenshot_test_support)
 integrationTest(NAME testStereoPopupBorder SRCS stereo_popup_border_test.cpp)
 integrationTest(NAME testStereoDepthNotifications SRCS stereo_depth_notifications_test.cpp LIBS screenshot_test_support)

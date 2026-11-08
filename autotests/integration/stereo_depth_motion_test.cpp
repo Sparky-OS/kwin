@@ -60,7 +60,8 @@ static const QSize s_outputSize(320, 240);
 // limits in pixels at 1920 wide, scaled to the 320 wide output: sunk 32 and popped 16 pixels
 static constexpr qreal s_sunkLimit = 192;
 static constexpr qreal s_poppedLimit = 96;
-static constexpr int s_sunk = -32;
+// the window right beneath the active one: one layer of the sunk range, a fifth of the limit (ORDER 464; before it was the limit itself, 32)
+static constexpr int s_sunk = -6;
 // the animations run this many times slower, so that captures land along the motions
 static constexpr qreal s_slow = 10;
 
