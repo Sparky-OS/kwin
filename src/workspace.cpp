@@ -1504,11 +1504,13 @@ void Workspace::updateOutputs()
         }
     }
 
-    if (!m_activeOutput) {
-        setActiveOutput(m_outputs[0]);
-    }
-
+    // the screen marked main in Display Settings (the front of the order of priorities) is the first active output, not the
+    // first the backend lists
     updateOutputOrder();
+
+    if (!m_activeOutput) {
+        setActiveOutput(firstOutput());
+    }
 
     const QSet<LogicalOutput *> oldOutputsSet(oldLogicalOutputs.constBegin(), oldLogicalOutputs.constEnd());
     const QSet<LogicalOutput *> outputsSet(m_outputs.constBegin(), m_outputs.constEnd());
@@ -2430,7 +2432,7 @@ void Workspace::desktopResized(const QHash<Window *, LogicalOutput *> &oldOutput
     rearrange(oldOutputs);
 
     if (!m_outputs.contains(m_activeOutput)) {
-        setActiveOutput(m_outputs[0]);
+        setActiveOutput(firstOutput());
     }
 
     const auto stack = stackingOrder();
@@ -2739,6 +2741,14 @@ void Workspace::updateOutputOrder()
 QList<LogicalOutput *> Workspace::outputOrder() const
 {
     return m_outputOrder;
+}
+
+LogicalOutput *Workspace::firstOutput() const
+{
+    if (!m_outputOrder.isEmpty()) {
+        return m_outputOrder.front();
+    }
+    return m_outputs.isEmpty() ? nullptr : m_outputs[0];
 }
 
 LogicalOutput *Workspace::activeOutput() const

@@ -150,8 +150,9 @@ void PointerInputRedirection::init()
     std::for_each(clients.begin(), clients.end(), setupMoveResizeConnection);
     connect(workspace(), &Workspace::windowAdded, this, setupMoveResizeConnection);
 
-    // warp the cursor to center of screen containing the workspace center
-    if (const LogicalOutput *output = workspace()->outputAt(workspace()->geometry().center())) {
+    // warp the cursor to the center of the first output in the person's order, the one the active output starts on, so that the
+    // first move of the mouse does not take the focus to another screen
+    if (const LogicalOutput *output = workspace()->firstOutput()) {
         warp(output->geometry().center());
     }
     updateAfterScreenChange();

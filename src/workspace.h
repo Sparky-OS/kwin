@@ -159,6 +159,12 @@ public:
     LogicalOutput *xineramaIndexToOutput(int index) const;
 
     QList<LogicalOutput *> outputOrder() const;
+    /**
+     * The screen marked main in Display Settings (priority 1, set through kde_output_management_v2 set_priority): the front of the
+     * output order, or the first the backend lists while there is no order yet. The active output starts here, comes back here
+     * when the active output is removed, and the pointer starts on its centre.
+     */
+    LogicalOutput *firstOutput() const;
 
     LogicalOutput *activeOutput() const;
     bool isOutputInteractive(const LogicalOutput *output) const;
