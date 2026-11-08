@@ -10,6 +10,9 @@
 #include "startupfeedback.h"
 // Qt
 #include <QApplication>
+#include <algorithm>
+#include <cmath>
+#include <iterator>
 #include <QDBusConnectionInterface>
 #include <QDBusServiceWatcher>
 #include <QFile>
@@ -31,6 +34,7 @@
 #include "cursorsource.h"
 #include "effect/effecthandler.h"
 #include "opengl/glutils.h"
+#include "scene/stereodepth.h"
 
 // based on StartupId in KRunner by Lubos Lunak
 // SPDX-FileCopyrightText: 2001 Lubos Lunak <l.lunak@kde.org>
@@ -167,6 +171,11 @@ void StartupFeedbackEffect::reconfigure(Effect::ReconfigureFlags flags)
 void StartupFeedbackEffect::prePaintScreen(ScreenPrePaintData &data)
 {
     const int time = m_clock.tick(data.view).count();
+    // the pointer's plane follows what it is over in the same short motion the pointer itself makes
+    if (data.screen == effects->screenAt(effects->cursorPos().toPoint())) {
+        m_depthTime += std::chrono::milliseconds(time);
+        m_pointerDepth.setTarget(stereoAtPointer() ? StereoDepth::pointerDepth(effects->cursorPos()) : 0, m_depthTime);
+    }
 
     if (m_active && effects->isCursorHidden()) {
         stop();
@@ -175,14 +184,17 @@ void StartupFeedbackEffect::prePaintScreen(ScreenPrePaintData &data)
         // need the unclipped version
         switch (m_type) {
         case BouncingFeedback:
-            m_progress = (m_progress + time) % BOUNCE_DURATION;
-            m_frame = qRound((qreal)m_progress / (qreal)BOUNCE_FRAME_DURATION) % BOUNCE_FRAMES;
+            if (!m_frameHeld) {
+                m_progress = (m_progress + time) % BOUNCE_DURATION;
+                m_frame = qRound((qreal)m_progress / (qreal)BOUNCE_FRAME_DURATION) % BOUNCE_FRAMES;
+            }
             m_currentGeometry = feedbackRect(); // bounce alters geometry with m_frame
-            data.paint = data.paint.united(m_currentGeometry);
+            data.paint = data.paint.united(paintedArea());
             break;
         case BlinkingFeedback:
             m_progress = (m_progress + time) % BLINKING_DURATION;
             m_frame = qRound((qreal)m_progress / (qreal)BLINKING_FRAME_DURATION) % BLINKING_FRAMES;
+            data.paint = data.paint.united(paintedArea());
             break;
         default:
             break; // nothing
@@ -223,7 +235,14 @@ void StartupFeedbackEffect::paintScreen(const RenderTarget &renderTarget, const 
         }
         const Rect pixelGeometry = m_currentGeometry.scaled(viewport.scale()).rounded();
         QMatrix4x4 mvp = viewport.projectionMatrix();
-        mvp.translate(pixelGeometry.x(), pixelGeometry.y());
+        // On an output that shows stereo depth the icon is part of the pointer: it takes the pointer's plane, each eye's copy shifted
+        // by the parallax of that plane (the bounce goes in depth, between the pointer's plane and the popped limit above it)
+        int shift = 0;
+        if (viewport.stereoEye() != StereoEye::None && screen && screen->hasStereoEyes() && StereoDepth::isEnabled()) {
+            const Rect view = screen->geometryF().scaled(screen->scale()).rounded();
+            shift = StereoDepth::eyeShift(StereoDepth::parallax(iconDepth(screen), view.width()), viewport.stereoEye());
+        }
+        mvp.translate(pixelGeometry.x() + shift, pixelGeometry.y());
         shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mvp);
         shader->setColorspaceUniforms(ColorDescription::sRGB, renderTarget.colorDescription(), RenderingIntent::Perceptual);
         texture->render(pixelGeometry.size());
@@ -235,7 +254,7 @@ void StartupFeedbackEffect::paintScreen(const RenderTarget &renderTarget, const 
 void StartupFeedbackEffect::postPaintScreen()
 {
     if (m_active) {
-        m_dirtyRect = m_currentGeometry; // ensure the now dirty region is cleaned on the next pass
+        m_dirtyRect = paintedArea(); // ensure the now dirty region is cleaned on the next pass
         if (m_type == BlinkingFeedback || m_type == BouncingFeedback) {
             effects->addRepaint(m_dirtyRect); // we also have to trigger a repaint
         }
@@ -247,9 +266,9 @@ void StartupFeedbackEffect::slotMouseChanged(const QPointF &pos, const QPointF &
                                              Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers, Qt::KeyboardModifiers oldmodifiers)
 {
     if (m_active) {
-        m_dirtyRect |= m_currentGeometry;
+        m_dirtyRect |= paintedArea();
         m_currentGeometry = feedbackRect();
-        m_dirtyRect |= m_currentGeometry;
+        m_dirtyRect |= paintedArea();
         effects->addRepaint(m_dirtyRect);
     }
 }
@@ -335,7 +354,8 @@ void StartupFeedbackEffect::start(const Startup &startup)
 
     const QPixmap iconPixmap = startup.icon.pixmap(QSize(iconSize, iconSize), output->scale());
     prepareTextures(iconPixmap);
-    m_dirtyRect = m_currentGeometry = feedbackRect();
+    m_currentGeometry = feedbackRect();
+    m_dirtyRect = paintedArea();
     effects->addRepaint(m_dirtyRect);
 }
 
@@ -440,7 +460,8 @@ Rect StartupFeedbackEffect::feedbackRect() const
     switch (m_type) {
     case BouncingFeedback:
         texture = m_bouncingTextures[FRAME_TO_BOUNCE_TEXTURE[m_frame]].get();
-        yOffset = FRAME_TO_BOUNCE_YOFFSET[m_frame] * m_bounceSizesRatio;
+        // on an output that shows stereo depth the bounce is in depth only (iconDepth), the icon keeps its place on the screen
+        yOffset = stereoAtPointer() ? 0 : FRAME_TO_BOUNCE_YOFFSET[m_frame] * m_bounceSizesRatio;
         break;
     case BlinkingFeedback: // fall through
     case PassiveFeedback:
@@ -456,6 +477,46 @@ Rect StartupFeedbackEffect::feedbackRect() const
         rect = Rect(cursorPos, feedbackIconSize());
     }
     return rect;
+}
+
+void StartupFeedbackEffect::setCurrentFrame(int frame)
+{
+    m_frameHeld = frame >= 0;
+    m_frame = std::clamp(frame, 0, BOUNCE_FRAMES - 1);
+    m_progress = m_frame * BOUNCE_FRAME_DURATION;
+    if (m_active) {
+        m_currentGeometry = feedbackRect();
+        effects->addRepaintFull();
+    }
+}
+
+bool StartupFeedbackEffect::stereoAtPointer() const
+{
+    const LogicalOutput *output = effects->screenAt(effects->cursorPos().toPoint());
+    return output && output->hasStereoEyes() && StereoDepth::isEnabled();
+}
+
+qreal StartupFeedbackEffect::iconDepth(const LogicalOutput *output) const
+{
+    const qreal base = m_pointerDepth.depth(m_depthTime);
+    if (m_type != BouncingFeedback) {
+        return base;
+    }
+    // the bounce's own curve (the icon's height above its lowest point) becomes the share of the popped limit that the icon comes out of the pointer's plane
+    static const int lowest = *std::max_element(std::begin(FRAME_TO_BOUNCE_YOFFSET), std::end(FRAME_TO_BOUNCE_YOFFSET));
+    static const int highest = *std::min_element(std::begin(FRAME_TO_BOUNCE_YOFFSET), std::end(FRAME_TO_BOUNCE_YOFFSET));
+    const qreal height = qreal(lowest - FRAME_TO_BOUNCE_YOFFSET[m_frame]) / (lowest - highest);
+    return base + StereoDepth::poppedLimit(output) * height;
+}
+
+Rect StartupFeedbackEffect::paintedArea() const
+{
+    if (!stereoAtPointer()) {
+        return m_currentGeometry;
+    }
+    const LogicalOutput *output = effects->screenAt(effects->cursorPos().toPoint());
+    const int margin = std::ceil(StereoDepth::maxEyeShift(output->geometryF().scaled(output->scale()).rounded().width(), output) / output->scale()) + 1;
+    return m_currentGeometry.adjusted(-margin, 0, margin, 0);
 }
 
 bool StartupFeedbackEffect::isActive() const

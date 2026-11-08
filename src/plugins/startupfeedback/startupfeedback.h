@@ -20,6 +20,8 @@
 
 #include <chrono>
 
+#include "scene/stereodepth.h"
+
 namespace KWin
 {
 
@@ -31,6 +33,7 @@ class StartupFeedbackEffect
 {
     Q_OBJECT
     Q_PROPERTY(int type READ type)
+    Q_PROPERTY(int frame READ currentFrame WRITE setCurrentFrame)
 
 public:
     StartupFeedbackEffect();
@@ -51,6 +54,13 @@ public:
     {
         return int(m_type);
     }
+
+    // the frame of the bounce (0 to 19; the animation is at its highest at 0), for tests: a frame from 0 holds the animation there, -1 lets it run
+    int currentFrame() const
+    {
+        return m_frame;
+    }
+    void setCurrentFrame(int frame);
 
     static bool supported();
 
@@ -79,6 +89,12 @@ private:
     QImage scalePixmap(const QPixmap &pm, const QSize &size) const;
     void prepareTextures(const QPixmap &pix);
     Rect feedbackRect() const;
+    // Whether the pointer is on an output that shows stereo depth: there the icon is placed in depth, as part of the pointer
+    bool stereoAtPointer() const;
+    // The icon's depth in pixels of a view 1920 wide: the pointer's own plane, and for the bounce that plane up to the popped limit and back
+    qreal iconDepth(const LogicalOutput *output) const;
+    // the icon's frame with the room its parallax needs to either side
+    Rect paintedArea() const;
     QSize feedbackIconSize() const;
 
     qreal m_bounceSizesRatio;
@@ -89,7 +105,10 @@ private:
     QMap<QString, Startup> m_startups;
     bool m_active;
     int m_frame;
+    bool m_frameHeld = false;
     int m_progress;
+    StereoDepth::Motion m_pointerDepth;
+    std::chrono::nanoseconds m_depthTime = std::chrono::nanoseconds::zero();
     AnimationClock m_clock;
     std::unique_ptr<GLTexture> m_bouncingTextures[5];
     std::unique_ptr<GLTexture> m_texture; // for passive and blinking
