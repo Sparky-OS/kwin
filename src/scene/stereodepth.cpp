@@ -37,6 +37,11 @@ static constexpr qreal s_referencePopped = 4;
 // under it: the spacing the popped share had before notifications were put at the limit (limit / surfaces in the pile).
 static constexpr qreal s_pinnedStackSpan = 1.0;
 
+// The windows beneath the active one step back one layer each; a layer is this fraction of the sunk limit, and the stack stops at
+// the limit, the wallpaper's depth: the windows beyond this many share the deepest level and never go behind the wallpaper
+// (Daniel, 2026-11-08)
+static constexpr int s_sunkLayers = 5;
+
 // how long a change of level lasts at the default animation speed: towards the viewer quickly, so
 // that nothing is drawn behind what it is over for more than an instant, and away from it gently
 static constexpr std::chrono::milliseconds s_riseDuration(80);
@@ -270,19 +275,19 @@ qreal StereoDepth::level(const Window *window)
         return level;
     }
     case Role::Sunk: {
-        // the sunk range is shared by the windows beneath the active one, the lowest at the limit
+        // the windows beneath the active one step back from the screen in their stacking order, each a layer of the sunk range deeper
+        // than the one above it, the first right behind the screen: a layer is a fifth of the limit whatever the number of windows,
+        // so two windows are not at the bottom, and when they fill the range the rest share the limit, never behind the wallpaper (Daniel, 2026-11-08)
         const Window *main = mainWindow(window);
-        int count = 0;
         int above = 0;
         bool found = false;
         for (const Window *other : stack) {
             if (isOnStage(other, output) && other == mainWindow(other) && roleOf(other) == Role::Sunk) {
-                count++;
                 found |= other == main;
                 above += found && other != main;
             }
         }
-        return found ? -qreal(above + 1) / count : 0;
+        return found ? -qreal(std::min(above + 1, s_sunkLayers)) / s_sunkLayers : 0;
     }
     }
     return 0;
