@@ -28,7 +28,7 @@ class Window;
  * popped limit, in front of it). Anything between is valid, nothing goes beyond (but for what
  * opens over a pinned window, below). The active
  * window is at the screen's level and what pops up over it (menus, dialogs, tooltips) is popped,
- * the inactive windows share the sunk range evenly in their stacking order, the wallpaper is at
+ * the inactive windows step back one layer each (a fifth of the sunk limit) in their stacking order, the first right behind the screen and the sixth and the rest at the limit, and a chain of menus puts level n at n popped limits from its base, the wallpaper is at
  * the sunk limit, panels are at the screen's level, and a popped thing that touches the edge of
  * its output stays at the screen's level. A window the user or a rule pinned above the others
  * (Keep Above) stays at the popped limit and one pinned below (Keep Below) at the sunk limit,

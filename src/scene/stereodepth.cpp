@@ -42,6 +42,12 @@ static constexpr qreal s_pinnedStackSpan = 1.0;
 // (Daniel, 2026-11-08)
 static constexpr int s_sunkLayers = 5;
 
+// A chain of popups (a menu, its sub-menu, the next) stacks one popped limit per level from its base, whatever the length of the
+// chain: level n is n limits out from the base, the screen for a plain window and the pinned window's level for a window kept above
+// the others, and opening a sub-menu moves nothing above it (Daniel, 2026-11-08: "two menu levels will yeld twice the separation from
+// the screen, three levels the same"). The chain stops growing at this depth, which bounds what is drawn of it.
+static constexpr int s_maxPopupDepth = 6;
+
 // how long a change of level lasts at the default animation speed: towards the viewer quickly, so
 // that nothing is drawn behind what it is over for more than an instant, and away from it gently
 static constexpr std::chrono::milliseconds s_riseDuration(80);
@@ -205,6 +211,32 @@ bool StereoDepth::isEnabled()
     return options->stereoSunkLimit() > 0 || options->stereoPoppedLimit() > 0;
 }
 
+// how many levels deep @a window is in its chain: itself and every popped window it was opened from (a dialog counts, a combo box's list
+// or a menu opened in it is the level beyond it, and so is a pop-up of the panel that holds a menu), up to the window that holds them; a popup with no parent (an X11 override-redirect menu)
+// is the n-th such popup on the output in the stacking order
+static int popupDepth(const Window *window, const LogicalOutput *output)
+{
+    if (window->transientFor()) {
+        int depth = 0;
+        for (const Window *w = window; w && depth < s_maxPopupDepth; w = w->transientFor()) {
+            if (roleOf(w) == Role::Popped) {
+                depth++;
+            }
+        }
+        return std::max(depth, 1);
+    }
+    int rank = 0;
+    for (const Window *other : workspace()->stackingOrder()) {
+        if (isOnStage(other, output) && roleOf(other) == Role::Popped && !other->transientFor() && !edgeFlattens(other) && !declaredPlace(other) && !isAlert(other)) {
+            rank++;
+            if (other == window) {
+                break;
+            }
+        }
+    }
+    return std::clamp(rank, 1, s_maxPopupDepth);
+}
+
 qreal StereoDepth::level(const Window *window)
 {
     const LogicalOutput *output = window->output();
@@ -230,8 +262,9 @@ qreal StereoDepth::level(const Window *window)
         if (const auto place = declaredPlace(window)) {
             // where the program declared it, under the rules below
             level = std::clamp(*place, -1.0, 1.0);
-        } else if (const Window *base = pinnedBase(window); base && !touchesEdge(base)) {
-            // over a pinned window, which stays at the limit: one step further out than the layer under it
+        } else if (const Window *base = pinnedBase(window); base && !touchesEdge(base) && isAlert(window)) {
+            // a notification or an on-screen display over a pinned window, which stays at the limit: one step further out than the
+            // layer under it
             int count = 0;
             int below = 0;
             bool found = false;
@@ -245,22 +278,14 @@ qreal StereoDepth::level(const Window *window)
             level = found ? 1 + s_pinnedStackSpan * qreal(below + 1) / count : 1;
         } else if (isAlert(window)) {
             // a notification or an on-screen display is the nearest thing on the output, at the
-            // popped limit whatever else is popped: the share below is for what is worked in
+            // popped limit whatever else is popped
             level = 1;
+        } else if (const Window *base = pinnedBase(window); base && !touchesEdge(base)) {
+            // a menu chain over a window kept above the others: level n is n limits out from the pinned window
+            level = 1 + popupDepth(window, output);
         } else {
-            // the popped limit is shared by what is popped over each other, the topmost at the
-            // limit; a popup with a declared place takes no share
-            int count = 0;
-            int below = 0;
-            bool found = false;
-            for (const Window *other : stack) {
-                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !edgeFlattens(other) && !declaredPlace(other) && !isAlert(other)) {
-                    count++;
-                    found |= other == window;
-                    below += !found;
-                }
-            }
-            level = found ? qreal(below + 1) / count : 1;
+            // a menu chain over a plain window: level n is n limits out from the screen, a popup opened alone at the limit
+            level = popupDepth(window, output);
         }
         // nor behind what its own window popped up before it, which it was opened from: a sub-menu
         // that ends up under its menu shares the menu's level
@@ -541,13 +566,13 @@ int StereoDepth::eyeShift(int parallax, StereoEye eye)
 
 int StereoDepth::maxEyeShift(int viewWidth, const LogicalOutput *output)
 {
-    const qreal limit = std::max(sunkLimit(output), poppedLimit(output) * (1 + s_pinnedStackSpan));
+    const qreal limit = std::max(sunkLimit(output), poppedLimit(output) * (1 + s_maxPopupDepth));
     return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
 }
 
 int StereoDepth::maxEyeShift(int viewWidth)
 {
-    const qreal limit = std::max(options->stereoSunkLimit(), options->stereoPoppedLimit() * (1 + s_pinnedStackSpan));
+    const qreal limit = std::max(options->stereoSunkLimit(), options->stereoPoppedLimit() * (1 + s_maxPopupDepth));
     return (std::lround(limit * viewWidth / s_referenceWidth) + 1) / 2;
 }
 
