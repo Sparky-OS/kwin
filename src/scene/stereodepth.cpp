@@ -169,6 +169,27 @@ static bool touchesEdge(const Window *window)
         || frame.y() + frame.height() >= screen.y() + screen.height();
 }
 
+// Whether the edge rule flattens @a window to the screen's level: a popped thing that touches its output's edge. A popup that cannot
+// fit inside the invisible border of an output (ORDER 418), a menu taller or wider than the room the border leaves, is the exception:
+// where the client lets the positioner resize it, ORDER 418's bounds fit it inside the border; otherwise it keeps its place, and it
+// keeps its level and its place in front of what it was opened from (Daniel, 2026-11-08), where the edge rule dropped it behind its
+// parent to the screen's level.
+static bool edgeFlattens(const Window *window)
+{
+    if (!touchesEdge(window)) {
+        return false;
+    }
+    if (isPopup(window)) {
+        const qreal border = StereoDepth::popupBorder(window->output());
+        const RectF screen = window->output()->geometryF();
+        const QSizeF size = window->frameGeometry().size();
+        if (border > 0 && (size.width() > screen.width() - 2 * border || size.height() > screen.height() - 2 * border)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool StereoDepth::isDesktopChrome(const Window *window)
 {
     return window->isDock() || isPopup(window);
@@ -197,7 +218,7 @@ qreal StereoDepth::level(const Window *window)
     case Role::Below:
         return -1;
     case Role::Popped: {
-        if (touchesEdge(window)) {
+        if (edgeFlattens(window)) {
             return 0;
         }
         qreal level = 1;
@@ -210,7 +231,7 @@ qreal StereoDepth::level(const Window *window)
             int below = 0;
             bool found = false;
             for (const Window *other : stack) {
-                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other) && !declaredPlace(other) && pinnedBase(other) == base) {
+                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !edgeFlattens(other) && !declaredPlace(other) && pinnedBase(other) == base) {
                     count++;
                     found |= other == window;
                     below += !found;
@@ -228,7 +249,7 @@ qreal StereoDepth::level(const Window *window)
             int below = 0;
             bool found = false;
             for (const Window *other : stack) {
-                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other) && !declaredPlace(other) && !isAlert(other)) {
+                if (isOnStage(other, output) && roleOf(other) == Role::Popped && !edgeFlattens(other) && !declaredPlace(other) && !isAlert(other)) {
                     count++;
                     found |= other == window;
                     below += !found;
@@ -242,7 +263,7 @@ qreal StereoDepth::level(const Window *window)
         const QList<Window *> &shown = workspace()->windows();
         for (qsizetype i = 0, end = shown.indexOf(const_cast<Window *>(window)); i < end; ++i) {
             const Window *other = shown[i];
-            if (mainWindow(other) == main && isOnStage(other, output) && roleOf(other) == Role::Popped && !touchesEdge(other)) {
+            if (mainWindow(other) == main && isOnStage(other, output) && roleOf(other) == Role::Popped && !edgeFlattens(other)) {
                 level = std::max(level, StereoDepth::level(other));
             }
         }
