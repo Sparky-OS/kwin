@@ -263,7 +263,14 @@ void Workspace::setActiveWindow(Window *window)
     }
 
     if (window) {
-        setActiveOutput(window->output());
+        // The desktop and the surfaces the session's shell puts up on every screen (the splash, the desktop windows, a panel, a
+        // launcher) are not where the person works. Plasma maps them one per output in the order its screens come in, and each
+        // takes the focus as it maps, so the last would leave the active output on the screen it served last, not on the screen
+        // marked main in Display Settings where the session started. The pointer, a click and the activation of a program's own
+        // window still move it; a launcher opens on the active output, so activating it moves nothing.
+        if (!window->isDesktop() && !qobject_cast<LayerShellV1Window *>(window)) {
+            setActiveOutput(window->output());
+        }
         disableGlobalShortcutsForClient(window->rules()->checkDisableGlobalShortcuts(false));
     } else {
         disableGlobalShortcutsForClient(false);
