@@ -7,6 +7,7 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 #include "kwin_wayland_test.h"
+#include "options.h"
 
 #include "atoms.h"
 #include "compositor.h"
@@ -31,6 +32,9 @@
 #include <KSharedConfig>
 #include <QSocketNotifier>
 #include <drm_fourcc.h>
+#include <wayland-util.h>
+#include <array>
+#include <optional>
 #include <linux/input-event-codes.h>
 #include <netwm.h>
 #include <xcb/present.h>
@@ -145,6 +149,7 @@ private Q_SLOTS:
     void testStereoContentDeclarationOneEyeWide_data();
     void testStereoContentDeclarationOneEyeWide();
     void testStereoContentDeclarationMalformed();
+    void testStereoDepthLimits();
     void testStereoContentOneViewSize_data();
     void testStereoContentOneViewSize();
     void testStereoOneViewConfigure_data();
@@ -4068,7 +4073,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 9u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 10u);
 
     const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -4407,6 +4412,73 @@ void X11WindowTest::testStereoOneViewConfigure()
     }
     xcb_destroy_window(c.get(), window->window());
     xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoDepthLimits()
+{
+    // This test verifies that a window which declares stereo content is told the depth limits of
+    // its output in _KDE_NET_WM_STEREO_DEPTH_LIMITS (what kde_stereo_depth_v1.depth_limits carries
+    // to a Wayland surface), that the property follows the person's settings, and that it goes when
+    // the window stops declaring.
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    const qreal sunk = options->stereoSunkLimit();
+    const qreal popped = options->stereoPoppedLimit();
+    const auto restore = qScopeGuard([sunk, popped]() {
+        options->setStereoSunkLimit(sunk);
+        options->setStereoPoppedLimit(popped);
+    });
+    options->setStereoSunkLimit(10);
+    options->setStereoPoppedLimit(4);
+
+    // the value as the client reads it: exactly two CARDINAL/32 values, or nothing
+    const auto read = [&c](xcb_window_t windowId) -> std::optional<std::array<uint32_t, 2>> {
+        xcb_get_property_cookie_t cookie = xcb_get_property(c.get(), false, windowId, atoms->kde_net_wm_stereo_depth_limits, XCB_ATOM_CARDINAL, 0, 3);
+        std::unique_ptr<xcb_get_property_reply_t> reply(xcb_get_property_reply(c.get(), cookie, nullptr));
+        if (!reply || reply->type != XCB_ATOM_CARDINAL || reply->format != 32 || reply->value_len != 2 || reply->bytes_after != 0) {
+            return std::nullopt;
+        }
+        const uint32_t *values = reinterpret_cast<const uint32_t *>(xcb_get_property_value(reply.get()));
+        return std::array<uint32_t, 2>{values[0], values[1]};
+    };
+
+    const uint32_t value = StereoContentSideBySideFull;
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
+        xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, windowId, atoms->kde_net_wm_stereo_content,
+                            XCB_ATOM_CARDINAL, 32, 1, &value);
+    });
+    QVERIFY(window);
+
+    // 10 and 4 pixels of a view 1920 wide, 24.8 fixed point, as the Wayland event's wl_fixed_t
+    QTRY_VERIFY(read(window->window()).has_value());
+    QCOMPARE((*read(window->window()))[0], uint32_t(wl_fixed_from_double(StereoDepth::sunkLimit(window->output()))));
+    QCOMPARE((*read(window->window()))[1], uint32_t(wl_fixed_from_double(StereoDepth::poppedLimit(window->output()))));
+    QCOMPARE((*read(window->window()))[0], uint32_t(10 * 256));
+    QCOMPARE((*read(window->window()))[1], uint32_t(4 * 256));
+
+    // the person changes the limits, and a fractional one keeps its fraction
+    options->setStereoSunkLimit(24);
+    options->setStereoPoppedLimit(9.5);
+    QTRY_COMPARE((*read(window->window())).at(0), uint32_t(24 * 256));
+    QCOMPARE((*read(window->window())).at(1), uint32_t(9.5 * 256));
+
+    // a window that does not declare stereo content is told nothing
+    X11Window *plain = createWindow(c.get(), Rect(200, 0, 100, 100));
+    QVERIFY(plain);
+    QTest::qWait(100);
+    QVERIFY(!read(plain->window()).has_value());
+
+    // withdrawing the declaration withdraws the limits, declaring again brings them back
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content);
+    xcb_flush(c.get());
+    QTRY_VERIFY(!read(window->window()).has_value());
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &value);
+    xcb_flush(c.get());
+    QTRY_VERIFY(read(window->window()).has_value());
+    QCOMPARE((*read(window->window())).at(0), uint32_t(24 * 256));
 }
 
 void X11WindowTest::testStereoContentDeclarationMalformed()
