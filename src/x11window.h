@@ -104,6 +104,12 @@ public:
     QSizeF stereoWindowScale() const;
     QSizeF programSizeScale() const;
     /**
+     * Writes the depth limits of the output the window mainly sits on to its
+     * _KDE_NET_WM_STEREO_DEPTH_LIMITS while it declares stereo content, and removes the
+     * property when it stops declaring. Called by StereoDepthStates on every change.
+     */
+    void updateStereoDepthLimits(qreal sunk, qreal popped);
+    /**
      * The child windows that hold stereo content (_KDE_NET_WM_STEREO_CONTENT_CHILDREN).
      */
     X11StereoChildren *stereoChildren() const;
@@ -382,6 +388,9 @@ private:
     QSizeF m_stereoClientScale = QSizeF(1, 1);
     QSizeF m_stereoWindowScale = QSizeF(1, 1);
     uint32_t m_stereoContentVersion = 0;
+    // the values last written to _KDE_NET_WM_STEREO_DEPTH_LIMITS: sunk and popped as 24.8 fixed point
+    bool m_stereoDepthLimitsWritten = false;
+    uint32_t m_stereoDepthLimits[2] = {0, 0};
     // the size one view is shown at, as the program declares it
     QSizeF m_stereoOneViewSize;
     uint32_t m_stereoPlaceSerial = 0;

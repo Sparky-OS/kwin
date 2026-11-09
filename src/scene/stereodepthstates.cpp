@@ -13,6 +13,7 @@
 #include "wayland/surface.h"
 #include "window.h"
 #include "workspace.h"
+#include "x11window.h"
 
 namespace KWin
 {
@@ -59,6 +60,7 @@ void StereoDepthStates::watch(Window *window)
     connect(window, &Window::minimizedChanged, this, &StereoDepthStates::scheduleUpdate);
     connect(window, &Window::hiddenChanged, this, &StereoDepthStates::scheduleUpdate);
     connect(window, &Window::desktopsChanged, this, &StereoDepthStates::scheduleUpdate);
+    connect(window, &Window::stereoContentChanged, this, &StereoDepthStates::scheduleUpdate);
     if (SurfaceInterface *surface = window->surface()) {
         // a surface may be followed before its window is shown, or again later
         connect(surface, &SurfaceInterface::stereoDepthFollowed, this, &StereoDepthStates::scheduleUpdate);
@@ -79,6 +81,11 @@ void StereoDepthStates::update()
     m_scheduled = false;
     const auto windows = workspace()->windows();
     for (Window *window : windows) {
+        if (auto *x11Window = qobject_cast<X11Window *>(window)) {
+            // an X11 window cannot make a kde_stereo_depth_v1 object: the limits of its output
+            // reach it as a property, whether or not its surface exists yet
+            x11Window->updateStereoDepthLimits(StereoDepth::sunkLimit(window->output()), StereoDepth::poppedLimit(window->output()));
+        }
         SurfaceInterface *surface = window->surface();
         if (!surface || window->isDeleted()) {
             continue;

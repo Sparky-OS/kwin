@@ -4380,6 +4380,37 @@ void X11Window::getStereoContentClass()
     readStereoContentClass(property);
 }
 
+void X11Window::updateStereoDepthLimits(qreal sunk, qreal popped)
+{
+    if (!m_managed || isDeleted()) {
+        return;
+    }
+    if (declaredStereoContent() == StereoContentNone) {
+        if (m_stereoDepthLimitsWritten) {
+            m_stereoDepthLimitsWritten = false;
+            xcb_delete_property(kwinApp()->x11Connection(), window(), atoms->kde_net_wm_stereo_depth_limits);
+            xcb_flush(kwinApp()->x11Connection());
+        }
+        return;
+    }
+    // _KDE_NET_WM_STEREO_DEPTH_LIMITS: CARDINAL/32, exactly two values, sunk and popped as
+    // kde_stereo_depth_v1.depth_limits carries them: 24.8 fixed point (wl_fixed_t), pixels of a
+    // view 1920 wide, for the output the window mainly sits on
+    const auto fixed = [](qreal value) {
+        return uint32_t(int32_t(std::llround(value * 256)));
+    };
+    const uint32_t limits[2] = {fixed(sunk), fixed(popped)};
+    if (m_stereoDepthLimitsWritten && limits[0] == m_stereoDepthLimits[0] && limits[1] == m_stereoDepthLimits[1]) {
+        return;
+    }
+    m_stereoDepthLimitsWritten = true;
+    m_stereoDepthLimits[0] = limits[0];
+    m_stereoDepthLimits[1] = limits[1];
+    xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, window(),
+                        atoms->kde_net_wm_stereo_depth_limits, XCB_ATOM_CARDINAL, 32, 2, limits);
+    xcb_flush(kwinApp()->x11Connection());
+}
+
 Xcb::Property X11Window::fetchStereoContentVersion() const
 {
     return Xcb::Property(false, window(), atoms->kde_net_wm_stereo_content_version, XCB_ATOM_CARDINAL, 0, 1);

@@ -76,6 +76,7 @@ public:
     Xcb::Atom kde_net_wm_stereo_content_one_view_commit;
     Xcb::Atom kde_net_wm_stereo_content_one_view_size;
     Xcb::Atom kde_net_wm_stereo_content_supported;
+    Xcb::Atom kde_net_wm_stereo_depth_limits;
     Xcb::Atom utf8_string;
     Xcb::Atom text;
     Xcb::Atom uri_list;
