@@ -2212,6 +2212,17 @@ X11Window *Workspace::findStereoChildOwner(xcb_window_t w) const
     }
     return nullptr;
 }
+
+X11Window *Workspace::findStereoChildParent(xcb_window_t w) const
+{
+    for (Window *window : std::as_const(m_windows)) {
+        X11Window *x11Window = qobject_cast<X11Window *>(window);
+        if (x11Window && x11Window->stereoChildren() && x11Window->stereoChildren()->isParentOfChild(w)) {
+            return x11Window;
+        }
+    }
+    return nullptr;
+}
 #endif
 
 Window *Workspace::findWindow(std::function<bool(const Window *)> func) const

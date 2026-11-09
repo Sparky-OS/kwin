@@ -45,6 +45,14 @@ struct KWIN_EXPORT X11StereoChild
     RectF geometry;
     // Bounding shape in native X pixels, independent of the displayed place.
     RegionF shape;
+    // Where X shows the child, in the X11 window's coordinates as the scene has them: the X11
+    // window's area and those of the windows between it and the child, less the viewable windows
+    // stacked over the child, or over a window between, where their bounding shapes are, that are
+    // not declared children themselves (the scene orders those). The redirected child's buffer is
+    // whole, so the scene cuts the item to this, however large the child's place is.
+    RegionF visible;
+    // the windows stacked over the child, or over a window between, whose bounding shapes went into visible
+    QList<xcb_window_t> coverers;
     QSize nativeSize;
     // the child and the windows between it and the X11 window are mapped, so the child is
     // shown with the X11 window
@@ -105,6 +113,17 @@ public:
      * X11 window.
      */
     bool owns(xcb_window_t window) const;
+    /**
+     * Whether @p window is the X11 window or one between it and a child: the windows whose
+     * children can cover a child.
+     */
+    bool isParentOfChild(xcb_window_t window) const;
+    /**
+     * Handles a CreateNotify, DestroyNotify, MapNotify, UnmapNotify, ReparentNotify,
+     * ConfigureNotify or CirculateNotify that the X server sent to a window isParentOfChild()
+     * accepts: a window that may cover a child appeared, moved, was restacked or went away.
+     */
+    void handleSubstructureEvent(xcb_generic_event_t *event);
     bool hasSurfaceSerial(quint64 serial) const;
     void associate(XwaylandSurfaceV1Interface *surface);
     /**
@@ -127,6 +146,8 @@ private:
     void updateGeometry(X11StereoChild *child);
     void updateContent(X11StereoChild *child);
     void updateShape(X11StereoChild *child);
+    void updateVisible(X11StereoChild *child);
+    void updateAll();
     void setSurface(X11StereoChild *child, SurfaceInterface *surface);
     X11StereoChild *findChild(xcb_window_t window) const;
 

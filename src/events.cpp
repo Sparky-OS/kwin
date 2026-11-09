@@ -123,11 +123,57 @@ static Qt::MouseButton x11ToQtMouseButton(int button)
     return Qt::NoButton;
 }
 
+// The window a window-structure event was sent to when it came because that window's children are
+// watched (SubstructureNotify), or XCB_WINDOW_NONE: the parent of a CreateNotify, the event window of
+// the others when it is not the window the event is about.
+static xcb_window_t findSubstructureParent(xcb_generic_event_t *event)
+{
+    switch (event->response_type & ~0x80) {
+    case XCB_CREATE_NOTIFY:
+        return reinterpret_cast<xcb_create_notify_event_t *>(event)->parent;
+    case XCB_DESTROY_NOTIFY: {
+        const auto *e = reinterpret_cast<xcb_destroy_notify_event_t *>(event);
+        return e->event != e->window ? e->event : XCB_WINDOW_NONE;
+    }
+    case XCB_MAP_NOTIFY: {
+        const auto *e = reinterpret_cast<xcb_map_notify_event_t *>(event);
+        return e->event != e->window ? e->event : XCB_WINDOW_NONE;
+    }
+    case XCB_UNMAP_NOTIFY: {
+        const auto *e = reinterpret_cast<xcb_unmap_notify_event_t *>(event);
+        return e->event != e->window ? e->event : XCB_WINDOW_NONE;
+    }
+    case XCB_REPARENT_NOTIFY: {
+        const auto *e = reinterpret_cast<xcb_reparent_notify_event_t *>(event);
+        return e->event != e->window ? e->event : XCB_WINDOW_NONE;
+    }
+    case XCB_CONFIGURE_NOTIFY: {
+        const auto *e = reinterpret_cast<xcb_configure_notify_event_t *>(event);
+        return e->event != e->window ? e->event : XCB_WINDOW_NONE;
+    }
+    case XCB_CIRCULATE_NOTIFY: {
+        const auto *e = reinterpret_cast<xcb_circulate_notify_event_t *>(event);
+        return e->event != e->window ? e->event : XCB_WINDOW_NONE;
+    }
+    default:
+        return XCB_WINDOW_NONE;
+    }
+}
+
 /**
  * Handles workspace specific XCB event
  */
 void Workspace::workspaceEvent(xcb_generic_event_t *e)
 {
+    // a window inside an X11 window with stereo children appeared, moved, was restacked or went
+    // away: it may cover a child
+    if (const xcb_window_t parent = findSubstructureParent(e); parent != XCB_WINDOW_NONE) {
+        if (X11Window *window = findStereoChildParent(parent)) {
+            window->stereoChildren()->handleSubstructureEvent(e);
+            return;
+        }
+    }
+
     const xcb_window_t eventWindow = findEventWindow(e);
     if (eventWindow != XCB_WINDOW_NONE) {
         if (X11Window *window = findClient(eventWindow)) {

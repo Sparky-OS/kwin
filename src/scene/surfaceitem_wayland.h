@@ -81,6 +81,7 @@ public:
 
     void setChildGeometry(const RectF &geometry);
     void setChildShape(const RegionF &shape, const QSize &nativeSize);
+    void setChildVisible(const RegionF &visible);
     RegionF shape() const override;
     RegionF opaque() const override;
     void setMapped(bool mapped);
@@ -92,6 +93,8 @@ private:
     RegionF shapeForSourceBox(const RectF &bufferSourceBox) const override;
 
     RegionF m_nativeShape;
+    RegionF m_visible;
+    bool m_clipped = false;
     QSize m_nativeSize;
     QSizeF m_childSize;
     bool m_mapped = false;

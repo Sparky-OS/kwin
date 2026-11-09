@@ -127,6 +127,7 @@ public:
      * child and itself.
      */
     X11Window *findStereoChildOwner(xcb_window_t w) const;
+    X11Window *findStereoChildParent(xcb_window_t w) const;
 #endif
 
     Window *findWindow(const QUuid &internalId) const;

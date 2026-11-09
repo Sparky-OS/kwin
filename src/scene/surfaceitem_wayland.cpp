@@ -293,6 +293,19 @@ void SurfaceItemXwaylandChild::setChildShape(const RegionF &shape, const QSize &
     scheduleRepaint(rect());
 }
 
+// Where X shows the child, in the X11 window's coordinates: inside its window and the windows
+// between, and without the windows stacked over it.
+void SurfaceItemXwaylandChild::setChildVisible(const RegionF &visible)
+{
+    if (m_clipped && m_visible == visible) {
+        return;
+    }
+    m_clipped = true;
+    m_visible = visible;
+    discardQuads();
+    scheduleRepaint(rect());
+}
+
 RegionF SurfaceItemXwaylandChild::shapeForSourceBox(const RectF &sourceBox) const
 {
     if (sourceBox.isEmpty() || m_nativeSize.isEmpty()) {
@@ -306,9 +319,11 @@ RegionF SurfaceItemXwaylandChild::shapeForSourceBox(const RectF &sourceBox) cons
         && bufferSize() == QSize(2 * m_nativeSize.width(), m_nativeSize.height())) {
         nativeShape |= m_nativeShape.translated(m_nativeSize.width(), 0);
     }
-    return nativeShape.intersected(sourceBox)
-        .translated(-sourceBox.topLeft())
-        .scaled(destinationSize().width() / sourceBox.width(), destinationSize().height() / sourceBox.height());
+    const RegionF shape = nativeShape.intersected(sourceBox)
+                              .translated(-sourceBox.topLeft())
+                              .scaled(destinationSize().width() / sourceBox.width(), destinationSize().height() / sourceBox.height());
+    // each eye's quads come from this, so the cut is made here, in the item's own coordinates
+    return m_clipped ? shape.intersected(m_visible.translated(-position())) : shape;
 }
 
 RegionF SurfaceItemXwaylandChild::shape() const
@@ -382,6 +397,7 @@ void SurfaceItemXwayland::updateStereoChildren()
             item->setChildGeometry(child->place());
             item->setStereoContent(child->content);
             item->setChildShape(child->shape, child->nativeSize);
+            item->setChildVisible(child->visible);
             item->setMapped(child->mapped);
             item->setZ(child->belowParent ? int(items.size()) - int(children->children().size()) : int(items.size()) + 1);
             items.push_back(std::move(item));
