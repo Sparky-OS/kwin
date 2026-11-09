@@ -172,7 +172,7 @@ void StereoDepthSurfaceV1::sendState(bool awake, uint32_t outputEdges, qreal sun
         send_depth_state(awake ? 1 : 0, outputEdges);
     }
     const auto limits = std::make_pair(sunk, popped);
-    if (m_sentLimits != limits) {
+    if (resource()->version() >= KDE_STEREO_DEPTH_V1_DEPTH_LIMITS_SINCE_VERSION && m_sentLimits != limits) {
         m_sentLimits = limits;
         send_depth_limits(wl_fixed_from_double(sunk), wl_fixed_from_double(popped));
     }
