@@ -163,6 +163,8 @@ private Q_SLOTS:
     void testStereoChildWindowListedBeforeMapping();
     void testStereoChildWindowOtherVisual();
     void testStereoChildWindowOneViewSize();
+    void testStereoChildWindowClip();
+    void testStereoChildWindowClipAncestor();
 };
 
 void X11WindowTest::initTestCase_data()
@@ -5016,6 +5018,193 @@ void X11WindowTest::testStereoChildWindowOneViewSize()
     }());
     QCOMPARE(childItem->position(), stereoChild->place().topLeft());
     QCOMPARE(childItem->destinationSize(), stereoChild->place().size());
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoChildWindowClip()
+{
+    // This test verifies that a declared child is shown only where X shows it: inside its X11
+    // window, and without the viewable windows stacked over it, cut by their bounding shapes, also
+    // those that appear, move or are restacked after the child (ORDER 160). The redirected child's
+    // buffer is whole, so the scene cuts the item the way the X server cuts a child.
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200));
+    QVERIFY(window);
+    // a child larger than the room it has: 200x150 at (200, 100) in a window of 300x200
+    const xcb_window_t child = xcb_generate_id(c.get());
+    const uint32_t red = 0x00ff0000;
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, window->window(), 200, 100, 200, 150, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &red);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_map_window(c.get(), child);
+    // a plain sibling mapped after the child, so stacked over it: 60x40 at (220, 110)
+    const uint32_t green = 0x0000c000;
+    const auto createSibling = [&](const Rect &rect) {
+        const xcb_window_t sibling = xcb_generate_id(c.get());
+        xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, sibling, window->window(), rect.x(), rect.y(), rect.width(), rect.height(), 0,
+                          XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &green);
+        return sibling;
+    };
+    const xcb_window_t sibling = createSibling(Rect(220, 110, 60, 40));
+    xcb_map_window(c.get(), sibling);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_flush(c.get());
+
+    const X11StereoChildren *children = window->stereoChildren();
+    QTRY_COMPARE(children->children().size(), 1u);
+    const X11StereoChild *stereoChild = children->children().front().get();
+
+    const RegionF whole = Xcb::fromXNative(Rect(0, 0, 300, 200));
+    const auto rect = [](int x, int y, int width, int height) {
+        return Xcb::fromXNative(Rect(x, y, width, height));
+    };
+    // the window's area less the sibling
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40));
+
+    // unmapping the sibling gives its room back, mapping it takes it again
+    xcb_unmap_window(c.get(), sibling);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole);
+    xcb_map_window(c.get(), sibling);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40));
+
+    // a sibling that appears after the child was listed covers it as well
+    const xcb_window_t late = createSibling(Rect(250, 150, 30, 30));
+    xcb_map_window(c.get(), late);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40) - rect(250, 150, 30, 30));
+
+    // a sibling that moves
+    const uint32_t moved[] = {210, 160};
+    xcb_configure_window(c.get(), late, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, moved);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40) - rect(210, 160, 30, 30));
+
+    // a sibling that is destroyed
+    xcb_destroy_window(c.get(), late);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40));
+
+    // the child raised over its sibling is not covered by it, lowered under it is again
+    const uint32_t above = XCB_STACK_MODE_ABOVE;
+    xcb_configure_window(c.get(), child, XCB_CONFIG_WINDOW_STACK_MODE, &above);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole);
+    const uint32_t below = XCB_STACK_MODE_BELOW;
+    xcb_configure_window(c.get(), child, XCB_CONFIG_WINDOW_STACK_MODE, &below);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40));
+
+    // a sibling covers the child where its bounding shape is: two bars, not the rectangle between
+    const xcb_window_t shaped = createSibling(Rect(210, 100, 60, 60));
+    const xcb_rectangle_t bars[] = {{0, 0, 60, 20}, {0, 40, 60, 20}};
+    xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, XCB_CLIP_ORDERING_UNSORTED, shaped, 0, 0, 2, bars);
+    xcb_map_window(c.get(), shaped);
+    xcb_flush(c.get());
+    const RegionF withBars = whole - rect(220, 110, 60, 40) - rect(210, 100, 60, 20) - rect(210, 140, 60, 20);
+    QTRY_COMPARE(stereoChild->visible, withBars);
+    // and when its shape changes
+    const xcb_rectangle_t bar[] = {{0, 0, 60, 20}};
+    xcb_shape_rectangles(c.get(), XCB_SHAPE_SO_SET, XCB_SHAPE_SK_BOUNDING, XCB_CLIP_ORDERING_UNSORTED, shaped, 0, 0, 1, bar);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40) - rect(210, 100, 60, 20));
+    xcb_destroy_window(c.get(), shaped);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, whole - rect(220, 110, 60, 40));
+
+    // the scene shows the part of the surface that is visible, in the item's own coordinates:
+    // the child's 200x150 less what lies outside the window and under the sibling
+    KWIN_WAIT_FOR_STEREO_CHILD_SURFACE(stereoChild);
+    SurfaceItem *windowSurfaceItem = window->windowItem()->surfaceItem();
+    QVERIFY(windowSurfaceItem);
+    SurfaceItemXwaylandChild *childItem = nullptr;
+    QTRY_VERIFY([&]() {
+        for (Item *item : windowSurfaceItem->childItems()) {
+            if (auto candidate = qobject_cast<SurfaceItemXwaylandChild *>(item)) {
+                childItem = candidate;
+            }
+        }
+        return childItem != nullptr;
+    }());
+    // each eye's quads are what is painted: both eyes show the child's views only there
+    const auto coverage = [childItem](StereoEye eye) {
+        RegionF region;
+        for (const auto &quad : childItem->eyeQuads(eye)) {
+            region |= quad.bounds();
+        }
+        return region;
+    };
+    const RegionF shown = RegionF(rect(0, 0, 100, 100)) - rect(20, 10, 60, 40);
+    QTRY_COMPARE(coverage(StereoEye::Left), shown);
+    QTRY_COMPARE(coverage(StereoEye::Right), shown);
+    QCOMPARE(childItem->shape(), shown);
+
+    // a window with a sibling and no child to show is an ordinary window
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_children);
+    xcb_flush(c.get());
+    QTRY_VERIFY(children->children().empty());
+
+    xcb_unmap_window(c.get(), window->window());
+    xcb_destroy_window(c.get(), window->window());
+    xcb_flush(c.get());
+}
+
+void X11WindowTest::testStereoChildWindowClipAncestor()
+{
+    // This test verifies that a child inside a window of its own is clipped to that window as well
+    // (ORDER 160), and that a sibling stacked over the window between covers the child.
+
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200));
+    QVERIFY(window);
+    const uint32_t green = 0x0000c000;
+    const xcb_window_t holder = xcb_generate_id(c.get());
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, holder, window->window(), 150, 50, 100, 100, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &green);
+    const xcb_window_t child = xcb_generate_id(c.get());
+    const uint32_t red = 0x00ff0000;
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, holder, -10, 10, 200, 150, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &red);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_map_window(c.get(), child);
+    xcb_map_window(c.get(), holder);
+    // a sibling of the holder, stacked over it: 40x40 at (200, 100) in the window
+    const xcb_window_t sibling = xcb_generate_id(c.get());
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, sibling, window->window(), 200, 100, 40, 40, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_BACK_PIXEL, &green);
+    xcb_map_window(c.get(), sibling);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_flush(c.get());
+
+    const X11StereoChildren *children = window->stereoChildren();
+    QTRY_COMPARE(children->children().size(), 1u);
+    const X11StereoChild *stereoChild = children->children().front().get();
+    const auto rect = [](int x, int y, int width, int height) {
+        return Xcb::fromXNative(Rect(x, y, width, height));
+    };
+    // the holder's area (150, 50, 100, 100), less the sibling
+    QTRY_COMPARE(stereoChild->visible, RegionF(rect(150, 50, 100, 100)) - rect(200, 100, 40, 40));
+
+    // the holder moves, and the child with it
+    const uint32_t moved[] = {100, 20};
+    xcb_configure_window(c.get(), holder, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, moved);
+    xcb_flush(c.get());
+    QTRY_COMPARE(stereoChild->visible, RegionF(rect(100, 20, 100, 100)) - rect(200, 100, 40, 40));
 
     xcb_unmap_window(c.get(), window->window());
     xcb_destroy_window(c.get(), window->window());
