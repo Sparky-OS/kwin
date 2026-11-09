@@ -17,6 +17,9 @@
 #include "window.h"
 #include "workspace.h"
 
+#include <KWayland/Client/connection_thread.h>
+#include <KWayland/Client/event_queue.h>
+#include <KWayland/Client/registry.h>
 #include <KWayland/Client/surface.h>
 
 #include <functional>
@@ -49,6 +52,8 @@ private Q_SLOTS:
     void testDesktopDepthIsNotStereoContent();
     void testDeclaredPlace();
     void testLimitsFollowTheOutput();
+    void testResourceVersion_data();
+    void testResourceVersion();
     void testInertWithoutSurface();
 };
 
@@ -450,6 +455,112 @@ void StereoDepthExchangeTest::testLimitsFollowTheOutput()
     const Limits doubled = limitsOn(QSize(531, 299), {});
     QVERIFY(qAbs(doubled.sunk - 2 * monitor.sunk) < 0.01);
     QVERIFY(qAbs(doubled.popped - 2 * monitor.popped) < 0.01);
+}
+
+void StereoDepthExchangeTest::testResourceVersion_data()
+{
+    QTest::addColumn<uint32_t>("version");
+    QTest::newRow("version-3") << uint32_t(3);
+    QTest::newRow("version-4") << uint32_t(4);
+    QTest::newRow("version-5") << uint32_t(5);
+}
+
+void StereoDepthExchangeTest::testResourceVersion()
+{
+    QFETCH(uint32_t, version);
+
+    KWayland::Client::EventQueue queue;
+    queue.setup(Test::waylandConnection());
+    KWayland::Client::Registry registry;
+    registry.setEventQueue(&queue);
+    std::unique_ptr<Test::StereoContentManagerV1> manager;
+    connect(&registry, &KWayland::Client::Registry::interfaceAnnounced, &registry,
+            [&](const QByteArray &interface, uint32_t name, uint32_t advertised) {
+        if (interface == kde_stereo_content_manager_v1_interface.name) {
+            QVERIFY(advertised >= version);
+            manager = std::make_unique<Test::StereoContentManagerV1>(registry, name, version);
+        }
+    });
+    QSignalSpy announced(&registry, &KWayland::Client::Registry::interfacesAnnounced);
+    registry.create(Test::waylandConnection());
+    registry.setup();
+    QVERIFY(announced.wait());
+    QVERIFY(manager);
+    QCOMPARE(manager->version(), version);
+
+    auto window = createWindow(QPointF(100, 100));
+    QVERIFY(window->window);
+    auto current = follow(window->surface.get());
+    QVERIFY(Test::waylandSync());
+    QCOMPARE(current->states, 1);
+    QCOMPARE(current->limits, 1);
+    QCOMPARE(current->sunk, 10.0);
+    QCOMPARE(current->popped, 4.0);
+
+    // Model a client built against the older XML, which has no event 1. Merely
+    // binding the current generated interface at v3 can still decode that event.
+    wl_interface depthInterface = kde_stereo_depth_v1_interface;
+    depthInterface.version = version;
+    if (version < KDE_STEREO_DEPTH_V1_DEPTH_LIMITS_SINCE_VERSION) {
+        depthInterface.event_count = 1;
+    }
+    auto proxy = reinterpret_cast<kde_stereo_depth_v1 *>(wl_proxy_marshal_flags(
+        reinterpret_cast<wl_proxy *>(manager->object()), KDE_STEREO_CONTENT_MANAGER_V1_GET_DEPTH,
+        &depthInterface, version, 0, nullptr, static_cast<wl_surface *>(*window->surface)));
+    QVERIFY(proxy);
+    auto depth = std::make_unique<Test::StereoDepthV1>(proxy);
+    QCOMPARE(depth->version(), version);
+    QVERIFY(Test::waylandSync());
+    queue.dispatch();
+    QCOMPARE(depth->states, 1);
+    QVERIFY(depth->awake);
+    QCOMPARE(depth->outputEdges, 0u);
+    const bool hasLimits = version >= KDE_STEREO_DEPTH_V1_DEPTH_LIMITS_SINCE_VERSION;
+    QCOMPARE(depth->limits, hasLimits ? 1 : 0);
+    if (hasLimits) {
+        QCOMPARE(depth->sunk, 10.0);
+        QCOMPARE(depth->popped, 4.0);
+    }
+
+    // Subsequent state and limit changes reach each resource at its own version.
+    window->window->surface()->setStereoDepthState(false, Qt::RightEdge, 20, 8);
+    QVERIFY(Test::waylandSync());
+    queue.dispatch();
+    QCOMPARE(depth->states, 2);
+    QVERIFY(!depth->awake);
+    QCOMPARE(depth->outputEdges, uint32_t(Test::StereoDepthV1::edge_right));
+    QCOMPARE(depth->limits, hasLimits ? 2 : 0);
+    QCOMPARE(current->states, 2);
+    QCOMPARE(current->limits, 2);
+    QCOMPARE(current->sunk, 20.0);
+    QCOMPARE(current->popped, 8.0);
+    if (hasLimits) {
+        QCOMPARE(depth->sunk, 20.0);
+        QCOMPARE(depth->popped, 8.0);
+    }
+
+    // Limits can change without another depth_state event.
+    window->window->surface()->setStereoDepthState(false, Qt::RightEdge, 24, 12);
+    QVERIFY(Test::waylandSync());
+    queue.dispatch();
+    QCOMPARE(depth->states, 2);
+    QCOMPARE(depth->limits, hasLimits ? 3 : 0);
+    QCOMPARE(current->states, 2);
+    QCOMPARE(current->limits, 3);
+    QCOMPARE(current->sunk, 24.0);
+    QCOMPARE(current->popped, 12.0);
+    if (hasLimits) {
+        QCOMPARE(depth->sunk, 24.0);
+        QCOMPARE(depth->popped, 12.0);
+    }
+
+    window->window->surface()->setStereoDepthState(false, Qt::RightEdge, 24, 12);
+    QVERIFY(Test::waylandSync());
+    queue.dispatch();
+    QCOMPARE(depth->states, 2);
+    QCOMPARE(depth->limits, hasLimits ? 3 : 0);
+    QCOMPARE(current->limits, 3);
+    QCOMPARE(wl_display_get_error(Test::waylandConnection()->display()), 0);
 }
 
 void StereoDepthExchangeTest::testInertWithoutSurface()
