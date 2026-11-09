@@ -290,3 +290,13 @@ Input-only shapes do not change rendering or the existing X input geometry.
 The compositor reads shapes but writes no content declaration or owner membership property.
 Clients that require clipped children must check version 9 rather than treating version 8 placement support as clipping support.
 See the [X11 SHAPE 1.1 protocol](https://www.x.org/releases/X11R7.7/doc/xextproto/shape.html), chapters 2, 4 and 5.
+
+## X11 child clipping (ORDER 160)
+
+A declared X11 child is shown only where X shows it.
+Its buffer is whole, because it is redirected and Xwayland gives it a surface of its own, so the compositor cuts the item the way the X server cuts a child: to the X11 window and to the windows between them, and without the viewable windows stacked over the child, or over a window between, where their bounding shapes are.
+Windows that are declared children themselves are left to the scene's order.
+The part that is seen is `X11StereoChild::visible`, in the X11 window's coordinates; the item's shape is cut to it however the child is placed or scaled (`CHILD_PLACE`, `ONE_VIEW_SIZE`), so the view is cut once, where X draws the covering window.
+It is recomputed when the child or a window between moves, maps or unmaps, when a window inside the X11 window or a window between appears, moves, is restacked or goes away (the compositor selects `SubstructureNotify` on those windows and keeps the X11 window's own event mask), when a covering window changes its bounding shape, and when the X11 window changes size.
+The announced version of `_KDE_NET_WM_STEREO_CONTENT_SUPPORTED` is unchanged: a child that fits its window and has nothing over it is shown as before.
+A covering window's border is part of what it covers (the bounding region includes the border); its input shape is not read.
