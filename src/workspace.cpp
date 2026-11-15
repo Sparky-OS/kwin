@@ -2021,6 +2021,7 @@ QString Workspace::supportInformation() const
                                .arg(output->physicalSize().width())
                                .arg(output->physicalSize().height()));
             support.append(QStringLiteral("Scale: %1\n").arg(output->scale()));
+            support.append(QStringLiteral("Mode: %1\n").arg(output->currentMode()->name()));
             support.append(QStringLiteral("Refresh Rate: %1\n").arg(output->refreshRate()));
             QString vrr = QStringLiteral("incapable");
             if (output->capabilities() & BackendOutput::Capability::Vrr) {

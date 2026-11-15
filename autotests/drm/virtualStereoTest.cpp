@@ -55,8 +55,9 @@ private Q_SLOTS:
         DrmConnectorMode mode(nullptr, timing, {});
         QCOMPARE(mode.size(), QSize(1920, 1080));
         QCOMPARE(mode.refreshRate(), rate);
+        QCOMPARE(mode.name(), QStringLiteral("1920x1080%1@%2.00").arg(nativeFlags & DRM_MODE_FLAG_INTERLACE ? QStringLiteral("i") : QString()).arg(rate / 1000));
         QCOMPARE(mode.nativeMode()->flags, nativeFlags);
-        QCOMPARE(bool(mode.flags() & static_cast<OutputModeline::Flag>(0x2000000)), bool(nativeFlags & DRM_MODE_FLAG_INTERLACE));
+        QCOMPARE(bool(mode.flags() & OutputModeline::Flag::Interlaced), bool(nativeFlags & DRM_MODE_FLAG_INTERLACE));
         QCOMPARE(bool(mode.flags() & OutputModeline::Flag::Stereo3DFramePacking), bool(nativeFlags & DRM_MODE_FLAG_3D_FRAME_PACKING));
     }
 

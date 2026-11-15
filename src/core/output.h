@@ -147,6 +147,7 @@ public:
         // mode's 2D timing, left eye first, and tells the display which eye each frame carries;
         // a display 3D mode when the display declares it, else a twin of a 2D mode at 100 Hz or more
         Stereo3DSequentialDisplayPort = 0x1000000,
+        Interlaced = 0x2000000,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -179,6 +180,7 @@ public:
     bool isEmpty() const;
     QSize size() const;
     uint32_t refreshRate() const;
+    QString name() const;
     Flags flags() const;
 
     std::shared_ptr<OutputMode> match(const QList<std::shared_ptr<OutputMode>> &modes) const;
@@ -207,6 +209,7 @@ public:
 
     QSize size() const;
     uint32_t refreshRate() const;
+    QString name() const;
     OutputModeline::Flags flags() const;
     OutputModeline modeline() const;
 

@@ -51,6 +51,9 @@ uint32_t DrmConnector::refreshRateForMode(_drmModeModeInfo *m)
 static OutputModeline::Flags flagsForMode(const drmModeModeInfo *info, OutputModeline::Flags additionalFlags)
 {
     OutputModeline::Flags flags = additionalFlags | stereoFlagsForDrmMode(info->flags);
+    if (info->flags & DRM_MODE_FLAG_INTERLACE) {
+        flags |= OutputModeline::Flag::Interlaced;
+    }
     if (info->type & DRM_MODE_TYPE_PREFERRED) {
         flags |= OutputModeline::Flag::Preferred;
     }

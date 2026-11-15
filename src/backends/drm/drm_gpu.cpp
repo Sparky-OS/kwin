@@ -426,7 +426,7 @@ void DrmGpu::probeFrameSequential(DrmConnector *connector)
         const auto twin = std::make_shared<DrmConnectorMode>(mode, OutputModeline::Flag::Stereo3DSequentialDisplayPort);
         const bool accepted = connector->testFrameSequential(crtc, twin, framebuffer);
         mode->setFrameSequentialAccepted(accepted);
-        qCDebug(KWIN_DRM) << "Frame sequential stereo on" << connector->connectorName() << mode->size() << mode->refreshRate()
+        qCDebug(KWIN_DRM) << "Frame sequential stereo on" << connector->connectorName() << mode->name()
                           << (accepted ? "accepted" : "refused");
     }
 }

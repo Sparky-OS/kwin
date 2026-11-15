@@ -10,7 +10,7 @@
     SPDX-License-Identifier: MIT-CMU
     ]]></copyright>
 
-  <interface name="kde_output_device_registry_v2" version="30">
+  <interface name="kde_output_device_registry_v2" version="31">
     <description summary="output devices">
       This interface can be used to list output devices.
 
@@ -52,7 +52,7 @@
     </event>
   </interface>
 
-  <interface name="kde_output_device_v2" version="30">
+  <interface name="kde_output_device_v2" version="31">
     <description summary="output configuration representation">
       An output device describes a display device available to the compositor.
       output_device is similar to wl_output, but focuses on output
@@ -709,7 +709,7 @@
     </event>
   </interface>
 
-  <interface name="kde_output_device_mode_v2" version="30">
+  <interface name="kde_output_device_mode_v2" version="31">
     <description summary="output mode">
       This object describes an output mode.
 
@@ -778,6 +778,7 @@
       <entry name="stereo_l_depth" value="0x400000" since="28" summary="HDMI 1.4a 3D, L + depth"/>
       <entry name="stereo_l_depth_graphics" value="0x800000" since="28" summary="HDMI 1.4a 3D, L + depth + graphics + graphics-depth"/>
       <entry name="stereo_sequential_displayport" value="0x1000000" since="30" summary="DisplayPort frame sequential stereo, signalled by the source"/>
+      <entry name="interlaced" value="0x2000000" since="31" summary="interlaced scan; refresh is the field rate"/>
 
     </enum>
 

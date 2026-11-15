@@ -65,6 +65,14 @@ OutputModeline::OutputModeline(const QSize &size, uint32_t refreshRate, OutputMo
 {
 }
 
+QString OutputModeline::name() const
+{
+    return QStringLiteral("%1x%2%3@%4")
+        .arg(m_size.width()).arg(m_size.height())
+        .arg(m_flags & Flag::Interlaced ? QStringLiteral("i") : QString())
+        .arg(m_refreshRate / 1000.0, 0, 'f', 2);
+}
+
 bool OutputModeline::isEmpty() const
 {
     return m_size.isEmpty();
@@ -140,6 +148,11 @@ QSize OutputMode::size() const
 uint32_t OutputMode::refreshRate() const
 {
     return m_modeline.refreshRate();
+}
+
+QString OutputMode::name() const
+{
+    return m_modeline.name();
 }
 
 OutputModeline::Flags OutputMode::flags() const
