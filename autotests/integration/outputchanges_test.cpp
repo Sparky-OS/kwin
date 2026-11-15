@@ -27,6 +27,9 @@
 #include <xcb/xcb_icccm.h>
 #endif
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <ranges>
 
 using namespace std::chrono_literals;
@@ -136,6 +139,8 @@ private Q_SLOTS:
     void testGeneratePartialConfigs();
     void testColorPowerTradeoffDefault();
     void testVirtualStereoRestore();
+    void testInterlacedRestore_data();
+    void testInterlacedRestore();
     void testVirtualStereoAutomaticPicks();
     void testAutorotate_data();
     void testAutorotate();
@@ -1737,6 +1742,76 @@ void OutputChangesTest::testVirtualStereoRestore()
     auto fallback = disabled.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
     QVERIFY(fallback);
     QCOMPARE(*fallback->first.constChangeSet(outputs[0])->currentMode, base);
+}
+
+void OutputChangesTest::testInterlacedRestore_data()
+{
+    using Flag = OutputModeline::Flag;
+    QTest::addColumn<OutputModeline::Flags>("layout");
+    QTest::addColumn<bool>("legacy");
+    for (const auto legacy : {false, true}) {
+        const QByteArray suffix = legacy ? "-legacy" : "-new";
+        QTest::newRow(("2d" + suffix).constData()) << OutputModeline::Flags(Flag::Preferred) << legacy;
+        QTest::newRow(("frame-packing" + suffix).constData()) << OutputModeline::Flags(Flag::Stereo3DFramePacking) << legacy;
+        QTest::newRow(("virtual" + suffix).constData()) << (Flag::VirtualStereo | Flag::Stereo3DAnaglyphModern) << legacy;
+    }
+}
+
+void OutputChangesTest::testInterlacedRestore()
+{
+    using Flag = OutputModeline::Flag;
+    QFETCH(OutputModeline::Flags, layout);
+    QFETCH(bool, legacy);
+    const OutputModeline base(QSize(1920, 1080), 60000, Flag::Preferred | Flag::Interlaced);
+    const OutputModeline hdmi(base.size(), base.refreshRate(), Flag::Stereo3DFramePacking | Flag::Interlaced);
+    const OutputModeline selected(base.size(), base.refreshRate(), layout | Flag::Interlaced);
+    const auto backend = qobject_cast<VirtualBackend *>(kwinApp()->outputBackend());
+    backend->setVirtualOutputs({VirtualBackend::OutputInfo{
+        .size = base.size(),
+        .modes = {base, hdmi},
+        .edidIdentifierOverride = QByteArrayLiteral("InterlacedRestore"),
+    }});
+    const auto outputs = backend->outputs();
+    auto store = workspace()->outputConfigureStore();
+    store->clear();
+    QVERIFY(store->queryConfig(outputs, false, AccelerometerOrientation::Undefined, false));
+    OutputConfiguration choice;
+    choice.changeSet(outputs[0])->desiredMode = selected;
+    choice.changeSet(outputs[0])->anaglyph = true;
+    outputs[0]->applyChanges(choice);
+    store->storeConfig(outputs, false);
+
+    if (legacy) {
+        QFile file(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QStringLiteral("/kwinoutputconfig.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        auto document = QJsonDocument::fromJson(file.readAll());
+        file.close();
+        auto sections = document.array();
+        for (qsizetype i = 0; i < sections.size(); ++i) {
+            auto section = sections[i].toObject();
+            if (section["name"] != "outputs") {
+                continue;
+            }
+            auto entries = section["data"].toArray();
+            for (qsizetype j = 0; j < entries.size(); ++j) {
+                auto entry = entries[j].toObject();
+                auto mode = entry["mode"].toObject();
+                mode.remove("interlaced");
+                mode["flags"] = mode["flags"].toInt() & ~int(Flag::Interlaced);
+                entry["mode"] = mode;
+                entries[j] = entry;
+            }
+            section["data"] = entries;
+            sections[i] = section;
+        }
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(file.write(QJsonDocument(sections).toJson()) > 0);
+    }
+    OutputConfigurationStore reloaded;
+    const auto restored = reloaded.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
+    QVERIFY(restored);
+    QCOMPARE(*restored->first.constChangeSet(outputs[0])->currentMode, selected);
+    QCOMPARE(*restored->first.constChangeSet(outputs[0])->desiredMode, selected);
 }
 
 void OutputChangesTest::testColorPowerTradeoffDefault()

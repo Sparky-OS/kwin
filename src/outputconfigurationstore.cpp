@@ -90,7 +90,7 @@ static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &s
     if (!(saved.flags() & Flag::VirtualStereo)) {
         return false;
     }
-    const auto layouts = saved.flags() & ~(Flag::Preferred | Flag::Generated | Flag::Custom | Flag::ReducedBlanking | Flag::VirtualStereo);
+    const auto layouts = saved.flags() & ~(Flag::Preferred | Flag::Generated | Flag::Custom | Flag::ReducedBlanking | Flag::VirtualStereo | Flag::Interlaced);
     const bool anaglyphLayout = layouts == Flag::Stereo3DAnaglyphModern || layouts == Flag::Stereo3DAnaglyphCrt;
     // the hand-switched packings, and the side by side (full) twin of a mode two eyes wide
     const bool halfLayout = layouts == Flag::Stereo3DSideBySideHalf || layouts == Flag::Stereo3DTopAndBottom || layouts == Flag::Stereo3DSideBySideFull;
@@ -124,6 +124,23 @@ static bool canRestoreVirtualMode(BackendOutput *output, const OutputModeline &s
         baseExists |= base.match(*customModes).has_value();
     }
     return baseExists && (!spatialLayout || nativeSize);
+}
+
+// Older configurations did not carry scan type. Prefer an exact match, then recover
+// an interlaced mode only when its progressive counterpart cannot be restored.
+static std::optional<OutputModeline> restoreScanType(BackendOutput *output, const std::optional<OutputModeline> &saved, bool scanTypeKnown, bool anaglyph, bool otherStereoFormats, const std::optional<QList<CustomModeDefinition>> &customModes)
+{
+    if (!saved || scanTypeKnown || (saved->flags() & OutputModeline::Flag::Custom)) {
+        return saved;
+    }
+    const auto exists = [&](const OutputModeline &mode) {
+        return mode.match(output->modes()) || canRestoreVirtualMode(output, mode, anaglyph, otherStereoFormats, customModes);
+    };
+    if (exists(*saved)) {
+        return saved;
+    }
+    const OutputModeline interlaced(saved->size(), saved->refreshRate(), saved->flags() | OutputModeline::Flag::Interlaced);
+    return exists(interlaced) ? std::make_optional(interlaced) : saved;
 }
 
 OutputConfigurationStore::OutputConfigurationStore()
@@ -497,7 +514,8 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
     OutputConfiguration ret;
     QList<std::pair<BackendOutput *, size_t>> priorities;
     for (const auto &[output, outputIndex] : outputMap) {
-        const OutputState &state = m_outputs[outputIndex];
+        OutputState state = m_outputs[outputIndex];
+        state.mode = restoreScanType(output, state.mode, state.modeScanTypeKnown, state.anaglyph.value_or(false), state.otherStereoFormats.value_or(false), state.customModes);
         const auto &setupState = *std::find_if(setup->outputs.begin(), setup->outputs.end(), [outputIndex = outputIndex](const auto &state) {
             return state.outputIndex == outputIndex;
         });
@@ -523,7 +541,8 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
                 // This is fallback for output configs prior to 6.6.5, which didn't have flags.
                 if (!effectiveMode) {
                     for (const auto &mode : availableModes) {
-                        if (mode->isRemoved() || isStereo3D(mode->flags())) {
+                        if (mode->isRemoved() || isStereo3D(mode->flags())
+                            || mode->flags().testFlag(OutputModeline::Flag::Interlaced) != state.mode->flags().testFlag(OutputModeline::Flag::Interlaced)) {
                             continue;
                         }
                         if (state.mode->size() == mode->size() && state.mode->refreshRate() == mode->refreshRate()) {
@@ -542,8 +561,8 @@ OutputConfiguration OutputConfigurationStore::setupToConfig(Setup *setup, const 
                 effectiveMode = twin;
                 glassesTwinChosen = true;
             }
-            qCDebug(KWIN_OUTPUT_CONFIG, "Chose new mode for output %s: %dx%d@%u%s",
-                    qPrintable(state.edidIdentifier), effectiveMode->size().width(), effectiveMode->size().height(), effectiveMode->refreshRate(),
+            qCDebug(KWIN_OUTPUT_CONFIG, "Chose new mode for output %s: %s%s",
+                    qPrintable(state.edidIdentifier), qPrintable(effectiveMode->name()),
                     glassesTwinChosen ? " side by side (full), for glasses" : "");
         }
 
@@ -703,7 +722,8 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
 
         const auto outputIndex = findOutputIndex(output, outputs);
         const bool enable = kscreenChangeSet.enabled.value_or(!isLidClosed || !output->isInternal() || outputs.size() == 1);
-        const OutputState existingData = outputIndex ? m_outputs[*outputIndex] : OutputState{};
+        OutputState existingData = outputIndex ? m_outputs[*outputIndex] : OutputState{};
+        existingData.mode = restoreScanType(output, existingData.mode, existingData.modeScanTypeKnown, existingData.anaglyph.value_or(false), existingData.otherStereoFormats.value_or(false), existingData.customModes);
 
         std::optional<OutputModeline> modeline = output->initialVirtualMode();
         if (!modeline && existingData.mode && canRestoreVirtualMode(output, *existingData.mode, existingData.anaglyph.value_or(false), existingData.otherStereoFormats.value_or(false), existingData.customModes)) {
@@ -726,7 +746,8 @@ OutputConfiguration OutputConfigurationStore::generateConfig(const QList<Backend
                 // This is fallback for output configs prior to 6.6.5, which didn't have flags.
                 if (!modeline) {
                     for (const auto &mode : availableModes) {
-                        if (mode->isRemoved() || isStereo3D(mode->flags())) {
+                        if (mode->isRemoved() || isStereo3D(mode->flags())
+                            || mode->flags().testFlag(OutputModeline::Flag::Interlaced) != existingData.mode->flags().testFlag(OutputModeline::Flag::Interlaced)) {
                             continue;
                         }
                         if (existingData.mode->size() == mode->size() && existingData.mode->refreshRate() == mode->refreshRate()) {
@@ -1189,7 +1210,8 @@ void OutputConfigurationStore::load()
             const auto flags = OutputModeline::Flags(obj["flags"].toInt(0));
             if (width > 0 && height > 0 && refreshRate > 0) {
                 state.mode = OutputModeline(QSize(width, height), refreshRate, flags);
-                qCDebug(KWIN_OUTPUT_CONFIG, "Read mode %dx%d@%u for output %s", width, height, refreshRate, qPrintable(state.edidIdentifier));
+                state.modeScanTypeKnown = obj["interlaced"].isBool() || flags.testFlag(OutputModeline::Flag::Interlaced);
+                qCDebug(KWIN_OUTPUT_CONFIG, "Read mode %s for output %s", qPrintable(state.mode->name()), qPrintable(state.edidIdentifier));
             }
         }
         if (const auto it = data.find("scale"); it != data.end()) {
@@ -1610,6 +1632,7 @@ void OutputConfigurationStore::save()
             mode["height"] = output.mode->size().height();
             mode["refreshRate"] = int(output.mode->refreshRate());
             mode["flags"] = int(output.mode->flags());
+            mode["interlaced"] = output.mode->flags().testFlag(OutputModeline::Flag::Interlaced);
             o["mode"] = mode;
         }
         if (output.scaleSetting) {

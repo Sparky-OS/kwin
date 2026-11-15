@@ -62,6 +62,7 @@ private:
         QString mstPath;
         // actual state
         std::optional<OutputModeline> mode;
+        bool modeScanTypeKnown = true;
         std::optional<double> scaleSetting;
         std::optional<OutputTransform> transform;
         std::optional<OutputTransform> manualTransform;
