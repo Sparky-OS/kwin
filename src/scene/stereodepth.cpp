@@ -9,6 +9,7 @@
 #include "core/backendoutput.h"
 #include "core/output.h"
 #include "effect/effecthandler.h"
+#include "layershellv1window.h"
 #include "options.h"
 #include "wayland/surface.h"
 #include "window.h"
@@ -92,6 +93,16 @@ static bool isAlert(const Window *window)
 
 static Role roleOf(const Window *window);
 
+// A layer-shell surface over the whole of its output in the overlay layer, as the loading screen KSplash maps on each screen
+// after a login: nothing of the pile can lie over it, so it is never a window of the pile, whether it has the focus or not. It lies
+// at the screen and shows the depth of its elements, as the lock screen does.
+static bool coversOutputOnTop(const Window *window)
+{
+    const LogicalOutput *output = window->output();
+    return output && qobject_cast<const LayerShellV1Window *>(window) && window->layer() == OverlayLayer
+        && window->frameGeometry().contains(output->geometryF());
+}
+
 static bool isOnStage(const Window *window, const LogicalOutput *output)
 {
     return window->output() == output && window->isShown() && window->isOnCurrentDesktop() && window->isOnCurrentActivity();
@@ -115,7 +126,8 @@ static bool isCovered(const Window *window)
 static Role roleOf(const Window *window)
 {
     if (window->isDeleted() || window->isFullScreen() || window->isLockScreen() || window->isInternal()
-        || window->isOutline() || window->isInputMethod() || window->isDNDIcon() || window->isPictureInPicture()) {
+        || window->isOutline() || window->isInputMethod() || window->isDNDIcon() || window->isPictureInPicture()
+        || coversOutputOnTop(window)) {
         return Role::Fixed;
     }
     if (window->isDesktop()) {
@@ -333,7 +345,7 @@ bool StereoDepth::isAwake(const Window *window)
     case Role::Fixed: {
         // a panel is never in the pile; a fullscreen window is awake while it is the active one
         const Window *active = workspace()->activeWindow();
-        return window->isDock() || window->isLockScreen() || window->isInternal()
+        return window->isDock() || window->isLockScreen() || window->isInternal() || coversOutputOnTop(window)
             || (window->isFullScreen() && active && mainWindow(active) == mainWindow(window));
     }
     case Role::Sunk:
