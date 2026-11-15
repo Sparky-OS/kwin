@@ -95,12 +95,28 @@ static QByteArray parseVendor(const uint8_t *data)
     return {};
 }
 
+// A size a screen can have, in either orientation: at least 10 cm by 6 cm, an aspect
+// between 1.2 and 2.6, and not the 16:9 placeholder some displays put there (160 x 90 mm).
+static bool isPlausibleScreenSize(const QSize &mm)
+{
+    const int longSide = std::max(mm.width(), mm.height());
+    const int shortSide = std::min(mm.width(), mm.height());
+    if (longSide < 100 || shortSide < 60) {
+        return false;
+    }
+    if (longSide == 160 && shortSide == 90) {
+        return false;
+    }
+    const int aspect = longSide * 100 / shortSide;
+    return aspect >= 120 && aspect <= 260;
+}
+
 static QSize determineScreenPhysicalSizeMm(const di_edid *edid)
 {
     // An EDID can contain zero or more detailed timing definitions, which can
     // contain more precise physical dimensions (in millimeters, as opposed to
-    // centimeters). Pick the first sane physical dimension from detailed timings
-    // and fall back to the basic dimensions.
+    // centimeters). Pick the first sane physical dimension from detailed timings.
+    QSize timingSize;
     const struct di_edid_detailed_timing_def *const *detailedTimings = di_edid_get_detailed_timing_defs(edid);
     // detailedTimings is a null-terminated array.
     for (int i = 0; detailedTimings[i] != nullptr; i++) {
@@ -115,12 +131,32 @@ static QSize determineScreenPhysicalSizeMm(const di_edid *edid)
             const double modeAspectRatio = double(timing->horiz_video) / double(timing->vert_video);
 
             if (std::abs(physicalAspectRatio - modeAspectRatio) <= 0.1) {
-                return QSize(timing->horiz_image_mm, timing->vert_image_mm);
+                timingSize = QSize(timing->horiz_image_mm, timing->vert_image_mm);
+                break;
             }
         }
     }
     const di_edid_screen_size *screenSize = di_edid_get_screen_size(edid);
-    return QSize(screenSize->width_cm, screenSize->height_cm) * 10;
+    const QSize basicSize = QSize(screenSize->width_cm, screenSize->height_cm) * 10;
+    if (timingSize.isEmpty()) {
+        return basicSize;
+    }
+    // The screen size field is the one a source is meant to size text with (VESA E-EDID
+    // Release A2, 3.6.2: "The host (source) is expected to use this data to get a rough idea
+    // of the image size to generate properly scaled text and icons"). When it can be a
+    // screen, it decides: the detailed timing's millimeters (3.10.2) are only used when they
+    // say the same screen, that is within the centimeter the field is rounded to. Some
+    // panels put another panel's size in their timing.
+    if (!isPlausibleScreenSize(basicSize)) {
+        return timingSize;
+    }
+    if (std::abs(timingSize.width() - basicSize.width()) <= 10 && std::abs(timingSize.height() - basicSize.height()) <= 10) {
+        return timingSize;
+    }
+    qCWarning(KWIN_CORE).nospace() << "EDID gives two screen sizes: " << basicSize.width() << "x" << basicSize.height()
+                                   << " mm as the screen size and " << timingSize.width() << "x" << timingSize.height()
+                                   << " mm in its first detailed timing; using the screen size";
+    return basicSize;
 }
 
 // libdisplay-info 0.4 wraps the VIC in a struct and renames the video format lookup

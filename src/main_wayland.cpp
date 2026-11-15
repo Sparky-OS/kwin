@@ -43,6 +43,7 @@
 #include <QCommandLineParser>
 #include <QDBusInterface>
 #include <QDebug>
+#include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QWindow>
@@ -548,6 +549,12 @@ int main(int argc, char *argv[])
         // outputs their own sizes, WIDTHxHEIGHT for each in turn, separated by commas; an output it
         // leaves out has the size of --width and --height.
         const QStringList sizes = qEnvironmentVariable("KWIN_VIRTUAL_OUTPUT_SIZES").split(QLatin1Char(','), Qt::SkipEmptyParts);
+        // For headless proofs of what a screen's EDID decides (its physical size, and from it the first
+        // scale): KWIN_VIRTUAL_OUTPUT_EDIDS gives the outputs an EDID each, the path of a binary EDID file
+        // for each in turn, separated by commas (an empty entry leaves that output without one), and
+        // KWIN_VIRTUAL_OUTPUT_INTERNAL says which are built-in panels, 1 or 0 for each in turn.
+        const QStringList edids = qEnvironmentVariable("KWIN_VIRTUAL_OUTPUT_EDIDS").split(QLatin1Char(','));
+        const QStringList internals = qEnvironmentVariable("KWIN_VIRTUAL_OUTPUT_INTERNAL").split(QLatin1Char(','));
         for (int i = 0; i < outputCount; ++i) {
             QSize size = initialWindowSize;
             if (i < sizes.size()) {
@@ -571,10 +578,20 @@ int main(int argc, char *argv[])
                     modes.append(KWin::OutputModeline(pixelSize, 60000, Flag::VirtualStereo | layout));
                 }
             }
+            QByteArray edid;
+            if (i < edids.size() && !edids[i].isEmpty()) {
+                QFile edidFile(edids[i]);
+                if (!edidFile.open(QIODevice::ReadOnly) || (edid = edidFile.readAll()).size() < 128) {
+                    std::cerr << "FATAL ERROR: KWIN_VIRTUAL_OUTPUT_EDIDS: " << qPrintable(edids[i]) << " is not a readable EDID" << std::endl;
+                    return 1;
+                }
+            }
             outputBackend->addOutput(KWin::VirtualBackend::OutputInfo{
                 .size = size,
                 .scale = outputScale,
+                .internal = i < internals.size() && internals[i].toInt() != 0,
                 .modes = modes,
+                .edid = edid,
             });
         }
         a.setSession(KWin::Session::create(KWin::Session::Type::Noop));
