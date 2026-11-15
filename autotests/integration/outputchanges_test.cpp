@@ -1807,6 +1807,10 @@ void OutputChangesTest::testInterlacedRestore()
         QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
         QVERIFY(file.write(QJsonDocument(sections).toJson()) > 0);
     }
+    // Saving while the output is disconnected must not discard legacy scan information.
+    {
+        OutputConfigurationStore disconnected;
+    }
     OutputConfigurationStore reloaded;
     const auto restored = reloaded.queryConfig(outputs, false, AccelerometerOrientation::Undefined, false);
     QVERIFY(restored);

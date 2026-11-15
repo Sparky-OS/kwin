@@ -569,10 +569,11 @@ void OutputDeviceV2InterfacePrivate::sendCurrentMode(Resource *outputResource)
     const auto handle = current->handle().lock();
     if (outputResource->version() < 24 && (handle->flags() & OutputModeline::Flag::VirtualStereo)) {
         using Flag = OutputModeline::Flag;
-        const auto basicFlags = Flag::Preferred | Flag::Generated | Flag::Custom | Flag::ReducedBlanking;
+        const auto basicFlags = Flag::Preferred | Flag::Generated | Flag::Custom | Flag::ReducedBlanking | Flag::Interlaced;
         for (const auto &mode : m_modes) {
             const auto candidate = mode->handle().lock();
-            if (!(candidate->flags() & ~basicFlags) && candidate->size() == handle->size() && candidate->refreshRate() == handle->refreshRate()) {
+            if (!(candidate->flags() & ~basicFlags) && candidate->size() == handle->size() && candidate->refreshRate() == handle->refreshRate()
+                && candidate->flags().testFlag(Flag::Interlaced) == handle->flags().testFlag(Flag::Interlaced)) {
                 current = mode.get();
                 break;
             }

@@ -1632,7 +1632,9 @@ void OutputConfigurationStore::save()
             mode["height"] = output.mode->size().height();
             mode["refreshRate"] = int(output.mode->refreshRate());
             mode["flags"] = int(output.mode->flags());
-            mode["interlaced"] = output.mode->flags().testFlag(OutputModeline::Flag::Interlaced);
+            if (output.modeScanTypeKnown) {
+                mode["interlaced"] = output.mode->flags().testFlag(OutputModeline::Flag::Interlaced);
+            }
             o["mode"] = mode;
         }
         if (output.scaleSetting) {
