@@ -87,13 +87,17 @@ public:
 
     void check()
     {
+        // For headless proofs: KWIN_VIRTUAL_TOUCH_SCREEN=1 stands for a notebook with a built-in touch
+        // screen and a touchpad, which a session without libinput devices cannot have. Tablet mode is
+        // then available and off, until the Touch Mode setting says otherwise.
+        static const bool virtualTouchScreen = qEnvironmentVariableIntValue("KWIN_VIRTUAL_TOUCH_SCREEN") != 0;
         const auto devices = input()->devices();
-        const bool hasTouch = std::any_of(devices.constBegin(), devices.constEnd(), [](InputDevice *device) {
+        const bool hasTouch = virtualTouchScreen || std::any_of(devices.constBegin(), devices.constEnd(), [](InputDevice *device) {
             return device->isTouch() && blocksTabletMode(device);
         });
         m_parent->setTabletModeAvailable(hasTouch);
 
-        const bool hasPointer = std::any_of(devices.constBegin(), devices.constEnd(), [](InputDevice *device) {
+        const bool hasPointer = virtualTouchScreen || std::any_of(devices.constBegin(), devices.constEnd(), [](InputDevice *device) {
             return device->isPointer() && blocksTabletMode(device);
         });
         m_parent->setIsTablet(hasTouch && !hasPointer);
