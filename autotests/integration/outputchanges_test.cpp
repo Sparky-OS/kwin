@@ -1393,6 +1393,18 @@ static QByteArray readEdid(const QString &path)
     return file.readAll();
 }
 
+// A 13.3 inch full HD notebook panel whose EDID gives two sizes: 29 x 17 cm in the screen size
+// field, which is the panel, and 344 x 193 mm in its first detailed timing, which is a 15.5 inch one.
+static QByteArray denseNotebookPanelEdid()
+{
+    return QByteArray::fromHex(
+        "00ffffffffffff0034a9a29600000000ff170104a51d1178029521a653539825"
+        "0b505400000001010101010101010101010101010101023a805871380d402c06"
+        "920058c11000001e023a8058713830422c06920058c11000001e000000fd0026"
+        "3e40430f010a202020202020000000fc005656593133463030314731300a0010"
+    );
+}
+
 void OutputChangesTest::testGenerateConfigs_data()
 {
     QTest::addColumn<DeviceType>("deviceType");
@@ -1542,6 +1554,26 @@ void OutputChangesTest::testGenerateConfigs_data()
                .panelOrientation = OutputTransform::Kind::Rotate90,
            }
         << OutputModeline(QSize(800, 1280), 90000ul, OutputModeline::Flag::Preferred) << 1.0 << true;
+
+    QTest::addRow("13.3\" full HD convertible, two sizes in the EDID")
+        << DeviceType::Handheld
+        << Test::OutputInfo{
+               .geometry = Rect(0, 0, 1920, 1080),
+               .internal = true,
+               .modes = {OutputModeline(QSize(1920, 1080), 60000, OutputModeline::Flag::Preferred)},
+               .edid = denseNotebookPanelEdid(),
+           }
+        << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.25 << true;
+
+    QTest::addRow("13.3\" full HD notebook with a lid, two sizes in the EDID")
+        << DeviceType::Laptop
+        << Test::OutputInfo{
+               .geometry = Rect(0, 0, 1920, 1080),
+               .internal = true,
+               .modes = {OutputModeline(QSize(1920, 1080), 60000, OutputModeline::Flag::Preferred)},
+               .edid = denseNotebookPanelEdid(),
+           }
+        << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.3 << true;
 
     QTest::addRow("Legion Go S")
         << DeviceType::Handheld

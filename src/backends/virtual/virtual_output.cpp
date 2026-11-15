@@ -29,10 +29,12 @@ VirtualOutput::VirtualOutput(VirtualBackend *parent, bool internal, const QSize 
 
     static int identifier = -1;
     m_identifier = ++identifier;
+    // like a connector, an output that is given an EDID and no size has the EDID's size
+    const Edid parsedEdid{edid, edidIdentifierOverride};
     setInformation(Information{
         .name = connectorName.value_or(QStringLiteral("Virtual-%1").arg(identifier)),
-        .physicalSize = physicalSizeInMM,
-        .edid = Edid{edid, edidIdentifierOverride},
+        .physicalSize = physicalSizeInMM.isEmpty() && parsedEdid.isValid() ? parsedEdid.physicalSize() : physicalSizeInMM,
+        .edid = parsedEdid,
         .capabilities = Capability::CustomModes,
         .panelOrientation = panelOrientation,
         .internal = internal,
