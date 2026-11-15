@@ -971,6 +971,14 @@ double OutputConfigurationStore::chooseScale(BackendOutput *output, const QSize 
         }
     }
 
+    // A built-in panel of full HD or more that is at least as dense as a 14 inch full HD
+    // one (150 dpi is full HD at 14.7 inches) is hard to read at 100 %, and a person who
+    // cannot read the screen cannot reach the setting that changes it: never below 125 %.
+    const bool fullHdOrMore = std::max(modeSize.width(), modeSize.height()) >= 1920 && std::min(modeSize.width(), modeSize.height()) >= 1080;
+    if (output->isInternal() && fullHdOrMore && std::min(dpiX, dpiY) >= 150) {
+        scale = std::max(scale, 1.25);
+    }
+
     return scale;
 }
 

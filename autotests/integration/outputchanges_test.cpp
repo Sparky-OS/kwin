@@ -1575,6 +1575,61 @@ void OutputChangesTest::testGenerateConfigs_data()
            }
         << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.3 << true;
 
+    // 150.9 dpi: the formula alone gives 120 %
+    QTest::addRow("14.6\" full HD notebook")
+        << DeviceType::Laptop
+        << Test::OutputInfo{
+               .geometry = Rect(0, 0, 1920, 1080),
+               .internal = true,
+               .physicalSizeInMM = QSize(323, 182),
+               .modes = {OutputModeline(QSize(1920, 1080), 60000, OutputModeline::Flag::Preferred)},
+           }
+        << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.25 << true;
+
+    // 152 dpi and no lid switch: the formula alone gives 100 %
+    QTest::addRow("14.5\" full HD tablet")
+        << DeviceType::Handheld
+        << Test::OutputInfo{
+               .geometry = Rect(0, 0, 1920, 1080),
+               .internal = true,
+               .physicalSizeInMM = QSize(321, 181),
+               .modes = {OutputModeline(QSize(1920, 1080), 60000, OutputModeline::Flag::Preferred)},
+           }
+        << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.25 << true;
+
+    // 141 dpi: below the floor's density, as before
+    QTest::addRow("15.6\" full HD notebook")
+        << DeviceType::Laptop
+        << Test::OutputInfo{
+               .geometry = Rect(0, 0, 1920, 1080),
+               .internal = true,
+               .physicalSizeInMM = QSize(344, 193),
+               .modes = {OutputModeline(QSize(1920, 1080), 60000, OutputModeline::Flag::Preferred)},
+           }
+        << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.0 << true;
+
+    // the floor is for built-in panels: a monitor of the same density keeps the formula's result (157 %, held to 135 % by
+    // the 800 logical pixels a monitor keeps)
+    QTest::addRow("14.6\" full HD portable monitor")
+        << DeviceType::Desktop
+        << Test::OutputInfo{
+               .geometry = Rect(0, 0, 1920, 1080),
+               .internal = false,
+               .physicalSizeInMM = QSize(323, 182),
+               .modes = {OutputModeline(QSize(1920, 1080), 60000, OutputModeline::Flag::Preferred)},
+           }
+        << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.35 << true;
+
+    QTest::addRow("24\" full HD monitor")
+        << DeviceType::Desktop
+        << Test::OutputInfo{
+               .geometry = Rect(0, 0, 1920, 1080),
+               .internal = false,
+               .physicalSizeInMM = QSize(531, 299),
+               .modes = {OutputModeline(QSize(1920, 1080), 60000, OutputModeline::Flag::Preferred)},
+           }
+        << OutputModeline(QSize(1920, 1080), 60000ul, OutputModeline::Flag::Preferred) << 1.0 << true;
+
     QTest::addRow("Legion Go S")
         << DeviceType::Handheld
         << Test::OutputInfo{
