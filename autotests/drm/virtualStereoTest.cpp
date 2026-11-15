@@ -24,6 +24,42 @@ class VirtualStereoTest : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void interlacedModes_data()
+    {
+        QTest::addColumn<uint32_t>("clock");
+        QTest::addColumn<uint16_t>("htotal");
+        QTest::addColumn<uint32_t>("nativeFlags");
+        QTest::addColumn<uint32_t>("rate");
+        // CTA VICs 5 and 20, also declared with frame packing by the fixture EDID.
+        for (const auto stereo : {0U, uint32_t(DRM_MODE_FLAG_3D_FRAME_PACKING)}) {
+            const QByteArray suffix = stereo ? "-fp" : "-2d";
+            QTest::newRow(("1080i60" + suffix).constData()) << 74250U << uint16_t(2200) << (uint32_t(DRM_MODE_FLAG_INTERLACE) | stereo) << 60000U;
+            QTest::newRow(("1080i50" + suffix).constData()) << 74250U << uint16_t(2640) << (uint32_t(DRM_MODE_FLAG_INTERLACE) | stereo) << 50000U;
+            QTest::newRow(("1080p60" + suffix).constData()) << 148500U << uint16_t(2200) << stereo << 60000U;
+        }
+    }
+
+    void interlacedModes()
+    {
+        QFETCH(uint32_t, clock);
+        QFETCH(uint16_t, htotal);
+        QFETCH(uint32_t, nativeFlags);
+        QFETCH(uint32_t, rate);
+        drmModeModeInfo timing{};
+        timing.clock = clock;
+        timing.hdisplay = 1920;
+        timing.htotal = htotal;
+        timing.vdisplay = 1080;
+        timing.vtotal = 1125;
+        timing.flags = nativeFlags;
+        DrmConnectorMode mode(nullptr, timing, {});
+        QCOMPARE(mode.size(), QSize(1920, 1080));
+        QCOMPARE(mode.refreshRate(), rate);
+        QCOMPARE(mode.nativeMode()->flags, nativeFlags);
+        QCOMPARE(bool(mode.flags() & static_cast<OutputModeline::Flag>(0x2000000)), bool(nativeFlags & DRM_MODE_FLAG_INTERLACE));
+        QCOMPARE(bool(mode.flags() & OutputModeline::Flag::Stereo3DFramePacking), bool(nativeFlags & DRM_MODE_FLAG_3D_FRAME_PACKING));
+    }
+
     void modes_data()
     {
         QTest::addColumn<bool>("anaglyph");
