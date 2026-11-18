@@ -165,6 +165,7 @@ private Q_SLOTS:
     void testStereoChildWindowOneViewSize();
     void testStereoChildWindowClip();
     void testStereoChildWindowClipAncestor();
+    void testStereoChildWindowDepthLimits();
 };
 
 void X11WindowTest::initTestCase_data()
@@ -4075,7 +4076,7 @@ void X11WindowTest::testStereoContentDeclaration()
     std::unique_ptr<xcb_get_property_reply_t> supportReply(xcb_get_property_reply(c.get(), supportCookie, nullptr));
     QVERIFY(supportReply);
     QCOMPARE(supportReply->value_len, 1u);
-    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 10u);
+    QCOMPARE(*reinterpret_cast<uint32_t *>(xcb_get_property_value(supportReply.get())), 11u);
 
     const uint32_t value = StereoContentSideBySideFull;
     X11Window *window = createWindow(c.get(), Rect(0, 0, 100, 100), [&c, &value](xcb_window_t windowId) {
@@ -5211,5 +5212,86 @@ void X11WindowTest::testStereoChildWindowClipAncestor()
     xcb_flush(c.get());
 }
 
-WAYLANDTEST_MAIN(X11WindowTest)
+void X11WindowTest::testStereoChildWindowDepthLimits()
+{
+    // This test verifies that the person's depth limits reach a declared child window as they reach
+    // a declared top-level window: in the child's own _KDE_NET_WM_STEREO_DEPTH_LIMITS, at
+    // declaration, at every change of the limits, and removed when the declaration goes. The window
+    // that holds the child declares nothing itself and gets none.
+    Test::XcbConnectionPtr c = Test::createX11Connection();
+    QVERIFY(!xcb_connection_has_error(c.get()));
+
+    options->setStereoSunkLimit(10);
+    options->setStereoPoppedLimit(4);
+
+    X11Window *window = createWindow(c.get(), Rect(0, 0, 300, 200));
+    QVERIFY(window);
+    QCOMPARE(window->stereoContent(), StereoContentNone);
+
+    const xcb_window_t child = xcb_generate_id(c.get());
+    xcb_create_window(c.get(), XCB_COPY_FROM_PARENT, child, window->window(), 10, 20, 100, 80, 0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, 0, nullptr);
+    const uint32_t stereo = StereoContentSideBySideFull;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_map_window(c.get(), child);
+
+    const auto limitsOf = [&](xcb_window_t w) -> std::optional<std::array<uint32_t, 2>> {
+        xcb_flush(c.get());
+        UniqueCPtr<xcb_get_property_reply_t> reply(xcb_get_property_reply(c.get(), xcb_get_property(c.get(), 0, w, atoms->kde_net_wm_stereo_depth_limits, XCB_ATOM_CARDINAL, 0, 3), nullptr));
+        if (!reply || reply->type != XCB_ATOM_CARDINAL || reply->format != 32 || reply->length != 2) {
+            return std::nullopt;
+        }
+        const auto *value = static_cast<const uint32_t *>(xcb_get_property_value(reply.get()));
+        return std::array<uint32_t, 2>{value[0], value[1]};
+    };
+    const auto fixed = [](qreal value) {
+        return uint32_t(int32_t(std::llround(value * 256)));
+    };
+
+    // declared before it is listed: nothing yet
+    QVERIFY(!limitsOf(child).has_value());
+
+    QSignalSpy stereoChildrenChangedSpy(window, &X11Window::stereoChildrenChanged);
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, window->window(), atoms->kde_net_wm_stereo_content_children,
+                        XCB_ATOM_WINDOW, 32, 1, &child);
+    xcb_flush(c.get());
+    QVERIFY(stereoChildrenChangedSpy.wait());
+
+    // at declaration: the limits of the output the window sits on, in 24.8 fixed point
+    const std::array<uint32_t, 2> first = {fixed(StereoDepth::sunkLimit(window->output())), fixed(StereoDepth::poppedLimit(window->output()))};
+    QTRY_VERIFY(limitsOf(child).has_value());
+    QCOMPARE(*limitsOf(child), first);
+    QVERIFY(!limitsOf(window->window()).has_value());
+
+    // the person changes the limits: the child follows
+    options->setStereoSunkLimit(20);
+    options->setStereoPoppedLimit(8);
+    const std::array<uint32_t, 2> second = {fixed(StereoDepth::sunkLimit(window->output())), fixed(StereoDepth::poppedLimit(window->output()))};
+    QVERIFY(second != first);
+    QTRY_COMPARE(limitsOf(child).value_or(std::array<uint32_t, 2>{0, 0}), second);
+
+    // the declaration goes: so do the limits; declared again, they come back
+    const uint32_t none = StereoContentNone;
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &none);
+    xcb_flush(c.get());
+    QTRY_VERIFY(!limitsOf(child).has_value());
+    xcb_change_property(c.get(), XCB_PROP_MODE_REPLACE, child, atoms->kde_net_wm_stereo_content,
+                        XCB_ATOM_CARDINAL, 32, 1, &stereo);
+    xcb_flush(c.get());
+    QTRY_COMPARE(limitsOf(child).value_or(std::array<uint32_t, 2>{0, 0}), second);
+
+    // the window stops listing the child: the limits go with it (case by lane 501's own test of the same fix)
+    xcb_delete_property(c.get(), window->window(), atoms->kde_net_wm_stereo_content_children);
+    xcb_flush(c.get());
+    QTRY_VERIFY(!limitsOf(child).has_value());
+    QVERIFY(!limitsOf(window->window()).has_value());
+
+    options->setStereoSunkLimit(10);
+    options->setStereoPoppedLimit(4);
+}
+
 #include "x11_window_test.moc"
+
+WAYLANDTEST_MAIN(X11WindowTest)
