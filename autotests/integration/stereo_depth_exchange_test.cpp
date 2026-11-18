@@ -6,6 +6,8 @@
 
 #include "kwin_wayland_test.h"
 
+#include <KWayland/Client/subsurface.h>
+
 #include "core/output.h"
 #include "core/outputconfiguration.h"
 #include "effect/globals.h"
@@ -52,6 +54,7 @@ private Q_SLOTS:
     void testDesktopDepthIsNotStereoContent();
     void testDeclaredPlace();
     void testLimitsFollowTheOutput();
+    void testLimitsOnDeclaredSubsurface();
     void testResourceVersion_data();
     void testResourceVersion();
     void testInertWithoutSurface();
@@ -455,6 +458,27 @@ void StereoDepthExchangeTest::testLimitsFollowTheOutput()
     const Limits doubled = limitsOn(QSize(531, 299), {});
     QVERIFY(qAbs(doubled.sunk - 2 * monitor.sunk) < 0.01);
     QVERIFY(qAbs(doubled.popped - 2 * monitor.popped) < 0.01);
+}
+
+// A declared subsurface (the 3D area of an ordinary window on Wayland) follows the depth of its surface tree like
+// any surface: it gets the limits of the output its window sits on, the same as a declared top-level.
+void StereoDepthExchangeTest::testLimitsOnDeclaredSubsurface()
+{
+    QVERIFY(stereoOutput(true));
+    workspace()->setActiveOutput(QPoint(640, 512));
+    auto window = createWindow(QPointF(100, 100));
+    QVERIFY(window->window);
+    std::unique_ptr<KWayland::Client::Surface> child(Test::createSurface());
+    auto subsurface = Test::createSubSurface(child.get(), window->surface.get());
+    auto declaration = std::make_unique<Test::StereoContentV1>(Test::stereoContentManager()->create(*child));
+    declaration->set_content(3);
+    auto depth = follow(child.get());
+    Test::render(child.get(), QSize(100, 50), Qt::red);
+    QVERIFY(commit(window->surface.get(), window->window));
+    QVERIFY(waitFor(depth.get(), [&depth]() {
+        return depth->limits > 0;
+    }));
+    QVERIFY(depth->sunk > 0 && depth->popped > 0);
 }
 
 void StereoDepthExchangeTest::testResourceVersion_data()
