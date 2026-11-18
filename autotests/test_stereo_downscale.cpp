@@ -36,6 +36,48 @@ class StereoDownscaleTest : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void identicalEyes()
+    {
+        const auto display = EglDisplay::create(eglGetDisplay(EGL_DEFAULT_DISPLAY), nullptr);
+        QVERIFY(display);
+        const auto context = EglContext::create(display.get(), EGL_NO_CONFIG_KHR, nullptr);
+        QVERIFY(context);
+        QVERIFY(context->makeCurrent());
+        const QSize eyeSize(1920, 921);
+        const QSize destination(1268, 608);
+        QImage input(QSize(2 * eyeSize.width(), eyeSize.height()), QImage::Format_RGBA8888_Premultiplied);
+        for (int y = 0; y < eyeSize.height(); ++y) {
+            for (int x = 0; x < eyeSize.width(); ++x) {
+                const QRgb pixel = qRgb((x * 17 + y * 13) % 256, (x * 7 + y * 23) % 256, (x * 3 + y * 11) % 256);
+                input.setPixel(x, y, pixel);
+                input.setPixel(x + eyeSize.width(), y, pixel);
+            }
+        }
+        ItemRendererOpenGL renderer(display.get());
+        renderer.setStereoCapture(true);
+        ImageSurface surface(renderer, input, destination, StereoContentSideBySideFull);
+        auto output = GLTexture::allocate(GL_RGBA8, destination);
+        GLFramebuffer framebuffer(output.get());
+        QVERIFY(framebuffer.valid());
+        RenderTarget target(&framebuffer);
+        RenderViewport viewport(RectF(QPointF(), destination), 1, target, QPoint());
+        WindowPaintData paint;
+        QImage left;
+        for (auto eye : {StereoEye::Left, StereoEye::Right}) {
+            renderer.setStereoEye(eye);
+            context->pushFramebuffer(&framebuffer);
+            renderer.renderItem(target, viewport, &surface, 0, Region::infinite(), paint, {}, {});
+            context->popFramebuffer();
+            const QImage actual = output->toImage();
+            if (eye == StereoEye::Left) {
+                left = actual;
+            } else {
+                QCOMPARE(actual, left);
+            }
+        }
+        QCOMPARE(glGetError(), GLenum(GL_NO_ERROR));
+    }
+
     void downscale_data()
     {
         QTest::addColumn<QSizeF>("factor");
