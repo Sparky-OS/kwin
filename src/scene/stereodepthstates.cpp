@@ -61,6 +61,10 @@ void StereoDepthStates::watch(Window *window)
     connect(window, &Window::hiddenChanged, this, &StereoDepthStates::scheduleUpdate);
     connect(window, &Window::desktopsChanged, this, &StereoDepthStates::scheduleUpdate);
     connect(window, &Window::stereoContentChanged, this, &StereoDepthStates::scheduleUpdate);
+    if (auto *x11Window = qobject_cast<X11Window *>(window)) {
+        // a child window declared, or its declaration gone: its depth limits follow
+        connect(x11Window, &X11Window::stereoChildrenChanged, this, &StereoDepthStates::scheduleUpdate);
+    }
     if (SurfaceInterface *surface = window->surface()) {
         // a surface may be followed before its window is shown, or again later
         connect(surface, &SurfaceInterface::stereoDepthFollowed, this, &StereoDepthStates::scheduleUpdate);

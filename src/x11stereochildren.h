@@ -66,6 +66,10 @@ struct KWIN_EXPORT X11StereoChild
     // the child's own _KDE_NET_WM_STEREO_CONTENT_ONE_VIEW_SIZE: the size one view is shown at,
     // empty when the child declares none
     QSizeF oneViewSize;
+    // the values last written to the child's _KDE_NET_WM_STEREO_DEPTH_LIMITS: sunk and popped as
+    // 24.8 fixed point, as X11Window::updateStereoDepthLimits() writes them for a window
+    bool depthLimitsWritten = false;
+    uint32_t depthLimits[2] = {0, 0};
 
     // The child's place in the X11 window as the scene shows it, in this order: its declared
     // place (_KDE_NET_WM_STEREO_CONTENT_CHILD_PLACE); else, when it holds stereo content and

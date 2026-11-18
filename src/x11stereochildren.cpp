@@ -191,6 +191,11 @@ std::unique_ptr<X11StereoChild> X11StereoChildren::watch(xcb_window_t window)
 void X11StereoChildren::unwatch(X11StereoChild *child)
 {
     xcb_connection_t *connection = kwinApp()->x11Connection();
+    // the depth limits KWin wrote on the child go with the declaration
+    if (child->depthLimitsWritten) {
+        child->depthLimitsWritten = false;
+        xcb_discard_reply(connection, xcb_delete_property_checked(connection, child->window, atoms->kde_net_wm_stereo_depth_limits).sequence);
+    }
     // the child may be gone already, with its X11 window destroyed: that is no error to report
     xcb_discard_reply(connection, xcb_composite_unredirect_window_checked(connection, child->window, XCB_COMPOSITE_REDIRECT_MANUAL).sequence);
     if (Xcb::Extensions::self()->isShapeAvailable()) {

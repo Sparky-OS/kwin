@@ -140,7 +140,10 @@ RootInfo *RootInfo::create()
     // 10 also tells a window that declares stereo content the depth limits of the output it mainly
     // sits on, in its own _KDE_NET_WM_STEREO_DEPTH_LIMITS (what kde_stereo_depth_v1.depth_limits
     // carries to a Wayland surface), and keeps the property current.
-    const uint32_t stereoContentSupported = 10;
+    // 11 also writes it on every child window listed in _KDE_NET_WM_STEREO_CONTENT_CHILDREN that
+    // declares stereo content, once KWin holds the child: a program that waits for the property
+    // on its child knows the child is redirected and a present that follows is shown as a pair.
+    const uint32_t stereoContentSupported = 11;
     xcb_change_property(kwinApp()->x11Connection(), XCB_PROP_MODE_REPLACE, kwinApp()->x11RootWindow(),
                         atoms->kde_net_wm_stereo_content_supported, XCB_ATOM_CARDINAL, 32, 1, &stereoContentSupported);
 
