@@ -7,6 +7,12 @@ in vec4 texcoord;
 out vec2 texcoord0;
 #endif
 
+#if TRAIT_STEREO_AREA_FILTER
+uniform vec2 stereoTextureSize;
+uniform vec4 stereoEyeBounds;
+out vec2 stereoLocalCoord;
+#endif
+
 #if TRAIT_ROUNDED_CORNERS | TRAIT_BORDER
 out vec2 position0;
 #endif
@@ -17,6 +23,9 @@ void main()
 {
 #if TRAIT_MAP_TEXTURE || TRAIT_MAP_EXTERNAL_TEXTURE || TRAIT_MAP_MULTI_PLANE_TEXTURE
     texcoord0 = texcoord.st;
+#endif
+#if TRAIT_STEREO_AREA_FILTER
+    stereoLocalCoord = (texcoord.st - stereoEyeBounds.xy) * stereoTextureSize;
 #endif
 
 #if TRAIT_ROUNDED_CORNERS | TRAIT_BORDER

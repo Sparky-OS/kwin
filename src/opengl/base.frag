@@ -56,9 +56,27 @@ out vec4 fragColor;
 #if TRAIT_STEREO_AREA_FILTER
 uniform vec2 stereoTextureSize;
 uniform vec4 stereoEyeBounds;
+in vec2 stereoLocalCoord;
 
-vec4 sampleStereo(vec2 uv)
+vec4 sampleStereo(vec2 position)
 {
+    vec2 origin = stereoEyeBounds.xy * stereoTextureSize;
+    vec2 extent = (stereoEyeBounds.zw - stereoEyeBounds.xy) * stereoTextureSize;
+    position = clamp(position, vec2(0.5), max(vec2(0.5), extent - vec2(0.5)));
+#if TRAIT_MAP_TEXTURE && __VERSION__ >= 130
+    // Interpolate in eye-local texels; atlas offsets must not change the weights.
+    ivec2 offset = ivec2(floor(origin));
+    vec2 texel = position - vec2(0.5) + fract(origin);
+    ivec2 first = ivec2(floor(texel));
+    ivec2 last = ivec2(ceil(origin + extent)) - ivec2(1) - offset;
+    vec2 weight = fract(texel);
+    vec4 a = texelFetch(sampler, offset + first, 0);
+    vec4 b = texelFetch(sampler, offset + min(first + ivec2(1, 0), last), 0);
+    vec4 c = texelFetch(sampler, offset + min(first + ivec2(0, 1), last), 0);
+    vec4 d = texelFetch(sampler, offset + min(first + ivec2(1), last), 0);
+    return mix(mix(a, b, weight.x), mix(c, d, weight.x), weight.y);
+#else
+    vec2 uv = (position + origin) / stereoTextureSize;
 #if TRAIT_MAP_MULTI_PLANE_TEXTURE
     return vec4(texture(sampler, uv).x, texture(sampler1, uv).rg, 1.0);
 #elif TRAIT_MAP_EXTERNAL_TEXTURE
@@ -66,17 +84,16 @@ vec4 sampleStereo(vec2 uv)
 #else
     return texture(sampler, uv);
 #endif
+#endif
 }
 
 vec4 stereoAreaSample()
 {
-    vec2 footprint = max(fwidth(texcoord0) * stereoTextureSize, vec2(1.0));
-    vec2 center = texcoord0 * stereoTextureSize;
-    vec2 eyeLow = stereoEyeBounds.xy * stereoTextureSize + vec2(0.5);
-    vec2 eyeHigh = max(eyeLow, stereoEyeBounds.zw * stereoTextureSize - vec2(0.5));
+    vec2 footprint = max(fwidth(stereoLocalCoord), vec2(1.0));
+    vec2 center = stereoLocalCoord;
     if (max(footprint.x, footprint.y) <= 1.0) {
         // Bilinear, without reaching into the other eye at its edge.
-        return sampleStereo(clamp(center, eyeLow, eyeHigh) / stereoTextureSize);
+        return sampleStereo(center);
     }
     // Any shrink integrates the covered texel areas, clamping within this eye only;
     // an axis that is not shrunk covers one texel, which is bilinear.
@@ -99,8 +116,7 @@ vec4 stereoAreaSample()
                                    - max(vec2(x, x + 1.0), vec2(low.x)));
             float weightX = wx.x + wx.y;
             vec2 center = vec2(x, y) + vec2(0.5) + vec2(wx.y / weightX, wy.y / weightY);
-            vec2 uv = clamp(center, eyeLow, eyeHigh) / stereoTextureSize;
-            sum += sampleStereo(uv) * (weightX * weightY);
+            sum += sampleStereo(center) * (weightX * weightY);
         }
     }
     return sum / (footprint.x * footprint.y);
