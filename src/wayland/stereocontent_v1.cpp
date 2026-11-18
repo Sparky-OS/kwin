@@ -7,6 +7,7 @@
 
 #include "display.h"
 #include "effect/globals.h"
+#include "subcompositor.h"
 #include "surface.h"
 #include "surface_p.h"
 
@@ -49,7 +50,13 @@ void StereoContentManagerV1::kde_stereo_content_manager_v1_get_depth(Resource *r
     SurfaceInterface *surf = SurfaceInterface::get(surface);
     auto depth = new StereoDepthSurfaceV1(resource->client(), id, resource->version(), surf);
     SurfaceInterfacePrivate::get(surf)->stereoDepths.append(depth);
-    Q_EMIT surf->stereoDepthFollowed();
+    // the window's depth states are made from its top-level surface: a subsurface that starts
+    // following later is announced up to the top-level, so the update that tells it comes
+    for (SurfaceInterface *followed = surf; followed;) {
+        Q_EMIT followed->stereoDepthFollowed();
+        const SubSurfaceInterface *sub = followed->subSurface();
+        followed = sub ? sub->parentSurface() : nullptr;
+    }
     // a surface whose state is known tells a new follower at once
     if (const auto state = SurfaceInterfacePrivate::get(surf)->stereoDepthState) {
         depth->sendState(state->awake, state->outputEdges, state->sunk, state->popped);
